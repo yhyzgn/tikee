@@ -1,0 +1,16 @@
+# Local agent/runtime state
+.omx/
+
+# Rust build output
+/target/
+
+# Node/frontend dependencies and build output
+node_modules/
+dist/
+build/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
