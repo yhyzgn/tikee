@@ -287,3 +287,15 @@ Constraint:
 - Local configuration files live under `config/`, not `examples/`, because they are operational configuration rather than sample code.
 - `scripts/dev.sh` is the canonical local development launcher for backend + Web UI during the active development cycle.
 - Built-in initialization credentials are `scheduler_init` / `Scheduler@2026!` / `scheduler-init-token`; they are development-only and remain overrideable through `SCHEDULER_DEV_ADMIN_*`.
+
+
+## 2026-05-19 — SQLite schema compatibility pass
+
+- SeaORM's initial migration is already marked applied in existing dev SQLite files, so adding fields to that migration is insufficient for local upgrades.
+- `connect_and_migrate` now runs a SQLite-only compatibility pass after normal migrations to add broadcast execution schema pieces idempotently.
+- This is a local/dev compatibility bridge; future production schema changes should be separate versioned migrations before first production release.
+
+## 2026-05-19 — Web visual direction
+
+- Web UI direction is light modern SaaS control plane: clean cards, generous spacing, blue accents, clear hierarchy, and disabled future entries for modules not implemented yet.
+- Do not expose clickable menu pages for backend capabilities that do not exist yet; show them as planned/disabled to avoid misleading operators.

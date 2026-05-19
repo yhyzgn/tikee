@@ -1,4 +1,5 @@
-import { Card, Col, Row, Statistic, Typography } from 'antd';
+import { ApiOutlined, ClockCircleOutlined, DeploymentUnitOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { Card, Col, Row, Statistic, Tag, Typography } from 'antd';
 
 import type { JobInstanceSummary, JobSummary } from '../api/client';
 
@@ -10,24 +11,57 @@ export interface DashboardProps {
 export function Dashboard({ jobs, instances }: DashboardProps) {
   const enabledJobs = jobs.filter((job) => job.enabled).length;
   const pendingInstances = instances.filter((instance) => instance.status === 'pending').length;
+  const broadcastInstances = instances.filter((instance) => instance.execution_mode === 'broadcast').length;
 
   return (
     <div className="page-stack">
-      <Typography.Title level={2}>Dashboard</Typography.Title>
+      <section className="hero-panel">
+        <div>
+          <Tag color="blue" className="soft-tag">MVP Console</Tag>
+          <Typography.Title level={1}>任务调度中枢</Typography.Title>
+          <Typography.Paragraph>
+            用统一控制台管理任务、触发执行、查看实例与日志。当前菜单只开放已实现能力，规划中模块暂以禁用项展示。
+          </Typography.Paragraph>
+        </div>
+        <div className="hero-panel__summary">
+          <strong>{jobs.length}</strong>
+          <span>total jobs</span>
+        </div>
+      </section>
+
       <Row gutter={[16, 16]}>
-        <Col xs={24} md={8}>
-          <Card><Statistic title="Jobs" value={jobs.length} /></Card>
+        <Col xs={24} md={6}>
+          <Card className="metric-card"><Statistic prefix={<ThunderboltOutlined />} title="任务总数" value={jobs.length} /></Card>
         </Col>
-        <Col xs={24} md={8}>
-          <Card><Statistic title="Enabled Jobs" value={enabledJobs} /></Card>
+        <Col xs={24} md={6}>
+          <Card className="metric-card"><Statistic prefix={<ApiOutlined />} title="启用任务" value={enabledJobs} /></Card>
         </Col>
-        <Col xs={24} md={8}>
-          <Card><Statistic title="Pending Instances" value={pendingInstances} /></Card>
+        <Col xs={24} md={6}>
+          <Card className="metric-card"><Statistic prefix={<ClockCircleOutlined />} title="等待实例" value={pendingInstances} /></Card>
+        </Col>
+        <Col xs={24} md={6}>
+          <Card className="metric-card"><Statistic prefix={<DeploymentUnitOutlined />} title="广播实例" value={broadcastInstances} /></Card>
         </Col>
       </Row>
-      <Card title="当前阶段说明">
-        后端已支持 Job 创建、API 手动触发和实例查询；Worker 真实任务派发与 CRON / Fixed Rate tick loop 后续接入。
-      </Card>
+
+      <Row gutter={[16, 16]}>
+        <Col xs={24} lg={14}>
+          <Card className="clean-card" title="当前能力">
+            <div className="capability-list">
+              <span>任务创建</span>
+              <span>API 手动触发</span>
+              <span>单机 / 广播执行</span>
+              <span>实例与日志查看</span>
+              <span>开发认证</span>
+            </div>
+          </Card>
+        </Col>
+        <Col xs={24} lg={10}>
+          <Card className="clean-card" title="菜单说明">
+            Worker 集群、安全策略、审计日志等菜单是平台后续能力入口。因为对应功能尚未完成，目前先禁用，避免误导操作。
+          </Card>
+        </Col>
+      </Row>
     </div>
   );
 }

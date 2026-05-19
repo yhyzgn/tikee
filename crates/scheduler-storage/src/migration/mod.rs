@@ -249,6 +249,20 @@ async fn create_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
             .to_owned(),
     )
     .await?;
+    create_attempt_indexes(manager).await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_job_instance_logs_instance_seq")
+            .table(JobInstanceLogs::Table)
+            .col(JobInstanceLogs::InstanceId)
+            .col(JobInstanceLogs::Sequence)
+            .to_owned(),
+    )
+    .await
+}
+
+async fn create_attempt_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
     create_index(
         manager,
         Index::create()
@@ -268,23 +282,14 @@ async fn create_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
             .col(JobInstanceAttempts::Status)
             .to_owned(),
     )
-    .await?;
-    create_index(
-        manager,
-        Index::create()
-            .name("idx_job_instance_logs_instance_seq")
-            .table(JobInstanceLogs::Table)
-            .col(JobInstanceLogs::InstanceId)
-            .col(JobInstanceLogs::Sequence)
-            .to_owned(),
-    )
     .await
 }
 
 async fn create_index(
     manager: &SchemaManager<'_>,
-    statement: IndexCreateStatement,
+    mut statement: IndexCreateStatement,
 ) -> Result<(), DbErr> {
+    statement.if_not_exists();
     manager.create_index(statement).await
 }
 

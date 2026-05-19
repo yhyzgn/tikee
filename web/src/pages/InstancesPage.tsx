@@ -51,7 +51,7 @@ export function InstancesPage({ jobs, instances }: InstancesPageProps) {
     { title: 'Created At', dataIndex: 'created_at' },
     {
       title: 'Logs',
-      render: (_, instance) => <Button type="link" onClick={() => void openLogs(instance)}>View Logs</Button>,
+      render: (_, instance) => <Button type="link" onClick={() => void openLogs(instance)}>查看日志</Button>,
     },
   ];
 
@@ -70,7 +70,7 @@ export function InstancesPage({ jobs, instances }: InstancesPageProps) {
   ];
 
   return (
-    <Card title="Instances">
+    <Card className="clean-card" title="执行实例">
       {instances.length === 0 ? (
         <Empty description="还没有实例，请先在 Jobs 页面创建并触发任务" />
       ) : (
@@ -81,11 +81,11 @@ export function InstancesPage({ jobs, instances }: InstancesPageProps) {
       )}
       <Drawer
         width={760}
-        title={selectedInstance ? `Instance Logs: ${selectedInstance.id}` : 'Instance Logs'}
+        title={selectedInstance ? `实例日志： ${selectedInstance.id}` : '实例日志'}
         open={logDrawerOpen}
         onClose={() => setLogDrawerOpen(false)}
       >
-        <Typography.Title level={5}>Broadcast Attempts</Typography.Title>
+        <Typography.Title level={5}>广播子执行</Typography.Title>
         <Table
           rowKey="id"
           columns={attemptColumns}
@@ -93,7 +93,7 @@ export function InstancesPage({ jobs, instances }: InstancesPageProps) {
           pagination={false}
           locale={{ emptyText: '非广播实例或暂无子执行' }}
         />
-        <Typography.Title level={5} style={{ marginTop: 24 }}>Execution Logs</Typography.Title>
+        <Typography.Title level={5} style={{ marginTop: 24 }}>执行日志</Typography.Title>
         <Table
           rowKey="id"
           loading={logsLoading}

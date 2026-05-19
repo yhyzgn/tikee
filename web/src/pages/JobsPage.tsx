@@ -41,7 +41,7 @@ export function JobsPage({ jobs, loading, onRefresh, onTriggered }: JobsPageProp
             await onTriggered();
           }}
         >
-          Trigger
+          触发
         </Dropdown.Button>
       ),
     },
@@ -49,14 +49,14 @@ export function JobsPage({ jobs, loading, onRefresh, onTriggered }: JobsPageProp
 
   return (
     <div className="page-stack">
-      <Card title="Create Job">
+      <Card className="clean-card" title="创建任务">
         <Form
           form={form}
           layout="inline"
           initialValues={{ namespace: 'default', app: 'default', schedule_type: 'api', enabled: true }}
           onFinish={async (values) => {
             await createJob(values);
-            message.success('Job created');
+            message.success('任务已创建');
             form.resetFields(['name', 'schedule_expr']);
             await onRefresh();
           }}
@@ -72,8 +72,9 @@ export function JobsPage({ jobs, loading, onRefresh, onTriggered }: JobsPageProp
         </Form>
       </Card>
       <Card
-        title="Jobs"
-        extra={<Space><Button onClick={onRefresh}>Refresh</Button></Space>}
+        className="clean-card"
+        title="任务列表"
+        extra={<Space><Button onClick={onRefresh}>刷新</Button></Space>}
       >
         <Table rowKey="id" loading={loading} columns={columns} dataSource={jobs} pagination={{ pageSize: 8 }} />
       </Card>

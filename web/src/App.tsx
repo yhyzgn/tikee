@@ -99,7 +99,19 @@ export function App() {
   };
 
   return (
-    <ConfigProvider theme={{ algorithm: theme.defaultAlgorithm }}>
+    <ConfigProvider
+      theme={{
+        algorithm: theme.defaultAlgorithm,
+        token: {
+          colorPrimary: '#2563eb',
+          colorInfo: '#0ea5e9',
+          colorBgBase: '#f6f8fc',
+          colorTextBase: '#172033',
+          borderRadius: 12,
+          fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+        },
+      }}
+    >
       {bootstrapping ? (
         <div className="login-page">
           <Alert type="info" showIcon message="正在恢复会话" />

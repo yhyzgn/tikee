@@ -57,3 +57,10 @@
 
 - Initialization credentials are intentionally documented for development; they must not be used as production credentials.
 - `scripts/dev.sh` starts local long-running processes and writes `.dev/*` logs; `.dev/` is ignored by git.
+
+
+## 2026-05-19 — UI / schema follow-up
+
+- SQLite compatibility pass fixes current dev DB drift, but long-term production migrations should be split into explicit versioned migrations with downgrade/roll-forward policy.
+- Web UI is visually modernized, but full UX depth for Worker, Security, Audit, Workflow, and Settings is still pending backend capability implementation.
+- Vite build still reports a large bundle warning due to Ant Design; future routing/code-splitting should address this.

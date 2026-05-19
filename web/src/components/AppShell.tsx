@@ -1,5 +1,13 @@
-import { DashboardOutlined, DeploymentUnitOutlined, LogoutOutlined, UnorderedListOutlined } from '@ant-design/icons';
-import { Button, Layout, Menu, Space, Typography, theme } from 'antd';
+import {
+  ApiOutlined,
+  AuditOutlined,
+  DashboardOutlined,
+  DeploymentUnitOutlined,
+  LogoutOutlined,
+  SafetyCertificateOutlined,
+  ThunderboltOutlined,
+} from '@ant-design/icons';
+import { Avatar, Badge, Button, Layout, Menu, Space, Typography } from 'antd';
 import type { ReactNode } from 'react';
 
 const { Header, Sider, Content } = Layout;
@@ -13,31 +21,44 @@ export interface AppShellProps {
 }
 
 export function AppShell({ children, activeKey, username, onNavigate, onLogout }: AppShellProps) {
-  const { token } = theme.useToken();
-
   return (
     <Layout className="app-shell">
-      <Sider breakpoint="lg" collapsedWidth="0" className="app-shell__sider">
-        <div className="app-shell__brand">scheduler</div>
+      <Sider breakpoint="lg" collapsedWidth="0" width={264} className="app-shell__sider">
+        <div className="app-shell__brand">
+          <div className="app-shell__brand-mark">S</div>
+          <div>
+            <div className="app-shell__brand-title">scheduler</div>
+            <div className="app-shell__brand-subtitle">Task Platform</div>
+          </div>
+        </div>
         <Menu
-          theme="dark"
+          className="app-shell__menu"
           mode="inline"
           selectedKeys={[activeKey]}
           onClick={(event) => onNavigate(event.key)}
           items={[
-            { key: 'dashboard', icon: <DashboardOutlined />, label: 'Dashboard' },
-            { key: 'jobs', icon: <UnorderedListOutlined />, label: 'Jobs' },
-            { key: 'instances', icon: <DeploymentUnitOutlined />, label: 'Instances' },
+            { key: 'dashboard', icon: <DashboardOutlined />, label: '总览' },
+            { key: 'jobs', icon: <ThunderboltOutlined />, label: '任务' },
+            { key: 'instances', icon: <DeploymentUnitOutlined />, label: '实例' },
+            { type: 'divider' },
+            { key: 'workers-next', icon: <ApiOutlined />, label: 'Worker 集群', disabled: true },
+            { key: 'security-next', icon: <SafetyCertificateOutlined />, label: '安全策略', disabled: true },
+            { key: 'audit-next', icon: <AuditOutlined />, label: '审计日志', disabled: true },
           ]}
         />
       </Sider>
-      <Layout>
+      <Layout className="app-shell__main">
         <Header className="app-shell__header">
-          <Typography.Title level={4} style={{ margin: 0, color: token.colorTextHeading }}>
-            分布式任务调度平台
-          </Typography.Title>
-          <Space className="app-shell__user">
-            <Typography.Text type="secondary">{username}</Typography.Text>
+          <div>
+            <Typography.Title level={3} className="app-shell__title">
+              分布式任务调度平台
+            </Typography.Title>
+            <Typography.Text className="app-shell__subtitle">轻量、容器友好、Worker 主动隧道连接</Typography.Text>
+          </div>
+          <Space className="app-shell__user" size={14}>
+            <Badge status="processing" text="Dev" />
+            <Avatar className="app-shell__avatar">{username.slice(0, 1).toUpperCase()}</Avatar>
+            <Typography.Text className="app-shell__username">{username}</Typography.Text>
             <Button icon={<LogoutOutlined />} onClick={onLogout}>
               退出
             </Button>

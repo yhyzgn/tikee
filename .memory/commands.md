@@ -361,3 +361,23 @@ curl -fsS http://127.0.0.1:9090/healthz
 curl -fsS http://127.0.0.1:8080
 docker compose down
 ```
+
+
+## 2026-05-19 — UI modernization / SQLite compatibility validation
+
+```bash
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test --workspace --all-features
+cargo build --workspace --all-features
+mvn -f java/pom.xml -q test
+bun run --cwd web lint
+bun run --cwd web typecheck
+bun test --cwd web
+bun run --cwd web build
+cargo run --bin scheduler -- serve --config config/dev.toml
+curl -fsS http://127.0.0.1:9090/healthz
+curl -fsS http://127.0.0.1:9090/api/v1/jobs
+curl -fsS http://127.0.0.1:9090/api/v1/jobs/job_019e3ec775b177b0bd1f804874c84f3c/instances
+./scripts/dev.sh
+```
