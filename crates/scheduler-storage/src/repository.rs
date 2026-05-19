@@ -1,10 +1,13 @@
 //! Repository APIs over scheduler metadata tables.
 
-use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
+use scheduler_core::{InstanceStatus, TriggerType};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder, Set,
+};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use uuid::Uuid;
 
-use crate::entities::{app, job, namespace};
+use crate::entities::{app, job, job_instance, namespace};
 
 /// Minimal job creation input.
 #[derive(Debug, Clone)]
@@ -40,6 +43,123 @@ pub struct JobSummary {
     pub schedule_expr: Option<String>,
     /// Enabled flag.
     pub enabled: bool,
+}
+
+/// Minimal job instance creation input.
+#[derive(Debug, Clone)]
+pub struct CreateJobInstance {
+    /// Parent job identifier.
+    pub job_id: String,
+    /// Trigger source for this instance.
+    pub trigger_type: TriggerType,
+}
+
+/// Job instance summary returned to management API callers.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JobInstanceSummary {
+    /// Instance identifier.
+    pub id: String,
+    /// Parent job identifier.
+    pub job_id: String,
+    /// Current instance status.
+    pub status: InstanceStatus,
+    /// Trigger source.
+    pub trigger_type: TriggerType,
+    /// Creation timestamp in RFC3339 format.
+    pub created_at: String,
+    /// Last update timestamp in RFC3339 format.
+    pub updated_at: String,
+}
+
+/// Job instance repository.
+#[derive(Debug, Clone)]
+pub struct JobInstanceRepository {
+    db: DatabaseConnection,
+}
+
+impl JobInstanceRepository {
+    /// Create a repository using the provided database connection.
+    #[must_use]
+    pub const fn new(db: DatabaseConnection) -> Self {
+        Self { db }
+    }
+
+    /// Create a pending job instance if the parent job exists.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when database access fails.
+    pub async fn create_pending(
+        &self,
+        input: CreateJobInstance,
+    ) -> Result<Option<JobInstanceSummary>, sea_orm::DbErr> {
+        let Some(parent) = job::Entity::find_by_id(input.job_id.clone())
+            .one(&self.db)
+            .await?
+        else {
+            return Ok(None);
+        };
+
+        let now = now_rfc3339();
+        let model = job_instance::ActiveModel {
+            id: Set(new_id("inst")),
+            job_id: Set(parent.id),
+            status: Set(InstanceStatus::Pending.to_string()),
+            trigger_type: Set(input.trigger_type.to_string()),
+            created_at: Set(now.clone()),
+            updated_at: Set(now),
+        }
+        .insert(&self.db)
+        .await?;
+
+        Ok(Some(JobInstanceSummary::from(model)))
+    }
+
+    /// List instances for a job ordered by creation timestamp.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when database access fails.
+    pub async fn list_by_job(
+        &self,
+        job_id: &str,
+    ) -> Result<Vec<JobInstanceSummary>, sea_orm::DbErr> {
+        let rows = job_instance::Entity::find()
+            .filter(job_instance::Column::JobId.eq(job_id))
+            .order_by_asc(job_instance::Column::CreatedAt)
+            .all(&self.db)
+            .await?;
+
+        Ok(rows.into_iter().map(JobInstanceSummary::from).collect())
+    }
+
+    /// Get one instance by id.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when database access fails.
+    pub async fn get(
+        &self,
+        instance_id: &str,
+    ) -> Result<Option<JobInstanceSummary>, sea_orm::DbErr> {
+        job_instance::Entity::find_by_id(instance_id.to_owned())
+            .one(&self.db)
+            .await
+            .map(|model| model.map(JobInstanceSummary::from))
+    }
+}
+
+impl From<job_instance::Model> for JobInstanceSummary {
+    fn from(value: job_instance::Model) -> Self {
+        Self {
+            id: value.id,
+            job_id: value.job_id,
+            status: value.status.parse().unwrap_or(InstanceStatus::Failed),
+            trigger_type: value.trigger_type.parse().unwrap_or(TriggerType::Api),
+            created_at: value.created_at,
+            updated_at: value.updated_at,
+        }
+    }
 }
 
 /// Job repository.
@@ -193,7 +313,12 @@ mod tests {
     use sea_orm::{ConnectionTrait, Database, Statement};
     use sea_orm_migration::MigratorTrait;
 
-    use crate::{migration::Migrator, repository::CreateJob};
+    use scheduler_core::{InstanceStatus, TriggerType};
+
+    use crate::{
+        migration::Migrator,
+        repository::{CreateJob, CreateJobInstance},
+    };
 
     use super::JobRepository;
 
@@ -248,5 +373,47 @@ mod tests {
         assert_eq!(jobs.len(), 1);
         assert_eq!(jobs[0].app, "billing");
         assert!(jobs[0].enabled);
+    }
+
+    #[tokio::test]
+    async fn repository_creates_and_lists_job_instances() {
+        let db = Database::connect("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("sqlite memory db should connect: {error}"));
+        Migrator::up(&db, None)
+            .await
+            .unwrap_or_else(|error| panic!("migration should run: {error}"));
+        let jobs = JobRepository::new(db.clone());
+        let instances = super::JobInstanceRepository::new(db);
+
+        let job = jobs
+            .create_job(CreateJob {
+                namespace: "default".to_owned(),
+                app: "billing".to_owned(),
+                name: "manual".to_owned(),
+                schedule_type: "api".to_owned(),
+                schedule_expr: None,
+                enabled: true,
+            })
+            .await
+            .unwrap_or_else(|error| panic!("job should be created: {error}"));
+
+        let instance = instances
+            .create_pending(CreateJobInstance {
+                job_id: job.id.clone(),
+                trigger_type: TriggerType::Api,
+            })
+            .await
+            .unwrap_or_else(|error| panic!("instance should be created: {error}"))
+            .unwrap_or_else(|| panic!("job should exist"));
+
+        let listed = instances
+            .list_by_job(&job.id)
+            .await
+            .unwrap_or_else(|error| panic!("instances should list: {error}"));
+
+        assert_eq!(instance.status, InstanceStatus::Pending);
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].trigger_type, TriggerType::Api);
     }
 }

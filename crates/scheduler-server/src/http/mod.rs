@@ -10,7 +10,7 @@ use std::{net::SocketAddr, sync::Arc, time::SystemTime};
 use anyhow::{Context, Result};
 use axum::{Json, Router, extract::State, http::StatusCode, response::IntoResponse, routing::get};
 use scheduler_core::HealthState;
-use scheduler_storage::{JobRepository, connect_and_migrate};
+use scheduler_storage::{JobInstanceRepository, JobRepository, connect_and_migrate};
 use serde::Serialize;
 
 use tokio::{net::TcpListener, signal};
@@ -25,15 +25,17 @@ use self::openapi::ApiDoc;
 pub struct AppState {
     started_at: SystemTime,
     jobs: JobRepository,
+    instances: JobInstanceRepository,
 }
 
 impl AppState {
     /// Create shared HTTP state.
     #[must_use]
-    pub fn new(jobs: JobRepository) -> Self {
+    pub fn new(jobs: JobRepository, instances: JobInstanceRepository) -> Self {
         Self {
             started_at: SystemTime::now(),
             jobs,
+            instances,
         }
     }
 }
@@ -52,7 +54,10 @@ async fn router_for_database(database_url: &str) -> Result<Router> {
     let db = connect_and_migrate(database_url)
         .await
         .with_context(|| format!("failed to initialize storage at {database_url}"))?;
-    Ok(router_with_state(AppState::new(JobRepository::new(db))))
+    Ok(router_with_state(AppState::new(
+        JobRepository::new(db.clone()),
+        JobInstanceRepository::new(db),
+    )))
 }
 
 fn api_router() -> Router<Arc<AppState>> {
@@ -60,6 +65,12 @@ fn api_router() -> Router<Arc<AppState>> {
         .route("/system/info", get(routes::system_info))
         .route("/cluster", get(routes::cluster_status))
         .route("/jobs", get(routes::list_jobs).post(routes::create_job))
+        .route(
+            "/jobs/{job_action}",
+            axum::routing::post(routes::trigger_job),
+        )
+        .route("/jobs/{job}/instances", get(routes::list_job_instances))
+        .route("/instances/{instance}", get(routes::get_job_instance))
 }
 
 /// Run the unified HTTP listener.
@@ -120,7 +131,7 @@ async fn shutdown_signal() {
 #[cfg(test)]
 mod tests {
     use axum::{body::Body, http::Request};
-    use scheduler_storage::{JobRepository, connect_and_migrate};
+    use scheduler_storage::{JobInstanceRepository, JobRepository, connect_and_migrate};
     use serde_json::Value;
     use tower::ServiceExt;
 
@@ -155,6 +166,9 @@ mod tests {
 
         assert!(json["paths"]["/api/v1/system/info"].is_object());
         assert!(json["paths"]["/api/v1/jobs"].is_object());
+        assert!(json["paths"]["/api/v1/jobs/{job}:trigger"].is_object());
+        assert!(json["paths"]["/api/v1/jobs/{job}/instances"].is_object());
+        assert!(json["paths"]["/api/v1/instances/{instance}"].is_object());
     }
 
     #[tokio::test]
@@ -198,6 +212,70 @@ mod tests {
         assert!(json.get("data").is_some());
     }
 
+    #[tokio::test]
+    async fn trigger_job_creates_pending_instance() {
+        let app = router().await;
+        let created = post_json(
+            app.clone(),
+            "/api/v1/jobs",
+            r#"{"namespace":"default","app":"billing","name":"manual"}"#,
+        )
+        .await;
+        let job_id = created["data"]["id"]
+            .as_str()
+            .unwrap_or_else(|| panic!("created job should contain id"));
+
+        let triggered = post_json(
+            app.clone(),
+            &format!("/api/v1/jobs/{job_id}:trigger"),
+            r#"{"trigger_type":"api"}"#,
+        )
+        .await;
+
+        assert_eq!(triggered["code"], 0);
+        assert_eq!(triggered["data"]["job_id"], job_id);
+        assert_eq!(triggered["data"]["status"], "pending");
+
+        let listed = request_with(app.clone(), &format!("/api/v1/jobs/{job_id}/instances")).await;
+        let body = axum::body::to_bytes(listed.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+
+        assert_eq!(json["data"]["items"][0]["status"], "pending");
+
+        let instance_id = triggered["data"]["id"]
+            .as_str()
+            .unwrap_or_else(|| panic!("triggered instance should contain id"));
+        let detail = request_with(app, &format!("/api/v1/instances/{instance_id}")).await;
+        let body = axum::body::to_bytes(detail.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+        assert_eq!(json["data"]["id"], instance_id);
+    }
+
+    async fn post_json(app: axum::Router, uri: &str, body: &str) -> Value {
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(uri)
+                    .header("content-type", "application/json")
+                    .body(Body::from(body.to_owned()))
+                    .unwrap_or_else(|error| panic!("request should build: {error}")),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("router should respond: {error}"));
+        assert!(response.status().is_success());
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        serde_json::from_slice(&body).unwrap_or_else(|error| panic!("body should be JSON: {error}"))
+    }
+
     async fn get_json(uri: &str) -> Value {
         let response = request(uri).await;
         assert!(response.status().is_success());
@@ -228,6 +306,9 @@ mod tests {
         let db = connect_and_migrate("sqlite::memory:")
             .await
             .unwrap_or_else(|error| panic!("test storage should initialize: {error}"));
-        router_with_state(AppState::new(JobRepository::new(db)))
+        router_with_state(AppState::new(
+            JobRepository::new(db.clone()),
+            JobInstanceRepository::new(db),
+        ))
     }
 }

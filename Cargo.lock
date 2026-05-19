@@ -2496,6 +2496,7 @@ dependencies = [
 name = "scheduler-storage"
 version = "0.1.0"
 dependencies = [
+ "scheduler-core",
  "sea-orm",
  "sea-orm-migration",
  "thiserror",

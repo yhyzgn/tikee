@@ -36,4 +36,5 @@
 - [x] 003-worker-tunnel：server 同时启动 HTTP 9090 与 Worker Tunnel gRPC 9091
 - [x] 设计路线图标记：gRPC 协议定义与代码生成
 - [x] 004-storage-and-scheduler：SeaORM 存储层、SQLite dev DB、MySQL migration feature、Jobs API 持久化
-- [ ] 005-basic-scheduler：基础调度器与 API 触发实例链路
+- [x] 005-basic-scheduler：调度领域模型、API 手动触发实例链路、实例列表查询
+- [ ] 006-worker-sdk-rust-and-java-starter：Rust Worker SDK 基础与 Java Spring Boot Starter 规划

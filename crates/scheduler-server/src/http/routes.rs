@@ -1,16 +1,18 @@
 //! HTTP route handlers for the management API.
 
-use std::sync::Arc;
+use std::{str::FromStr, sync::Arc};
 
-use axum::{Json, extract::Query, extract::State};
-use scheduler_storage::CreateJob;
+use axum::{Json, extract::Path, extract::Query, extract::State};
+use scheduler_core::{ScheduleType, TriggerType};
+use scheduler_storage::{CreateJob, CreateJobInstance};
 
 use super::{
     AppState,
     dto::{
         ApiResponse, ClusterApiResponse, ClusterResponse, CreateJobRequest, ErrorResponse,
-        JobApiResponse, JobPageApiResponse, JobSummary, Page, PageQuery, SystemInfoApiResponse,
-        SystemInfoResponse,
+        JobApiResponse, JobInstanceApiResponse, JobInstancePage, JobInstancePageApiResponse,
+        JobInstanceSummary, JobPageApiResponse, JobSummary, Page, PageQuery, SystemInfoApiResponse,
+        SystemInfoResponse, TriggerJobRequest,
     },
     error::ApiError,
 };
@@ -91,6 +93,7 @@ pub async fn list_jobs(
     request_body = CreateJobRequest,
     responses(
         (status = 200, description = "Created job", body = JobApiResponse),
+        (status = 400, description = "Invalid schedule type", body = ErrorResponse),
         (status = 500, description = "Storage error", body = ErrorResponse)
     )
 )]
@@ -98,13 +101,14 @@ pub async fn create_job(
     State(state): State<Arc<AppState>>,
     Json(request): Json<CreateJobRequest>,
 ) -> Result<Json<JobApiResponse>, ApiError> {
+    let schedule_type = parse_schedule_type(request.schedule_type.as_deref().unwrap_or("api"))?;
     let created = state
         .jobs
         .create_job(CreateJob {
             namespace: defaulted(request.namespace, "default"),
             app: defaulted(request.app, "default"),
             name: request.name,
-            schedule_type: defaulted(request.schedule_type, "api"),
+            schedule_type: schedule_type.to_string(),
             schedule_expr: request.schedule_expr,
             enabled: request.enabled.unwrap_or(true),
         })
@@ -112,6 +116,116 @@ pub async fn create_job(
         .map_err(|error| ApiError::storage(&error))?;
 
     Ok(Json(ApiResponse::success(JobSummary::from(created))))
+}
+
+/// Trigger a job and create a pending instance.
+///
+/// # Errors
+///
+/// Returns a validation, not-found, or storage error envelope when triggering fails.
+#[utoipa::path(
+    post,
+    path = "/api/v1/jobs/{job}:trigger",
+    tag = "jobs",
+    params(("job" = String, Path, description = "Job identifier")),
+    request_body = TriggerJobRequest,
+    responses(
+        (status = 200, description = "Created pending job instance", body = JobInstanceApiResponse),
+        (status = 400, description = "Invalid trigger type", body = ErrorResponse),
+        (status = 404, description = "Job not found", body = ErrorResponse),
+        (status = 500, description = "Storage error", body = ErrorResponse)
+    )
+)]
+pub async fn trigger_job(
+    State(state): State<Arc<AppState>>,
+    Path(job_action): Path<String>,
+    Json(request): Json<TriggerJobRequest>,
+) -> Result<Json<JobInstanceApiResponse>, ApiError> {
+    let job = parse_trigger_path(&job_action)?;
+    let trigger_type = parse_trigger_type(request.trigger_type.as_deref().unwrap_or("api"))?;
+    let instance = state
+        .instances
+        .create_pending(CreateJobInstance {
+            job_id: job.clone(),
+            trigger_type,
+        })
+        .await
+        .map_err(|error| ApiError::storage(&error))?
+        .ok_or_else(|| ApiError::not_found(format!("job not found: {job}")))?;
+
+    Ok(Json(ApiResponse::success(JobInstanceSummary::from(
+        instance,
+    ))))
+}
+
+/// List instances for a job.
+///
+/// # Errors
+///
+/// Returns a storage error envelope when repository access fails.
+#[utoipa::path(
+    get,
+    path = "/api/v1/jobs/{job}/instances",
+    tag = "jobs",
+    params(
+        ("job" = String, Path, description = "Job identifier"),
+        PageQuery,
+    ),
+    responses(
+        (status = 200, description = "Job instance page", body = JobInstancePageApiResponse),
+        (status = 500, description = "Storage error", body = ErrorResponse)
+    )
+)]
+pub async fn list_job_instances(
+    State(state): State<Arc<AppState>>,
+    Path(job): Path<String>,
+    Query(_query): Query<PageQuery>,
+) -> Result<Json<JobInstancePageApiResponse>, ApiError> {
+    let items = state
+        .instances
+        .list_by_job(&job)
+        .await
+        .map_err(|error| ApiError::storage(&error))?
+        .into_iter()
+        .map(JobInstanceSummary::from)
+        .collect();
+
+    Ok(Json(ApiResponse::success(JobInstancePage {
+        items,
+        next_page_token: None,
+    })))
+}
+
+/// Get one job instance.
+///
+/// # Errors
+///
+/// Returns a not-found or storage error envelope when lookup fails.
+#[utoipa::path(
+    get,
+    path = "/api/v1/instances/{instance}",
+    tag = "jobs",
+    params(("instance" = String, Path, description = "Instance identifier")),
+    responses(
+        (status = 200, description = "Job instance", body = JobInstanceApiResponse),
+        (status = 404, description = "Instance not found", body = ErrorResponse),
+        (status = 500, description = "Storage error", body = ErrorResponse)
+    )
+)]
+pub async fn get_job_instance(
+    State(state): State<Arc<AppState>>,
+    Path(instance): Path<String>,
+) -> Result<Json<JobInstanceApiResponse>, ApiError> {
+    let summary = state
+        .instances
+        .get(&instance)
+        .await
+        .map_err(|error| ApiError::storage(&error))?
+        .ok_or_else(|| ApiError::not_found(format!("instance not found: {instance}")))?;
+
+    Ok(Json(ApiResponse::success(JobInstanceSummary::from(
+        summary,
+    ))))
 }
 
 impl From<scheduler_storage::JobSummary> for JobSummary {
@@ -128,8 +242,37 @@ impl From<scheduler_storage::JobSummary> for JobSummary {
     }
 }
 
+impl From<scheduler_storage::JobInstanceSummary> for JobInstanceSummary {
+    fn from(value: scheduler_storage::JobInstanceSummary) -> Self {
+        Self {
+            id: value.id,
+            job_id: value.job_id,
+            status: value.status.to_string(),
+            trigger_type: value.trigger_type.to_string(),
+            created_at: value.created_at,
+            updated_at: value.updated_at,
+        }
+    }
+}
+
 fn defaulted(value: Option<String>, default: &str) -> String {
     value
         .filter(|item| !item.trim().is_empty())
         .unwrap_or_else(|| default.to_owned())
+}
+
+fn parse_schedule_type(value: &str) -> Result<ScheduleType, ApiError> {
+    ScheduleType::from_str(value).map_err(|error| ApiError::bad_request(error.to_string()))
+}
+
+fn parse_trigger_type(value: &str) -> Result<TriggerType, ApiError> {
+    TriggerType::from_str(value).map_err(|error| ApiError::bad_request(error.to_string()))
+}
+
+fn parse_trigger_path(value: &str) -> Result<String, ApiError> {
+    value
+        .strip_suffix(":trigger")
+        .filter(|job| !job.is_empty())
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| ApiError::not_found(format!("unsupported job action: {value}")))
 }

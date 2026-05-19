@@ -64,6 +64,12 @@ pub type JobPageApiResponse = ApiResponse<Page>;
 /// Created job API envelope.
 pub type JobApiResponse = ApiResponse<JobSummary>;
 
+/// Job instance page API envelope.
+pub type JobInstancePageApiResponse = ApiResponse<JobInstancePage>;
+
+/// Job instance API envelope.
+pub type JobInstanceApiResponse = ApiResponse<JobInstanceSummary>;
+
 /// Generic page response.
 #[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct Page {
@@ -124,7 +130,7 @@ pub struct JobSummary {
     pub enabled: bool,
 }
 
-/// Create job request placeholder.
+/// Create job request.
 #[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct CreateJobRequest {
     /// Namespace name. Defaults to `default` when omitted.
@@ -139,4 +145,37 @@ pub struct CreateJobRequest {
     pub schedule_expr: Option<String>,
     /// Enabled flag. Defaults to `true` when omitted.
     pub enabled: Option<bool>,
+}
+
+/// Trigger job request.
+#[derive(Debug, Clone, Default, Deserialize, ToSchema)]
+pub struct TriggerJobRequest {
+    /// Optional trigger source. Defaults to `api`.
+    pub trigger_type: Option<String>,
+}
+
+/// Job instance page response.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct JobInstancePage {
+    /// Page items.
+    pub items: Vec<JobInstanceSummary>,
+    /// Token for the next page when more data is available.
+    pub next_page_token: Option<String>,
+}
+
+/// Job instance summary DTO.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct JobInstanceSummary {
+    /// Instance identifier.
+    pub id: String,
+    /// Parent job identifier.
+    pub job_id: String,
+    /// Current instance status.
+    pub status: String,
+    /// Trigger source.
+    pub trigger_type: String,
+    /// Creation timestamp in RFC3339 format.
+    pub created_at: String,
+    /// Last update timestamp in RFC3339 format.
+    pub updated_at: String,
 }

@@ -192,3 +192,13 @@ Verification:
 
 Git:
 - 待提交并推送。
+
+
+## 2026-05-19 — 005-basic-scheduler
+
+- `scheduler-core` 新增调度领域模型：`ScheduleType`、`TriggerType`、`InstanceStatus`、`DispatchDecision`。
+- `scheduler-storage` 新增 `JobInstanceRepository`，支持创建 pending job instance、按 job 查询实例、按 id 查询实例。
+- HTTP 新增 `POST /api/v1/jobs/{job}:trigger`，实现 API 手动触发并返回统一 `{code,message,data}` envelope。
+- HTTP 新增 `GET /api/v1/jobs/{job}/instances` 与 `GET /api/v1/instances/{instance}`，支持实例列表与详情查询。
+- OpenAPI schema 已补充 TriggerJobRequest、JobInstanceSummary、JobInstancePage。
+- 设计路线图已将 API 手动触发实例链路作为基础调度器子项标记完成；CRON / Fixed Rate tick loop 仍待后续阶段。

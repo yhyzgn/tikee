@@ -2009,6 +2009,9 @@ scheduler/
 - [x] gRPC 协议定义与代码生成（Worker Tunnel proto + server streaming skeleton）
 - [x] SeaORM 存储层 + SQLite + MySQL 迁移（SQLite dev DB 已验证，MySQL migration 通过 SeaORM feature 启用）
 - [ ] 基础调度器 (CRON + Fixed Rate + API 触发)
+  - [x] API 手动触发实例链路（创建 pending job_instance + 实例列表/详情查询）
+  - [ ] CRON tick loop
+  - [ ] Fixed Rate tick loop
 - [ ] 单机执行 + 广播执行
 - [ ] Rust SDK (Worker 注册 + 心跳 + 任务执行)
 - [x] 基础 HTTP REST API skeleton（统一 `{code,message,data}` 响应、system/cluster/jobs 占位）

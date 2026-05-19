@@ -8,6 +8,10 @@ use super::dto::{ApiResponse, ErrorData};
 pub const NOT_IMPLEMENTED_CODE: i32 = 10_001;
 /// Business code for storage failures.
 pub const STORAGE_ERROR_CODE: i32 = 20_001;
+/// Business code for malformed requests.
+pub const BAD_REQUEST_CODE: i32 = 40_001;
+/// Business code for missing resources.
+pub const NOT_FOUND_CODE: i32 = 40_004;
 
 /// API error variants returned by management handlers.
 #[derive(Debug, Clone)]
@@ -22,6 +26,16 @@ pub enum ApiError {
         /// Human-readable storage error.
         message: String,
     },
+    /// Request payload or parameter is invalid.
+    BadRequest {
+        /// Human-readable validation error.
+        message: String,
+    },
+    /// Requested resource does not exist.
+    NotFound {
+        /// Human-readable missing-resource error.
+        message: String,
+    },
 }
 
 impl ApiError {
@@ -33,10 +47,28 @@ impl ApiError {
         }
     }
 
+    /// Build a bad request API error.
+    #[must_use]
+    pub fn bad_request(message: impl Into<String>) -> Self {
+        Self::BadRequest {
+            message: message.into(),
+        }
+    }
+
+    /// Build a not found API error.
+    #[must_use]
+    pub fn not_found(message: impl Into<String>) -> Self {
+        Self::NotFound {
+            message: message.into(),
+        }
+    }
+
     const fn status_code(&self) -> StatusCode {
         match self {
             Self::NotImplemented { .. } => StatusCode::NOT_IMPLEMENTED,
             Self::Storage { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::BadRequest { .. } => StatusCode::BAD_REQUEST,
+            Self::NotFound { .. } => StatusCode::NOT_FOUND,
         }
     }
 
@@ -44,12 +76,17 @@ impl ApiError {
         match self {
             Self::NotImplemented { .. } => NOT_IMPLEMENTED_CODE,
             Self::Storage { .. } => STORAGE_ERROR_CODE,
+            Self::BadRequest { .. } => BAD_REQUEST_CODE,
+            Self::NotFound { .. } => NOT_FOUND_CODE,
         }
     }
 
     fn message(&self) -> String {
         match self {
-            Self::NotImplemented { message } | Self::Storage { message } => message.clone(),
+            Self::NotImplemented { message }
+            | Self::Storage { message }
+            | Self::BadRequest { message }
+            | Self::NotFound { message } => message.clone(),
         }
     }
 }
