@@ -22,7 +22,7 @@
 4. **自动提交并推送**：验证通过后自行 `git commit` 并 `git push` 到远程仓库。若远程不存在或推送失败，必须在 `./.memory/session-log.md` 和最终回复中明确记录原因与下一步。
 5. **保持小步提交**：每个提交聚焦一个阶段或一个可验证能力，避免混杂大改。
 6. **不丢设计目标**：实现必须服从 `./design/scheduler-architecture-design.md`，若代码实现需要偏离设计，必须先更新设计文档和 `./.memory/decisions.md`。
-7. **Rust 代码必须 workspace + crates 解耦**：整个 Rust 项目必须使用 Cargo workspace；所有 Rust 模块抽取为独立 crate 并统一放在 `./crates/` 下，禁止把大量业务模块堆在单一 crate 中。
+7. **Rust 代码必须 workspace + crates 解耦**：整个 Rust 项目必须使用 Cargo workspace；后端主程序入口位于仓库根 `src/main.rs`；其余 Rust 模块抽取为独立 crate 并统一放在 `./crates/` 下，禁止把大量业务模块堆在单一 crate 中。
 8. **Web 端必须独立在 `./web/`**：Web 管理端代码必须放在 `./web/` 下，使用 React + TypeScript + Ant Design，包管理器固定使用 Bun。禁止使用 `webui/` 作为新的前端目录。
 9. **不要让 Worker 暴露入站端口**：scheduler 的核心架构是 Worker 主动通过 gRPC/HTTP2 tunnel 连接 Server，Server 反向指令复用该长连接。
 10. **Server 不执行用户代码**：动态脚本、WASM、HTTP、SQL 等处理器必须由 Worker 侧受控环境执行，Server 只调度、治理、审计。
@@ -181,7 +181,7 @@ cargo build --workspace --all-features
 ```bash
 cargo run --bin scheduler -- serve --config examples/dev.toml
 curl -fsS http://127.0.0.1:9090/healthz
-curl -fsS http://127.0.0.1:9090/openapi.json
+curl -fsS http://127.0.0.1:9090/api-docs/openapi.json
 ```
 
 若服务暂未实现，应运行当前阶段等价冒烟命令，并在 memory 中说明替代验证。

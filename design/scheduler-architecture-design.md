@@ -712,7 +712,7 @@ HTTP 接口是平台管理面的一等能力，面向 Web UI、CLI、CI/CD、Git
 - 分页：统一 `page_size`、`page_token`、`sort`、`filter`。
 - 错误：统一 Problem Details JSON，包含 `code`、`message`、`trace_id`、`details`。
 - 审计：所有写操作、密钥读取、脚本发布、权限变更、手动触发和取消都写审计日志。
-- OpenAPI：启动后暴露 `/openapi.json`、`/docs`，CI 中校验 OpenAPI 兼容性。
+- OpenAPI：启动后暴露 `/api-docs/openapi.json`、`/docs`，CI 中校验 OpenAPI 兼容性。
 
 **核心 HTTP 路由规划**：
 

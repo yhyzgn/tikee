@@ -74,3 +74,49 @@ Verification:
 
 Git:
 - 待提交并推送。
+
+
+## 2026-05-19 — 调整后端主程序入口到根 src/main.rs
+
+Agent:
+- Codex
+
+Work:
+- 根据用户要求将后端主程序入口从 `crates/scheduler-server/src/main.rs` 移到根 `src/main.rs`。
+- 根 package `scheduler` 只保留 binary entrypoint，实际 server 逻辑仍委托 `scheduler-server` crate。
+- 更新 prompt、design、memory 与阶段提示词中的入口位置约束。
+
+Verification:
+- 调整后继续执行当前阶段完整验证。
+
+
+## 2026-05-19 — 002-http-api-and-openapi 完成
+
+Agent:
+- Codex
+
+Work:
+- 增加 HTTP API 分层：DTO、error、OpenAPI、routes。
+- 使用 `utoipa` + `utoipa-swagger-ui` 生成 OpenAPI 和 Swagger UI。
+- 实现 `/api/v1/system/info`、`/api/v1/cluster`、`GET /api/v1/jobs`、`POST /api/v1/jobs` placeholder。
+- 实现 Problem Details JSON 错误响应。
+- 暴露 `/api-docs/openapi.json` 与 `/docs`。
+- 根据用户要求将后端主程序入口保留在根 `src/main.rs`，`crates/*` 继续承载解耦模块。
+- 更新 `.prompt/003-worker-tunnel.md`。
+
+Verification:
+- `cargo fmt --all -- --check` ✅
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings` ✅
+- `cargo test --workspace --all-features` ✅
+- `cargo build --workspace --all-features` ✅
+- `cargo run --bin scheduler -- serve --config examples/dev.toml` ✅
+- `GET /healthz` ✅
+- `GET /readyz` ✅
+- `GET /api-docs/openapi.json` ✅ contains `/api/v1/system/info` and `/api/v1/jobs`
+- `GET /api/v1/system/info` ✅ returned scheduler metadata
+- `GET /api/v1/cluster` ✅ returned standalone leader placeholder
+- `GET /api/v1/jobs` ✅ returned empty page
+- `POST /api/v1/jobs` ✅ returned 501 Problem Details placeholder
+
+Git:
+- 待提交并推送。

@@ -16,9 +16,14 @@
 
 ## 下一大阶段
 
-进入代码开发：`001-bootstrap` 已完成；下一阶段执行 `002-http-api-and-openapi`。
+进入代码开发：`001-bootstrap` 与 `002-http-api-and-openapi` 已完成；下一阶段执行 `003-worker-tunnel`。
 
 - [x] 001-bootstrap：初始化 Cargo workspace 与 `./crates/*` crate 骨架
 - [x] 001-bootstrap：实现 `scheduler serve`、`/healthz`、`/readyz`
 - [x] 001-bootstrap：通过 fmt、clippy、test、build 与 healthz/readyz 冒烟
 - [ ] 002-http-api-and-openapi：HTTP 管理 API 与 OpenAPI 3.1
+- [x] 002-http-api-and-openapi：选择 `utoipa` + `utoipa-swagger-ui`
+- [x] 002-http-api-and-openapi：实现 `/api/v1/system/info`、`/api/v1/cluster`、Jobs skeleton
+- [x] 002-http-api-and-openapi：暴露 `/api-docs/openapi.json` 与 `/docs`
+- [x] 002-http-api-and-openapi：后端入口调整为根 `src/main.rs`，业务模块继续在 `crates/*`
+- [ ] 003-worker-tunnel：Worker 主动连接与注册心跳

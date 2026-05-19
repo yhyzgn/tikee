@@ -17,7 +17,7 @@
 ## 当前代码上下文
 
 - Cargo workspace 已初始化。
-- Rust crate 均位于 `./crates/`：
+- 后端入口位于根 `src/main.rs`；Rust 模块 crate 均位于 `./crates/`：
   - `scheduler-core`
   - `scheduler-config`
   - `scheduler-server`
@@ -28,7 +28,7 @@
 
 ## 硬性约束
 
-- 所有 Rust 代码继续放在 `./crates/*` 对应 crate 中。
+- 后端主程序入口保留在仓库根 `src/main.rs`；其余 Rust 代码继续放在 `./crates/*` 对应 crate 中。
 - 不得把业务逻辑堆进 `scheduler-server`；DTO、错误、领域类型能抽到独立 crate 时优先抽离。
 - HTTP API 不得直连 Worker；执行链路仍要预留 Worker Tunnel。
 - 新增依赖默认使用当前最新稳定版；不能使用最新版时记录到 `.memory/decisions.md`。
@@ -50,7 +50,7 @@
    - `GET /api/v1/jobs` skeleton
    - `POST /api/v1/jobs` skeleton，可先返回 501 或受控占位，但 OpenAPI 要清楚表达。
 5. 暴露：
-   - `GET /openapi.json`
+   - `GET /api-docs/openapi.json`
    - `GET /docs` 或 Swagger UI/Redoc 占位。
 6. 为新增 handler 和错误模型补测试。
 7. 更新 `.memory` 和 `.prompt/003-worker-tunnel.md`。
@@ -65,7 +65,7 @@ cargo build --workspace --all-features
 cargo run --bin scheduler -- serve --config examples/dev.toml
 curl -fsS http://127.0.0.1:9090/healthz
 curl -fsS http://127.0.0.1:9090/readyz
-curl -fsS http://127.0.0.1:9090/openapi.json
+curl -fsS http://127.0.0.1:9090/api-docs/openapi.json
 curl -fsS http://127.0.0.1:9090/api/v1/system/info
 ```
 

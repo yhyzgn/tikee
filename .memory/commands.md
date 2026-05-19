@@ -36,3 +36,21 @@ cargo run --bin scheduler -- serve --config examples/dev.toml
 curl -fsS http://127.0.0.1:9090/healthz
 curl -fsS http://127.0.0.1:9090/readyz
 ```
+
+
+## 已验证命令（002-http-api-and-openapi）
+
+```bash
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test --workspace --all-features
+cargo build --workspace --all-features
+cargo run --bin scheduler -- serve --config examples/dev.toml
+curl -fsS http://127.0.0.1:9090/healthz
+curl -fsS http://127.0.0.1:9090/readyz
+curl -fsS http://127.0.0.1:9090/api-docs/openapi.json
+curl -fsS http://127.0.0.1:9090/api/v1/system/info
+curl -fsS http://127.0.0.1:9090/api/v1/cluster
+curl -fsS http://127.0.0.1:9090/api/v1/jobs
+curl -sS -o /tmp/create-job.json -w '%{http_code}' -H 'content-type: application/json' -d '{"name":"nightly"}' http://127.0.0.1:9090/api/v1/jobs
+```

@@ -44,3 +44,31 @@ Rationale:
 
 Constraint:
 - 禁止随意引入维护停滞、漏洞未修复或生态风险高的依赖。
+
+
+## 2026-05-19 — 后端主程序入口位置
+
+Decision:
+- 后端主程序入口不放在 `crates/` 内，而是放在仓库根 `src/main.rs`。
+- `crates/` 只承载解耦后的库模块 crate，例如 server、config、core、proto、storage 等。
+- 根 package `scheduler` 只负责 binary entrypoint 和启动委托，不承载业务模块。
+
+Rationale:
+- 符合用户对主程序入口位置的明确要求，同时保留 workspace + crates 模块解耦。
+
+Constraint:
+- 后续不得在根 `src/` 下堆业务模块；业务能力必须继续进入 `crates/*`。
+
+
+## 2026-05-19 — OpenAPI 生成库选择
+
+Decision:
+- HTTP/OpenAPI 阶段选择 `utoipa` + `utoipa-swagger-ui`。
+- OpenAPI JSON 暴露路径使用 `GET /api-docs/openapi.json`，Swagger UI 使用 `/docs`。
+
+Rationale:
+- `utoipa` 当前稳定、Axum 集成成熟，适合从 Rust handler/DTO 生成 OpenAPI。
+- `utoipa-swagger-ui` 会注册自身 OpenAPI JSON 路由，使用 `/api-docs/openapi.json` 可避免与手写 `/openapi.json` 路由冲突。
+
+Constraint:
+- 后续 Web API client 应以该 OpenAPI 文档为输入生成或校验。

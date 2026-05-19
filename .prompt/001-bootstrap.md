@@ -32,14 +32,14 @@
 
 ## 任务列表
 
-1. 初始化 Cargo workspace，根目录只放 workspace 配置，不承载业务代码。
-2. 在 `./crates/` 下创建建议 crate（所有 Rust 代码模块必须以 crate 形式解耦）：
+1. 初始化 Cargo workspace，根目录只放 workspace 配置和后端主程序入口 `src/main.rs`，不承载业务模块代码。
+2. 在 `./crates/` 下创建建议 crate（除根 `src/main.rs` 入口外，所有 Rust 代码模块必须以 crate 形式解耦）：
    - `crates/scheduler-server`：server binary / HTTP gateway / CLI serve。
    - `crates/scheduler-core`：领域模型与核心 trait 占位。
    - `crates/scheduler-config`：配置加载。
    - 后续可增加 `scheduler-proto`、`scheduler-storage`、`scheduler-worker-sdk`。
 3. 增加根 `Cargo.toml` workspace 配置。
-4. 增加 `rustfmt.toml`、基础 `.gitignore`，并确保 workspace members 只指向 `crates/*` 下 crate。
+4. 增加 `rustfmt.toml`、基础 `.gitignore`，并确保 workspace members 包含根入口 package 和 `crates/*` 下 crate。
 5. 实现 `scheduler serve`：
    - 读取默认配置。
    - 启动 Axum HTTP server。
