@@ -44,3 +44,21 @@ body {
   flex-direction: column;
   gap: 16px;
 }
+
+.app-shell__user {
+  margin-left: auto;
+}
+
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: linear-gradient(135deg, #eef4ff 0%, #f8fbff 52%, #ffffff 100%);
+}
+
+.login-card {
+  width: min(420px, 100%);
+  box-shadow: 0 16px 48px rgb(15 23 42 / 10%);
+}

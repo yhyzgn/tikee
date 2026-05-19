@@ -52,6 +52,15 @@ pub struct ErrorData {
 /// Standard error envelope.
 pub type ErrorResponse = ApiResponse<ErrorData>;
 
+/// Login API envelope.
+pub type LoginApiResponse = ApiResponse<AuthSession>;
+
+/// Current principal API envelope.
+pub type MeApiResponse = ApiResponse<MeResponse>;
+
+/// Empty successful API envelope.
+pub type EmptyApiResponse = ApiResponse<EmptyData>;
+
 /// System information API envelope.
 pub type SystemInfoApiResponse = ApiResponse<SystemInfoResponse>;
 
@@ -112,6 +121,35 @@ pub struct ClusterResponse {
     pub role: &'static str,
     /// Known server node count.
     pub nodes: u32,
+}
+
+/// Login request for the development admin account.
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+pub struct LoginRequest {
+    /// Username.
+    pub username: String,
+    /// Password.
+    pub password: String,
+}
+
+/// Authenticated session returned by login.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct AuthSession {
+    /// Bearer token.
+    pub token: String,
+    /// Username.
+    pub username: String,
+    /// Granted roles.
+    pub roles: Vec<String>,
+}
+
+/// Current authenticated principal.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct MeResponse {
+    /// Username.
+    pub username: String,
+    /// Granted roles.
+    pub roles: Vec<String>,
 }
 
 /// Job summary DTO.

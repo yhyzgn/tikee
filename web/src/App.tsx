@@ -1,20 +1,37 @@
 import { Alert, ConfigProvider, theme } from 'antd';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { listJobInstances, listJobs, type JobInstanceSummary, type JobSummary } from './api/client';
+import {
+  getAuthToken,
+  listJobInstances,
+  listJobs,
+  logout,
+  me,
+  setAuthToken,
+  type AuthSession,
+  type JobInstanceSummary,
+  type JobSummary,
+  type MeResponse,
+} from './api/client';
 import { AppShell } from './components/AppShell';
 import { Dashboard } from './pages/Dashboard';
 import { InstancesPage } from './pages/InstancesPage';
 import { JobsPage } from './pages/JobsPage';
+import { LoginPage } from './pages/LoginPage';
 
 export function App() {
   const [activePage, setActivePage] = useState('dashboard');
+  const [principal, setPrincipal] = useState<MeResponse | null>(null);
+  const [bootstrapping, setBootstrapping] = useState(() => getAuthToken() !== null);
   const [jobs, setJobs] = useState<JobSummary[]>([]);
   const [instances, setInstances] = useState<JobInstanceSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
+    if (principal === null) {
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -27,6 +44,31 @@ export function App() {
     } finally {
       setLoading(false);
     }
+  }, [principal]);
+
+  useEffect(() => {
+    if (getAuthToken() === null) {
+      setBootstrapping(false);
+      return;
+    }
+    let cancelled = false;
+    me()
+      .then((current) => {
+        if (!cancelled) {
+          setPrincipal(current);
+        }
+      })
+      .catch(() => {
+        setAuthToken(null);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setBootstrapping(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -43,12 +85,33 @@ export function App() {
     return <Dashboard jobs={jobs} instances={instances} />;
   }, [activePage, instances, jobs, loading, refresh]);
 
+  const handleAuthenticated = (session: AuthSession) => {
+    setPrincipal({ username: session.username, roles: session.roles });
+  };
+
+  const handleLogout = () => {
+    void logout().catch(() => undefined);
+    setAuthToken(null);
+    setPrincipal(null);
+    setJobs([]);
+    setInstances([]);
+    setActivePage('dashboard');
+  };
+
   return (
     <ConfigProvider theme={{ algorithm: theme.defaultAlgorithm }}>
-      <AppShell activeKey={activePage} onNavigate={setActivePage}>
-        {error ? <Alert type="error" showIcon message="API 调用失败" description={error} /> : null}
-        {page}
-      </AppShell>
+      {bootstrapping ? (
+        <div className="login-page">
+          <Alert type="info" showIcon message="正在恢复会话" />
+        </div>
+      ) : principal === null ? (
+        <LoginPage onAuthenticated={handleAuthenticated} />
+      ) : (
+        <AppShell activeKey={activePage} username={principal.username} onNavigate={setActivePage} onLogout={handleLogout}>
+          {error ? <Alert type="error" showIcon message="API 调用失败" description={error} /> : null}
+          {page}
+        </AppShell>
+      )}
     </ConfigProvider>
   );
 }

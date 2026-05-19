@@ -250,3 +250,10 @@ Rationale:
 Constraint:
 - 后续实时日志也必须复用 Worker 主动连接或 Server 侧事件推送，不得要求 Worker 暴露日志读取端口。
 
+
+
+## 2026-05-19 — 开发期认证基础
+
+- 012 阶段采用开发管理员 token 作为最小认证闭环，默认 `admin/admin` -> `dev-admin-token`，允许环境变量覆盖。
+- 写操作先保护 Job 创建与手动触发，读接口、health、ready、OpenAPI 暂保持开放，便于开发和部署烟测。
+- Web token 暂存在 `localStorage`，后续正式 RBAC/OIDC 阶段必须替换为更完整的会话、安全刷新与权限模型。

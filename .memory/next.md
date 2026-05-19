@@ -1,9 +1,15 @@
-# 下一步任务
+# 下一步
 
-执行 `.prompt/012-auth-rbac-foundation.md`：
+## 当前建议阶段
 
-1. 设计最小用户/session/auth 模型，为 Web 登录与权限感知操作打基础。
-2. 后端新增 auth 模块与统一 envelope API，避免破坏 `{code,message,data}` 规范。
-3. Web 增加登录页/登录态守卫，并在危险操作上体现权限感知。
-4. 暂不引入复杂 OIDC；先实现开发态本地账号或 token 机制，并明确后续 OIDC/RBAC 扩展点。
-5. 更新设计路线图、`.memory`、后续 `.prompt`，全量验证后提交并推送。
+执行 `.prompt/013-broadcast-execution.md`。
+
+## 目标
+
+在保持 Worker 只主动建立 OpenTunnel、不引入 Worker 入站端口的前提下，实现广播执行基础能力：一次触发向多个在线 Worker 下发任务，并能查询每个 Worker 的子执行结果。
+
+## 开始前检查
+
+- 先确认 012-auth-rbac-foundation 已提交并推送。
+- 保持 HTTP API envelope：`{code,message,data}`。
+- 完成后更新 `.memory/*`、`design/scheduler-architecture-design.md`、新增 `.prompt/014-*.md`。

@@ -1,11 +1,16 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 
-import { ApiClientError, listInstanceLogs, listJobs } from './client';
+import { ApiClientError, createJob, listInstanceLogs, listJobs, login, setAuthToken, triggerJob } from './client';
 
 const originalFetch = globalThis.fetch;
 
+function resetTokenStorage() {
+  setAuthToken(null);
+}
+
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  resetTokenStorage();
 });
 
 describe('api client envelope handling', () => {
@@ -43,5 +48,50 @@ describe('api client envelope handling', () => {
     globalThis.fetch = mock(async () => new Response(JSON.stringify(body))) as unknown as typeof fetch;
 
     await expect(listInstanceLogs('inst_1')).resolves.toEqual(body.data);
+  });
+
+  test('stores login token and sends authorization for protected mutations', async () => {
+    const calls: RequestInit[] = [];
+    globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+      calls.push(init ?? {});
+      return new Response(JSON.stringify({
+        code: 0,
+        message: 'success',
+        data: { token: 'dev-admin-token', username: 'admin', roles: ['admin'] },
+      }));
+    }) as unknown as typeof fetch;
+
+    await login({ username: 'admin', password: 'admin' });
+
+    globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+      calls.push(init ?? {});
+      return new Response(JSON.stringify({
+        code: 0,
+        message: 'success',
+        data: { id: 'job_1', namespace: 'default', app: 'default', name: 'demo', schedule_type: 'api', schedule_expr: null, enabled: true },
+      }));
+    }) as unknown as typeof fetch;
+
+    await createJob({ name: 'demo' });
+    const headers = calls.at(-1)?.headers;
+    expect(headers).toBeInstanceOf(Headers);
+    expect((headers as Headers).get('authorization')).toBe('Bearer dev-admin-token');
+  });
+
+  test('sends authorization when triggering a job', async () => {
+    setAuthToken('dev-admin-token');
+    let capturedHeaders = new Headers();
+    globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+      capturedHeaders = init?.headers as Headers;
+      return new Response(JSON.stringify({
+        code: 0,
+        message: 'success',
+        data: { id: 'inst_1', job_id: 'job_1', status: 'pending', trigger_type: 'api', created_at: 'now', updated_at: 'now' },
+      }));
+    }) as unknown as typeof fetch;
+
+    await triggerJob('job_1');
+
+    expect(capturedHeaders.get('authorization')).toBe('Bearer dev-admin-token');
   });
 });

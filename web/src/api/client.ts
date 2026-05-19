@@ -51,7 +51,25 @@ export interface JobInstanceLogSummary {
   created_at: string;
 }
 
+export interface LoginRequest {
+  username: string;
+  password: string;
+}
+
+export interface AuthSession {
+  token: string;
+  username: string;
+  roles: string[];
+}
+
+export interface MeResponse {
+  username: string;
+  roles: string[];
+}
+
 const API_BASE = import.meta.env.VITE_SCHEDULER_API_BASE ?? '';
+const TOKEN_STORAGE_KEY = 'scheduler.auth.token';
+let authToken: string | null = readStoredToken();
 
 export class ApiClientError extends Error {
   readonly code: number;
@@ -61,6 +79,41 @@ export class ApiClientError extends Error {
     this.name = 'ApiClientError';
     this.code = code;
   }
+}
+
+export function getAuthToken(): string | null {
+  return authToken;
+}
+
+export function setAuthToken(token: string | null): void {
+  authToken = token;
+  if (typeof localStorage === 'undefined') {
+    return;
+  }
+  if (token === null) {
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+  } else {
+    localStorage.setItem(TOKEN_STORAGE_KEY, token);
+  }
+}
+
+export async function login(payload: LoginRequest): Promise<AuthSession> {
+  const session = await request<AuthSession>('/api/v1/auth/login', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    auth: false,
+  });
+  setAuthToken(session.token);
+  return session;
+}
+
+export async function me(): Promise<MeResponse> {
+  return request<MeResponse>('/api/v1/auth/me');
+}
+
+export async function logout(): Promise<void> {
+  await request<null>('/api/v1/auth/logout', { method: 'POST', allowNullData: true });
+  setAuthToken(null);
 }
 
 export async function listJobs(): Promise<Page<JobSummary>> {
@@ -93,13 +146,24 @@ export async function listInstanceLogs(instanceId: string): Promise<Page<JobInst
   return request<Page<JobInstanceLogSummary>>(`/api/v1/instances/${encodeURIComponent(instanceId)}/logs`);
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+interface SchedulerRequestInit extends RequestInit {
+  auth?: boolean;
+  allowNullData?: boolean;
+}
+
+async function request<T>(path: string, init: SchedulerRequestInit = {}): Promise<T> {
+  const { auth = true, allowNullData = false, headers, ...fetchInit } = init;
+  const mergedHeaders = new Headers(headers);
+  if (!mergedHeaders.has('content-type')) {
+    mergedHeaders.set('content-type', 'application/json');
+  }
+  if (auth && authToken !== null && !mergedHeaders.has('authorization')) {
+    mergedHeaders.set('authorization', `Bearer ${authToken}`);
+  }
+
   const response = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers: {
-      'content-type': 'application/json',
-      ...init.headers,
-    },
+    ...fetchInit,
+    headers: mergedHeaders,
   });
   const envelope = (await response.json()) as ApiResponse<T | null>;
 
@@ -107,7 +171,17 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new ApiClientError(envelope.code, envelope.message);
   }
   if (envelope.data === null) {
+    if (allowNullData) {
+      return null as T;
+    }
     throw new ApiClientError(-1, 'API returned null data for a non-empty operation');
   }
   return envelope.data;
+}
+
+function readStoredToken(): string | null {
+  if (typeof localStorage === 'undefined') {
+    return null;
+  }
+  return localStorage.getItem(TOKEN_STORAGE_KEY);
 }

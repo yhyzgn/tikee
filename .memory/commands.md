@@ -268,3 +268,45 @@ curl -fsS http://127.0.0.1:8080/api/v1/jobs
 docker compose down
 ```
 
+
+
+## 2026-05-19 — 012-auth-rbac-foundation
+
+```bash
+cargo fmt --all
+cargo test --workspace --all-features
+bun run --cwd web lint
+bun run --cwd web typecheck
+bun test --cwd web
+```
+
+完整最终验证已执行：
+
+```bash
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test --workspace --all-features
+cargo build --workspace --all-features
+mvn -f java/pom.xml -q test
+bun install --cwd web
+bun run --cwd web lint
+bun run --cwd web typecheck
+bun test --cwd web
+bun run --cwd web build
+docker compose config
+docker build --network host -t scheduler:dev .
+docker build -t scheduler-web:dev ./web
+docker compose up -d --no-build
+curl -fsS http://127.0.0.1:9090/healthz
+curl -fsS http://127.0.0.1:8080
+docker compose down
+```
+
+额外本地 server auth smoke：
+
+```bash
+cargo run --bin scheduler -- serve --config examples/dev.toml
+curl -fsS http://127.0.0.1:9090/api/v1/auth/login -H 'content-type: application/json' -d '{"username":"admin","password":"admin"}'
+curl -fsS http://127.0.0.1:9090/api/v1/auth/me -H 'authorization: Bearer dev-admin-token'
+curl -fsS http://127.0.0.1:9090/api/v1/jobs -H 'content-type: application/json' -H 'authorization: Bearer dev-admin-token' -d '{"namespace":"default","app":"smoke","name":"auth-smoke"}'
+```

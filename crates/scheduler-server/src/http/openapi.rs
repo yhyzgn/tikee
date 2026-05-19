@@ -2,7 +2,7 @@
 
 use utoipa::OpenApi;
 
-use super::{dto, routes};
+use super::{auth, dto, routes};
 
 /// scheduler management `OpenAPI` document.
 #[derive(OpenApi)]
@@ -15,6 +15,9 @@ use super::{dto, routes};
     paths(
         routes::system_info,
         routes::cluster_status,
+        auth::login,
+        auth::me,
+        auth::logout,
         routes::list_jobs,
         routes::create_job,
         routes::trigger_job,
@@ -25,6 +28,9 @@ use super::{dto, routes};
     components(schemas(
         dto::ApiResponse<dto::SystemInfoResponse>,
         dto::ApiResponse<dto::ClusterResponse>,
+        dto::ApiResponse<dto::AuthSession>,
+        dto::ApiResponse<dto::MeResponse>,
+        dto::ApiResponse<dto::EmptyData>,
         dto::ApiResponse<dto::Page>,
         dto::ApiResponse<dto::JobSummary>,
         dto::ApiResponse<dto::JobInstanceSummary>,
@@ -35,6 +41,10 @@ use super::{dto, routes};
         dto::Page,
         dto::SystemInfoResponse,
         dto::ClusterResponse,
+        dto::LoginRequest,
+        dto::AuthSession,
+        dto::MeResponse,
+        dto::EmptyData,
         dto::JobSummary,
         dto::JobInstanceSummary,
         dto::JobInstancePage,
@@ -45,6 +55,7 @@ use super::{dto, routes};
     )),
     tags(
         (name = "system", description = "System and cluster metadata"),
+        (name = "auth", description = "Development authentication endpoints"),
         (name = "jobs", description = "Job management endpoints")
     )
 )]

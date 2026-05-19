@@ -12,6 +12,8 @@ pub const STORAGE_ERROR_CODE: i32 = 20_001;
 pub const BAD_REQUEST_CODE: i32 = 40_001;
 /// Business code for missing resources.
 pub const NOT_FOUND_CODE: i32 = 40_004;
+/// Business code for authentication failures.
+pub const UNAUTHORIZED_CODE: i32 = 40_101;
 
 /// API error variants returned by management handlers.
 #[derive(Debug, Clone)]
@@ -34,6 +36,11 @@ pub enum ApiError {
     /// Requested resource does not exist.
     NotFound {
         /// Human-readable missing-resource error.
+        message: String,
+    },
+    /// Authentication failed or credentials are missing.
+    Unauthorized {
+        /// Human-readable authentication error.
         message: String,
     },
 }
@@ -63,12 +70,21 @@ impl ApiError {
         }
     }
 
+    /// Build an unauthorized API error.
+    #[must_use]
+    pub fn unauthorized(message: impl Into<String>) -> Self {
+        Self::Unauthorized {
+            message: message.into(),
+        }
+    }
+
     const fn status_code(&self) -> StatusCode {
         match self {
             Self::NotImplemented { .. } => StatusCode::NOT_IMPLEMENTED,
             Self::Storage { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Self::BadRequest { .. } => StatusCode::BAD_REQUEST,
             Self::NotFound { .. } => StatusCode::NOT_FOUND,
+            Self::Unauthorized { .. } => StatusCode::UNAUTHORIZED,
         }
     }
 
@@ -78,6 +94,7 @@ impl ApiError {
             Self::Storage { .. } => STORAGE_ERROR_CODE,
             Self::BadRequest { .. } => BAD_REQUEST_CODE,
             Self::NotFound { .. } => NOT_FOUND_CODE,
+            Self::Unauthorized { .. } => UNAUTHORIZED_CODE,
         }
     }
 
@@ -86,7 +103,8 @@ impl ApiError {
             Self::NotImplemented { message }
             | Self::Storage { message }
             | Self::BadRequest { message }
-            | Self::NotFound { message } => message.clone(),
+            | Self::NotFound { message }
+            | Self::Unauthorized { message } => message.clone(),
         }
     }
 }

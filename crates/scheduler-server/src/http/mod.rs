@@ -1,5 +1,6 @@
 //! HTTP management gateway for scheduler.
 
+pub mod auth;
 pub mod dto;
 pub mod error;
 pub mod openapi;
@@ -73,6 +74,9 @@ fn api_router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/system/info", get(routes::system_info))
         .route("/cluster", get(routes::cluster_status))
+        .route("/auth/login", axum::routing::post(auth::login))
+        .route("/auth/me", get(auth::me))
+        .route("/auth/logout", axum::routing::post(auth::logout))
         .route("/jobs", get(routes::list_jobs).post(routes::create_job))
         .route(
             "/jobs/{job_action}",
@@ -189,6 +193,9 @@ mod tests {
         let json = get_json("/api-docs/openapi.json").await;
 
         assert!(json["paths"]["/api/v1/system/info"].is_object());
+        assert!(json["paths"]["/api/v1/auth/login"].is_object());
+        assert!(json["paths"]["/api/v1/auth/me"].is_object());
+        assert!(json["paths"]["/api/v1/auth/logout"].is_object());
         assert!(json["paths"]["/api/v1/jobs"].is_object());
         assert!(json["paths"]["/api/v1/jobs/{job}:trigger"].is_object());
         assert!(json["paths"]["/api/v1/jobs/{job}/instances"].is_object());
@@ -197,29 +204,99 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn create_job_persists_and_list_jobs_returns_it() {
+    async fn login_succeeds_and_me_returns_principal() {
+        let app = router().await;
+        let login = post_json_without_auth(
+            app.clone(),
+            "/api/v1/auth/login",
+            r#"{"username":"admin","password":"admin"}"#,
+        )
+        .await;
+
+        assert_eq!(login["code"], 0);
+        assert_eq!(login["data"]["token"], "dev-admin-token");
+        assert_eq!(login["data"]["roles"][0], "admin");
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/auth/me")
+                    .header("authorization", "Bearer dev-admin-token")
+                    .body(Body::empty())
+                    .unwrap_or_else(|error| panic!("request should build: {error}")),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("router should respond: {error}"));
+        assert!(response.status().is_success());
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let me: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+        assert_eq!(me["code"], 0);
+        assert_eq!(me["data"]["username"], "admin");
+    }
+
+    #[tokio::test]
+    async fn login_failure_uses_unauthorized_envelope() {
         let app = router().await;
         let response = app
-            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/auth/login")
+                    .header("content-type", "application/json")
+                    .header("authorization", "Bearer dev-admin-token")
+                    .body(Body::from(r#"{"username":"admin","password":"wrong"}"#))
+                    .unwrap_or_else(|error| panic!("request should build: {error}")),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("router should respond: {error}"));
+        assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+        assert_eq!(json["code"], 40101);
+        assert!(json.get("data").is_some());
+    }
+
+    #[tokio::test]
+    async fn create_job_requires_bearer_token() {
+        let app = router().await;
+        let response = app
             .oneshot(
                 Request::builder()
                     .method("POST")
                     .uri("/api/v1/jobs")
                     .header("content-type", "application/json")
                     .body(Body::from(
-                        r#"{"namespace":"default","app":"billing","name":"nightly"}"#,
+                        r#"{"namespace":"default","app":"billing","name":"blocked"}"#,
                     ))
                     .unwrap_or_else(|error| panic!("request should build: {error}")),
             )
             .await
             .unwrap_or_else(|error| panic!("router should respond: {error}"));
-
-        assert!(response.status().is_success());
+        assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .unwrap_or_else(|error| panic!("body should collect: {error}"));
-        let created: Value = serde_json::from_slice(&body)
+        let json: Value = serde_json::from_slice(&body)
             .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+        assert_eq!(json["code"], 40101);
+        assert!(json.get("data").is_some());
+    }
+
+    #[tokio::test]
+    async fn create_job_persists_and_list_jobs_returns_it() {
+        let app = router().await;
+        let created = post_json(
+            app.clone(),
+            "/api/v1/jobs",
+            r#"{"namespace":"default","app":"billing","name":"nightly"}"#,
+        )
+        .await;
         assert_eq!(created["code"], 0);
         assert_eq!(created["data"]["name"], "nightly");
         assert_eq!(created["data"]["namespace"], "default");
@@ -328,12 +405,24 @@ mod tests {
     }
 
     async fn post_json(app: axum::Router, uri: &str, body: &str) -> Value {
+        post_json_with_auth(app, uri, body, true).await
+    }
+
+    async fn post_json_without_auth(app: axum::Router, uri: &str, body: &str) -> Value {
+        post_json_with_auth(app, uri, body, false).await
+    }
+
+    async fn post_json_with_auth(app: axum::Router, uri: &str, body: &str, auth: bool) -> Value {
+        let mut builder = Request::builder()
+            .method("POST")
+            .uri(uri)
+            .header("content-type", "application/json");
+        if auth {
+            builder = builder.header("authorization", "Bearer dev-admin-token");
+        }
         let response = app
             .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri(uri)
-                    .header("content-type", "application/json")
+                builder
                     .body(Body::from(body.to_owned()))
                     .unwrap_or_else(|error| panic!("request should build: {error}")),
             )

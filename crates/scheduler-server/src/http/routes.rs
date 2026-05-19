@@ -2,12 +2,12 @@
 
 use std::{str::FromStr, sync::Arc};
 
-use axum::{Json, extract::Path, extract::Query, extract::State};
+use axum::{Json, extract::Path, extract::Query, extract::State, http::HeaderMap};
 use scheduler_core::{ScheduleType, TriggerType};
 use scheduler_storage::{CreateJob, CreateJobInstance};
 
 use super::{
-    AppState,
+    AppState, auth,
     dto::{
         ApiResponse, ClusterApiResponse, ClusterResponse, CreateJobRequest, ErrorResponse,
         JobApiResponse, JobInstanceApiResponse, JobInstanceLogPage, JobInstanceLogPageApiResponse,
@@ -100,8 +100,10 @@ pub async fn list_jobs(
 )]
 pub async fn create_job(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Json(request): Json<CreateJobRequest>,
 ) -> Result<Json<JobApiResponse>, ApiError> {
+    auth::require_admin(&headers)?;
     let schedule_type = parse_schedule_type(request.schedule_type.as_deref().unwrap_or("api"))?;
     let created = state
         .jobs
@@ -139,9 +141,11 @@ pub async fn create_job(
 )]
 pub async fn trigger_job(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Path(job_action): Path<String>,
     Json(request): Json<TriggerJobRequest>,
 ) -> Result<Json<JobInstanceApiResponse>, ApiError> {
+    auth::require_admin(&headers)?;
     let job = parse_trigger_path(&job_action)?;
     let trigger_type = parse_trigger_type(request.trigger_type.as_deref().unwrap_or("api"))?;
     let instance = state

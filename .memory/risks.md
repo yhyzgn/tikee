@@ -29,3 +29,10 @@
 - 011 日志当前按实例分页骨架返回全部结果，尚未实现游标分页、日志压缩/归档、实时 SSE/WebSocket 流和敏感信息脱敏策略。
 - TaskLog 持久化当前信任 worker 上报的 sequence/level/message，后续需要大小限制、速率限制和租户隔离。
 
+
+
+## 2026-05-19 — 012 auth 风险
+
+- 当前认证是开发期基础，不是生产安全方案；默认 `admin/admin` 和静态 bearer token 仅用于本地与早期集成。
+- 尚未实现正式 RBAC、OIDC、API Token 生命周期、密码哈希、审计日志、CSRF/刷新 token 等生产能力。
+- Web token 使用 `localStorage`，存在 XSS 后 token 泄露风险；正式安全阶段需要收敛为更安全的会话策略。

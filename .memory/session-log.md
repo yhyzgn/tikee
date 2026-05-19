@@ -352,3 +352,34 @@ Verification:
 Git:
 - 待提交并推送。
 
+
+## 2026-05-19 — 012-auth-rbac-foundation
+
+- 新增后端开发管理员认证模块：`POST /api/v1/auth/login`、`GET /api/v1/auth/me`、`POST /api/v1/auth/logout`。
+- 支持 env 覆盖开发管理员用户名、密码与 token：`SCHEDULER_DEV_ADMIN_USERNAME`、`SCHEDULER_DEV_ADMIN_PASSWORD`、`SCHEDULER_DEV_ADMIN_TOKEN`。
+- `POST /api/v1/jobs` 与 `POST /api/v1/jobs/{job}:trigger` 增加 bearer token 校验；失败返回 401 且保持 `{code,message,data}` envelope。
+- OpenAPI 增加 auth paths 与 schema。
+- Web 新增登录页、token localStorage 持久化、登录恢复、退出入口；创建 Job 与触发 Job 自动携带 Authorization header。
+- Web API client 增加 `login`、`me`、`logout`、`setAuthToken`、`getAuthToken`，并新增鉴权 header 测试。
+- 设计路线图已标记基础 Web UI 与“登录与权限感知操作”完成。
+
+Verification:
+- `cargo fmt --all -- --check` ✅
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings` ✅
+- `cargo test --workspace --all-features` ✅
+- `cargo build --workspace --all-features` ✅
+- `cargo run --bin scheduler -- serve --config examples/dev.toml` + `/healthz` + `/api/v1/auth/login` + `/api/v1/auth/me` + protected `POST /api/v1/jobs` smoke ✅
+- `mvn -f java/pom.xml -q test` ✅
+- `bun install --cwd web` ✅
+- `bun run --cwd web lint` ✅
+- `bun run --cwd web typecheck` ✅
+- `bun test --cwd web` ✅
+- `bun run --cwd web build` ✅
+- `docker compose config` ✅
+- `docker build --network host -t scheduler:dev .` ✅
+- `docker build -t scheduler-web:dev ./web` ✅
+- `docker compose up -d --no-build` + `/healthz` + Web nginx `/` smoke ✅
+- `docker compose down` ✅
+
+Git:
+- 待提交并推送。
