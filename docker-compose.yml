@@ -1,0 +1,24 @@
+services:
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: scheduler:dev
+    command: ["serve", "--config", "/app/examples/container.toml"]
+    ports:
+      - "9090:9090"
+      - "9091:9091"
+    volumes:
+      - scheduler-data:/data
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    image: scheduler-web:dev
+    depends_on:
+      - scheduler
+    ports:
+      - "8080:80"
+
+volumes:
+  scheduler-data:

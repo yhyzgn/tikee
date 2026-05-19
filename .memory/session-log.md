@@ -224,3 +224,36 @@ Git:
 - 新增 typed API client，统一解析 `{code,message,data}` envelope。
 - 新增 Bun test API client 单元测试，覆盖成功与业务失败分支。
 - 建立 `lint`、`typecheck`、`test`、`build` 脚本并验证通过。
+
+
+## 2026-05-19 — 008-container-deployment
+
+- 新增后端多阶段 Dockerfile：Rust release builder + Debian slim runtime，默认运行 `scheduler serve --config /app/examples/container.toml`。
+- 新增 `examples/container.toml`，容器内 HTTP `0.0.0.0:9090`、Worker Tunnel `0.0.0.0:9091`、SQLite dev 数据落 `/data/scheduler.db`。
+- 新增 Web Dockerfile：Bun 构建 React/Ant Design 静态资源，nginx 托管并代理 `/api/`、`/api-docs/`、`/docs` 到 scheduler HTTP 服务。
+- 新增 `docker-compose.yml`，包含 scheduler server 与 web 两个服务；Worker Tunnel 只暴露为 worker 主动出站连接入口。
+- 新增 `deploy/k8s/scheduler.yaml` 与 README，包含 Namespace、ConfigMap、SQLite dev PVC、server Deployment/Service、worker tunnel Service、web Deployment/Service。
+- 新增 Docker ignore 规则，避免 target、node_modules、dist 进入镜像构建上下文。
+- 设计路线图已将 Docker 镜像构建标记完成；后续 Helm Chart 仍保留在 Phase 3。
+
+Verification:
+- `docker compose config` ✅
+- `docker build -t scheduler:dev .` ✅
+- `docker build -t scheduler-web:dev ./web` ✅
+- `docker compose up -d --no-build` + `/healthz` + Web HTML + Web nginx `/api/v1/jobs` 代理 ✅
+- `docker compose down` ✅
+- `deploy/k8s/scheduler.yaml` PyYAML 结构解析 ✅（8 documents；当前环境无 `kubectl`）
+- `cargo fmt --all -- --check` ✅
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings` ✅
+- `cargo test --workspace --all-features` ✅
+- `cargo build --workspace --all-features` ✅
+- `mvn -f java/pom.xml -q test` ✅
+- `bun install --cwd web` ✅
+- `bun run --cwd web lint` ✅
+- `bun run --cwd web typecheck` ✅
+- `bun test --cwd web` ✅
+- `bun run --cwd web build` ✅
+
+Git:
+- 待提交并推送。
+

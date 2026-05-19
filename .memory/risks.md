@@ -16,3 +16,7 @@
 
 - Web build 当前有 Vite 大 chunk 警告（Ant Design bundle），功能构建通过；后续可用动态 import / 路由拆包优化。
 - Web 当前是管理端骨架，登录、RBAC、实例日志查看和实时事件流尚未实现。
+
+- Docker/K8s 基础部署已验证；K8s 当前只有原始 YAML 与开发态 SQLite PVC，生产仍需要 Helm Chart、外部数据库、高可用、Ingress/Gateway、NetworkPolicy、PDB、ServiceMonitor。
+- Web nginx 代理假设后端服务名为 `scheduler`；Compose 与当前 K8s YAML 已保持该名称，若 Helm/生产命名变化，需要模板化 upstream。
+

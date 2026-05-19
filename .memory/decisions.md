@@ -184,3 +184,19 @@ Rationale:
 
 Constraint:
 - 浏览器端只能访问 scheduler HTTP/OpenAPI，不直接访问 Worker Tunnel。
+
+
+## 2026-05-19 — 容器化部署基础形态
+
+Decision:
+- 后端使用仓库根 `Dockerfile` 产出 `scheduler` server 镜像，保持根 binary 入口，不把主程序入口迁入 `crates/`。
+- Web 使用 `web/Dockerfile` 产出独立 nginx 静态资源镜像，并通过同源 `/api/`、`/api-docs/`、`/docs` 反向代理访问后端 HTTP API。
+- Compose 与 K8s baseline 均使用独立 Worker Tunnel 服务入口；Worker 只主动出站连接，不要求业务容器暴露入站端口。
+
+Rationale:
+- 用户要求平台必须绝对支持 K8s/Docker/容器部署，且 server/worker 可位于不同容器或集群。
+- Web 与后端分镜像便于独立扩缩、缓存和后续 CDN/Ingress 接入。
+
+Constraint:
+- 后续 Worker/SDK/sidecar 示例不得引入 Server 直连 Worker 的反向入站模型；生产 Helm 需要继续保留 HTTP 与 Worker Tunnel 的清晰服务边界。
+

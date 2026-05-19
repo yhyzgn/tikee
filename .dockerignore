@@ -1,0 +1,10 @@
+.git
+.omx
+target
+**/target
+web/node_modules
+web/dist
+scheduler-dev.db*
+.DS_Store
+.idea
+.vscode

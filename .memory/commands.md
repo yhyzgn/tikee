@@ -158,3 +158,38 @@ curl -fsS http://127.0.0.1:9090/api/v1/jobs
 ```
 
 说明：Web build 当前有 Vite 大 chunk 警告（Ant Design bundle），不影响构建通过；后续可用路由级动态 import 拆包。
+
+
+## 已验证命令（008-container-deployment）
+
+```bash
+docker compose config
+docker build -t scheduler:dev .
+docker build -t scheduler-web:dev ./web
+docker compose up -d --no-build
+curl -fsS http://127.0.0.1:9090/healthz
+curl -fsS http://127.0.0.1:8080/
+curl -fsS http://127.0.0.1:8080/api/v1/jobs
+docker compose down
+python - <<'PY'
+from pathlib import Path
+import yaml
+items = list(yaml.safe_load_all(Path('deploy/k8s/scheduler.yaml').read_text()))
+assert all(item and item.get('apiVersion') and item.get('kind') for item in items)
+print(f'k8s yaml documents: {len(items)}')
+PY
+
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test --workspace --all-features
+cargo build --workspace --all-features
+mvn -f java/pom.xml -q test
+bun install --cwd web
+bun run --cwd web lint
+bun run --cwd web typecheck
+bun test --cwd web
+bun run --cwd web build
+```
+
+说明：`kubectl` 当前环境未安装，因此 K8s 做了 YAML 结构解析验证；Docker/Compose 已完成真实镜像构建与 Web -> backend API 代理冒烟。
+
