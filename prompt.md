@@ -181,7 +181,7 @@ cargo build --workspace --all-features
 运行/冒烟验证示例：
 
 ```bash
-cargo run --bin scheduler -- serve --config examples/dev.toml
+cargo run --bin scheduler -- serve --config config/dev.toml
 curl -fsS http://127.0.0.1:9090/healthz
 curl -fsS http://127.0.0.1:9090/api-docs/openapi.json
 ```

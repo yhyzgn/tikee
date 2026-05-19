@@ -8,8 +8,15 @@ RUN sed -i 's@deb.debian.org@mirrors.aliyun.com@g' /etc/apt/sources.list.d/debia
     && rustup target add x86_64-unknown-linux-musl \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/cache/apt/*
 
+# rsproxy 源配置
+ENV RUSTUP_DIST_SERVER="https://rsproxy.cn"
+ENV RUSTUP_UPDATE_ROOT="https://rsproxy.cn/rustup"
+
 ENV CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
 WORKDIR /app
+
+# 复制 Cargo 配置文件
+COPY .cargo/config.toml .cargo/config.toml
 
 COPY Cargo.toml Cargo.lock rustfmt.toml ./
 COPY crates/scheduler-config/Cargo.toml crates/scheduler-config/Cargo.toml
@@ -34,7 +41,7 @@ FROM dependencies AS builder
 COPY src ./src
 COPY crates ./crates
 COPY proto ./proto
-COPY examples ./examples
+COPY config ./config
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
@@ -51,9 +58,9 @@ RUN sed -i 's@dl-cdn.alpinelinux.org@mirrors.aliyun.com@g' /etc/apk/repositories
 ENV TZ=Asia/Shanghai
 WORKDIR /app
 COPY --from=builder /tmp/scheduler /usr/local/bin/scheduler
-COPY examples ./examples
+COPY config ./config
 
 VOLUME ["/data"]
 EXPOSE 9090 9091
 ENTRYPOINT ["scheduler"]
-CMD ["serve", "--config", "/app/examples/container.toml"]
+CMD ["serve", "--config", "/app/config/container.toml"]

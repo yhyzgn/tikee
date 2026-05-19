@@ -47,7 +47,7 @@
 6. 增加最小测试：
    - 配置加载测试。
    - healthz handler 测试。
-7. 增加 `examples/dev.toml`。
+7. 增加 `config/dev.toml`。
 8. 记录 Rust workspace 的实际命令；若创建前端占位，只能创建 `./web/`，不得创建 `webui/`。
 9. 更新 `.memory/commands.md` 中实际命令。
 10. 创建或更新 `.prompt/002-http-api-and-openapi.md`。
@@ -66,7 +66,7 @@ cargo build --workspace --all-features
 冒烟运行：
 
 ```bash
-cargo run --bin scheduler -- serve --config examples/dev.toml
+cargo run --bin scheduler -- serve --config config/dev.toml
 curl -fsS http://127.0.0.1:9090/healthz
 curl -fsS http://127.0.0.1:9090/readyz
 ```

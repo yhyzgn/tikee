@@ -9,7 +9,7 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo build --workspace --all-features
-cargo run --bin scheduler -- serve --config examples/dev.toml
+cargo run --bin scheduler -- serve --config config/dev.toml
 curl -fsS http://127.0.0.1:9090/healthz
 ```
 
@@ -32,7 +32,7 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo build --workspace --all-features
-cargo run --bin scheduler -- serve --config examples/dev.toml
+cargo run --bin scheduler -- serve --config config/dev.toml
 curl -fsS http://127.0.0.1:9090/healthz
 curl -fsS http://127.0.0.1:9090/readyz
 ```
@@ -45,7 +45,7 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo build --workspace --all-features
-cargo run --bin scheduler -- serve --config examples/dev.toml
+cargo run --bin scheduler -- serve --config config/dev.toml
 curl -fsS http://127.0.0.1:9090/healthz
 curl -fsS http://127.0.0.1:9090/readyz
 curl -fsS http://127.0.0.1:9090/api-docs/openapi.json
@@ -76,7 +76,7 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo build --workspace --all-features
-cargo run --bin scheduler -- serve --config examples/dev.toml
+cargo run --bin scheduler -- serve --config config/dev.toml
 curl -fsS http://127.0.0.1:9090/healthz
 curl -fsS http://127.0.0.1:9090/api-docs/openapi.json
 # Smoke also verifies 127.0.0.1:9091 accepts TCP connection for Worker Tunnel gRPC listener.
@@ -90,7 +90,7 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo build --workspace --all-features
-cargo run --bin scheduler -- serve --config examples/dev.toml
+cargo run --bin scheduler -- serve --config config/dev.toml
 curl -fsS http://127.0.0.1:9090/healthz
 curl -fsS http://127.0.0.1:9090/api-docs/openapi.json
 curl -fsS http://127.0.0.1:9090/api/v1/jobs
@@ -98,7 +98,7 @@ curl -fsS -H 'content-type: application/json' -d '{"namespace":"default","app":"
 curl -fsS http://127.0.0.1:9090/api/v1/jobs
 ```
 
-说明：本阶段新增 SeaORM storage crate；SQLite dev DB 使用 `examples/dev.toml` 的 `sqlite://scheduler-dev.db?mode=rwc`。
+说明：本阶段新增 SeaORM storage crate；SQLite dev DB 使用 `config/dev.toml` 的 `sqlite://scheduler-dev.db?mode=rwc`。
 
 
 ## 已验证命令（005-basic-scheduler）
@@ -108,7 +108,7 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo build --workspace --all-features
-cargo run --bin scheduler -- serve --config examples/dev.toml
+cargo run --bin scheduler -- serve --config config/dev.toml
 curl -fsS http://127.0.0.1:9090/healthz
 curl -fsS http://127.0.0.1:9090/api-docs/openapi.json
 curl -fsS http://127.0.0.1:9090/api/v1/jobs
@@ -127,7 +127,7 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo build --workspace --all-features
-cargo run --bin scheduler -- serve --config examples/dev.toml
+cargo run --bin scheduler -- serve --config config/dev.toml
 curl -fsS http://127.0.0.1:9090/healthz
 curl -fsS http://127.0.0.1:9090/api-docs/openapi.json
 ```
@@ -151,7 +151,7 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo build --workspace --all-features
-cargo run --bin scheduler -- serve --config examples/dev.toml
+cargo run --bin scheduler -- serve --config config/dev.toml
 curl -fsS http://127.0.0.1:9090/healthz
 curl -fsS http://127.0.0.1:9090/api-docs/openapi.json
 curl -fsS http://127.0.0.1:9090/api/v1/jobs
@@ -201,7 +201,7 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo build --workspace --all-features
-cargo run --bin scheduler -- serve --config examples/dev.toml
+cargo run --bin scheduler -- serve --config config/dev.toml
 curl -fsS http://127.0.0.1:9090/healthz
 curl -fsS http://127.0.0.1:9090/api/v1/jobs
 mvn -f java/pom.xml -q test
@@ -227,7 +227,7 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo build --workspace --all-features
-cargo run --bin scheduler -- serve --config examples/dev.toml
+cargo run --bin scheduler -- serve --config config/dev.toml
 curl -fsS http://127.0.0.1:9090/healthz
 curl -fsS -H 'content-type: application/json' -d '{"namespace":"default","app":"demo","name":"fast","schedule_type":"fixed_rate","schedule_expr":"1s"}' http://127.0.0.1:9090/api/v1/jobs
 curl -fsS http://127.0.0.1:9090/api/v1/jobs/<job_id>/instances
@@ -305,10 +305,10 @@ docker compose down
 额外本地 server auth smoke：
 
 ```bash
-cargo run --bin scheduler -- serve --config examples/dev.toml
-curl -fsS http://127.0.0.1:9090/api/v1/auth/login -H 'content-type: application/json' -d '{"username":"admin","password":"admin"}'
-curl -fsS http://127.0.0.1:9090/api/v1/auth/me -H 'authorization: Bearer dev-admin-token'
-curl -fsS http://127.0.0.1:9090/api/v1/jobs -H 'content-type: application/json' -H 'authorization: Bearer dev-admin-token' -d '{"namespace":"default","app":"smoke","name":"auth-smoke"}'
+cargo run --bin scheduler -- serve --config config/dev.toml
+curl -fsS http://127.0.0.1:9090/api/v1/auth/login -H 'content-type: application/json' -d '{"username":"scheduler_init","password":"Scheduler@2026!"}'
+curl -fsS http://127.0.0.1:9090/api/v1/auth/me -H 'authorization: Bearer scheduler-init-token'
+curl -fsS http://127.0.0.1:9090/api/v1/jobs -H 'content-type: application/json' -H 'authorization: Bearer scheduler-init-token' -d '{"namespace":"default","app":"smoke","name":"auth-smoke"}'
 ```
 
 
@@ -335,5 +335,29 @@ curl -fsS http://127.0.0.1:8080/api/v1/system/info
 curl -fsS http://127.0.0.1:8080/api-docs/openapi.json
 curl -fsS http://127.0.0.1:9090/api-docs/openapi.json
 docker compose ps
+docker compose down
+```
+
+
+## 2026-05-19 — dev script / config directory validation
+
+```bash
+./scripts/dev.sh
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test --workspace --all-features
+cargo build --workspace --all-features
+mvn -f java/pom.xml -q test
+bun run --cwd web lint
+bun run --cwd web typecheck
+bun test --cwd web
+bun run --cwd web build
+docker compose config
+DOCKER_BUILDKIT=1 docker build -t scheduler:dev .
+DOCKER_BUILDKIT=1 docker build -t scheduler-web:dev ./web
+docker compose down --remove-orphans || true
+docker compose up -d --no-build
+curl -fsS http://127.0.0.1:9090/healthz
+curl -fsS http://127.0.0.1:8080
 docker compose down
 ```

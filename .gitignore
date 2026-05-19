@@ -21,3 +21,6 @@ build/
 
 # Java/Maven build output
 java/**/target/
+
+# Local development script logs
+.dev/

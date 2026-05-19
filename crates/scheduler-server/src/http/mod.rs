@@ -229,19 +229,19 @@ mod tests {
         let login = post_json_without_auth(
             app.clone(),
             "/api/v1/auth/login",
-            r#"{"username":"admin","password":"admin"}"#,
+            r#"{"username":"scheduler_init","password":"Scheduler@2026!"}"#,
         )
         .await;
 
         assert_eq!(login["code"], 0);
-        assert_eq!(login["data"]["token"], "dev-admin-token");
+        assert_eq!(login["data"]["token"], "scheduler-init-token");
         assert_eq!(login["data"]["roles"][0], "admin");
 
         let response = app
             .oneshot(
                 Request::builder()
                     .uri("/api/v1/auth/me")
-                    .header("authorization", "Bearer dev-admin-token")
+                    .header("authorization", "Bearer scheduler-init-token")
                     .body(Body::empty())
                     .unwrap_or_else(|error| panic!("request should build: {error}")),
             )
@@ -254,7 +254,7 @@ mod tests {
         let me: Value = serde_json::from_slice(&body)
             .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
         assert_eq!(me["code"], 0);
-        assert_eq!(me["data"]["username"], "admin");
+        assert_eq!(me["data"]["username"], "scheduler_init");
     }
 
     #[tokio::test]
@@ -266,8 +266,10 @@ mod tests {
                     .method("POST")
                     .uri("/api/v1/auth/login")
                     .header("content-type", "application/json")
-                    .header("authorization", "Bearer dev-admin-token")
-                    .body(Body::from(r#"{"username":"admin","password":"wrong"}"#))
+                    .header("authorization", "Bearer scheduler-init-token")
+                    .body(Body::from(
+                        r#"{"username":"scheduler_init","password":"wrong"}"#,
+                    ))
                     .unwrap_or_else(|error| panic!("request should build: {error}")),
             )
             .await
@@ -489,7 +491,7 @@ mod tests {
             .uri(uri)
             .header("content-type", "application/json");
         if auth {
-            builder = builder.header("authorization", "Bearer dev-admin-token");
+            builder = builder.header("authorization", "Bearer scheduler-init-token");
         }
         let response = app
             .oneshot(

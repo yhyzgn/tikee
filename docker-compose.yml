@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
     image: scheduler:dev
-    command: ["serve", "--config", "/app/examples/container.toml"]
+    command: ["serve", "--config", "/app/config/container.toml"]
     ports:
       - "9090:9090"
       - "9091:9091"

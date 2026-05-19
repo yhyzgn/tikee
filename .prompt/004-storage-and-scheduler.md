@@ -25,7 +25,7 @@
 1. 新增 `crates/scheduler-storage`。
 2. 引入 SeaORM / sea-orm-migration 当前最新稳定版。
 3. 定义最小实体：namespace、app、job、job_instance。
-4. 支持 SQLite dev database，配置项写入 `examples/dev.toml`。
+4. 支持 SQLite dev database，配置项写入 `config/dev.toml`。
 5. 为 `GET /api/v1/jobs` 接入真实 repository 查询。
 6. 让 `POST /api/v1/jobs` 创建最小 job，而不是 501 placeholder。
 7. 补充 migration 和 repository 测试。
@@ -38,7 +38,7 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo build --workspace --all-features
-cargo run --bin scheduler -- serve --config examples/dev.toml
+cargo run --bin scheduler -- serve --config config/dev.toml
 curl -fsS http://127.0.0.1:9090/healthz
 curl -fsS http://127.0.0.1:9090/api/v1/jobs
 ```

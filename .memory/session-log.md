@@ -57,10 +57,10 @@ Agent:
 Work:
 - 初始化 Cargo workspace，workspace members 限定在 `crates/*`。
 - 新增 `scheduler-core`、`scheduler-config`、`scheduler-server` 三个 crate。
-- 实现 `scheduler serve --config examples/dev.toml`。
+- 实现 `scheduler serve --config config/dev.toml`。
 - 实现 Axum `/healthz` 与 `/readyz`。
 - 增加配置加载、health handler 单元测试。
-- 增加 `examples/dev.toml`、`rustfmt.toml`、GitHub Actions CI。
+- 增加 `config/dev.toml`、`rustfmt.toml`、GitHub Actions CI。
 - 更新下一阶段提示词 `.prompt/002-http-api-and-openapi.md`，新增 `.prompt/003-worker-tunnel.md`。
 
 Verification:
@@ -68,7 +68,7 @@ Verification:
 - `cargo clippy --workspace --all-targets --all-features -- -D warnings` ✅
 - `cargo test --workspace --all-features` ✅
 - `cargo build --workspace --all-features` ✅
-- `cargo run --bin scheduler -- serve --config examples/dev.toml` ✅
+- `cargo run --bin scheduler -- serve --config config/dev.toml` ✅
 - `curl -fsS http://127.0.0.1:9090/healthz` ✅ returned `{"status":"ok","uptime_seconds":0}`
 - `curl -fsS http://127.0.0.1:9090/readyz` ✅ returned `{"status":"ok","uptime_seconds":0}`
 
@@ -109,7 +109,7 @@ Verification:
 - `cargo clippy --workspace --all-targets --all-features -- -D warnings` ✅
 - `cargo test --workspace --all-features` ✅
 - `cargo build --workspace --all-features` ✅
-- `cargo run --bin scheduler -- serve --config examples/dev.toml` ✅
+- `cargo run --bin scheduler -- serve --config config/dev.toml` ✅
 - `GET /healthz` ✅
 - `GET /readyz` ✅
 - `GET /api-docs/openapi.json` ✅ contains `/api/v1/system/info` and `/api/v1/jobs`
@@ -185,7 +185,7 @@ Verification:
 - `cargo clippy --workspace --all-targets --all-features -- -D warnings` ✅
 - `cargo test --workspace --all-features` ✅
 - `cargo build --workspace --all-features` ✅
-- `cargo run --bin scheduler -- serve --config examples/dev.toml` ✅
+- `cargo run --bin scheduler -- serve --config config/dev.toml` ✅
 - HTTP `/healthz` ✅
 - OpenAPI `/api-docs/openapi.json` ✅
 - Worker Tunnel TCP listener `127.0.0.1:9091` ✅
@@ -228,8 +228,8 @@ Git:
 
 ## 2026-05-19 — 008-container-deployment
 
-- 新增后端多阶段 Dockerfile：Rust release builder + Debian slim runtime，默认运行 `scheduler serve --config /app/examples/container.toml`。
-- 新增 `examples/container.toml`，容器内 HTTP `0.0.0.0:9090`、Worker Tunnel `0.0.0.0:9091`、SQLite dev 数据落 `/data/scheduler.db`。
+- 新增后端多阶段 Dockerfile：Rust release builder + Debian slim runtime，默认运行 `scheduler serve --config /app/config/container.toml`。
+- 新增 `config/container.toml`，容器内 HTTP `0.0.0.0:9090`、Worker Tunnel `0.0.0.0:9091`、SQLite dev 数据落 `/data/scheduler.db`。
 - 新增 Web Dockerfile：Bun 构建 React/Ant Design 静态资源，nginx 托管并代理 `/api/`、`/api-docs/` 到 scheduler HTTP 服务。
 - 新增 `docker-compose.yml`，包含 scheduler server 与 web 两个服务；Worker Tunnel 只暴露为 worker 主动出站连接入口。
 - 新增 `deploy/k8s/scheduler.yaml` 与 README，包含 Namespace、ConfigMap、SQLite dev PVC、server Deployment/Service、worker tunnel Service、web Deployment/Service。
@@ -273,7 +273,7 @@ Verification:
 - `cargo clippy --workspace --all-targets --all-features -- -D warnings` ✅
 - `cargo test --workspace --all-features` ✅
 - `cargo build --workspace --all-features` ✅
-- `cargo run --bin scheduler -- serve --config examples/dev.toml` + `/healthz` + `/api/v1/jobs` smoke ✅
+- `cargo run --bin scheduler -- serve --config config/dev.toml` + `/healthz` + `/api/v1/jobs` smoke ✅
 - `mvn -f java/pom.xml -q test` ✅
 - `bun install --cwd web` ✅
 - `bun run --cwd web lint` ✅
@@ -305,7 +305,7 @@ Verification:
 - `cargo clippy --workspace --all-targets --all-features -- -D warnings` ✅
 - `cargo test --workspace --all-features` ✅
 - `cargo build --workspace --all-features` ✅
-- `cargo run --bin scheduler -- serve --config examples/dev.toml` + fixed_rate job 自动创建 pending instance smoke ✅
+- `cargo run --bin scheduler -- serve --config config/dev.toml` + fixed_rate job 自动创建 pending instance smoke ✅
 - `mvn -f java/pom.xml -q test` ✅
 - `bun install --cwd web` ✅
 - `bun run --cwd web lint` ✅
@@ -368,7 +368,7 @@ Verification:
 - `cargo clippy --workspace --all-targets --all-features -- -D warnings` ✅
 - `cargo test --workspace --all-features` ✅
 - `cargo build --workspace --all-features` ✅
-- `cargo run --bin scheduler -- serve --config examples/dev.toml` + `/healthz` + `/api/v1/auth/login` + `/api/v1/auth/me` + protected `POST /api/v1/jobs` smoke ✅
+- `cargo run --bin scheduler -- serve --config config/dev.toml` + `/healthz` + `/api/v1/auth/login` + `/api/v1/auth/me` + protected `POST /api/v1/jobs` smoke ✅
 - `mvn -f java/pom.xml -q test` ✅
 - `bun install --cwd web` ✅
 - `bun run --cwd web lint` ✅
@@ -416,3 +416,28 @@ Verification:
 
 Git:
 - 待提交并推送。
+
+
+## 2026-05-19 — dev startup script + config directory
+
+- Renamed runtime configuration directory from `examples/` to `config/` and updated Dockerfile, Compose, prompt, memory, and design references.
+- Added `scripts/dev.sh` to start backend + Web dev server together, wait for health checks, print browser/API URLs, and write logs under `.dev/`.
+- Added root `README.md` with local startup instructions, configuration directory contract, and initialization credentials.
+- Updated built-in development initialization account defaults to `scheduler_init` / `Scheduler@2026!` / `scheduler-init-token`; env overrides remain available.
+- Preserved the manually edited Dockerfile and committed the new `.cargo/config.toml` it references for rsproxy cargo source configuration.
+
+Verification:
+- `cargo fmt --all -- --check` ✅
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings` ✅
+- `cargo test --workspace --all-features` ✅
+- `cargo build --workspace --all-features` ✅
+- `mvn -f java/pom.xml -q test` ✅
+- `bun run --cwd web lint` ✅
+- `bun run --cwd web typecheck` ✅
+- `bun test --cwd web` ✅
+- `bun run --cwd web build` ✅
+- `./scripts/dev.sh` startup smoke: backend health + Web dev server ready ✅
+- `docker compose config` ✅
+- `DOCKER_BUILDKIT=1 docker build -t scheduler:dev .` ✅
+- `DOCKER_BUILDKIT=1 docker build -t scheduler-web:dev ./web` ✅
+- Compose bridge smoke: `/healthz` + Web `/` ✅

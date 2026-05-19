@@ -7,9 +7,9 @@ use super::{
     error::ApiError,
 };
 
-const DEFAULT_ADMIN_USERNAME: &str = "admin";
-const DEFAULT_ADMIN_PASSWORD: &str = "admin";
-const DEFAULT_ADMIN_TOKEN: &str = "dev-admin-token";
+const DEFAULT_ADMIN_USERNAME: &str = "scheduler_init";
+const DEFAULT_ADMIN_PASSWORD: &str = "Scheduler@2026!";
+const DEFAULT_ADMIN_TOKEN: &str = "scheduler-init-token";
 const ADMIN_ROLE: &str = "admin";
 
 /// Validate a bearer token from request headers.

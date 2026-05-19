@@ -254,7 +254,7 @@ Constraint:
 
 ## 2026-05-19 — 开发期认证基础
 
-- 012 阶段采用开发管理员 token 作为最小认证闭环，默认 `admin/admin` -> `dev-admin-token`，允许环境变量覆盖。
+- 012 阶段采用开发管理员 token 作为最小认证闭环，默认 `scheduler_init/Scheduler@2026!` -> `scheduler-init-token`，允许环境变量覆盖。
 - 写操作先保护 Job 创建与手动触发，读接口、health、ready、OpenAPI 暂保持开放，便于开发和部署烟测。
 - Web token 暂存在 `localStorage`，后续正式 RBAC/OIDC 阶段必须替换为更完整的会话、安全刷新与权限模型。
 
@@ -280,3 +280,10 @@ Constraint:
 - Worker `TaskResult` first updates child attempt status, then aggregates parent instance to `succeeded` or `partial_failed`.
 - HTTP exposes `GET /api/v1/instances/{instance}/attempts`; Web can trigger broadcast and inspect child attempts.
 - Broadcast trigger validates that at least one Worker is online before creating the parent instance, avoiding orphan pending broadcasts.
+
+
+## 2026-05-19 — Development bootstrap ergonomics
+
+- Local configuration files live under `config/`, not `examples/`, because they are operational configuration rather than sample code.
+- `scripts/dev.sh` is the canonical local development launcher for backend + Web UI during the active development cycle.
+- Built-in initialization credentials are `scheduler_init` / `Scheduler@2026!` / `scheduler-init-token`; they are development-only and remain overrideable through `SCHEDULER_DEV_ADMIN_*`.

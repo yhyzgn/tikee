@@ -1994,7 +1994,7 @@ scheduler/
 │
 ├── tests/
 ├── docs/
-└── examples/
+└── config/
 ```
 
 ---

@@ -33,7 +33,7 @@
 
 ## 2026-05-19 — 012 auth 风险
 
-- 当前认证是开发期基础，不是生产安全方案；默认 `admin/admin` 和静态 bearer token 仅用于本地与早期集成。
+- 当前认证是开发期基础，不是生产安全方案；默认 `scheduler_init/Scheduler@2026!` 和静态 bearer token 仅用于本地与早期集成。
 - 尚未实现正式 RBAC、OIDC、API Token 生命周期、密码哈希、审计日志、CSRF/刷新 token 等生产能力。
 - Web token 使用 `localStorage`，存在 XSS 后 token 泄露风险；正式安全阶段需要收敛为更安全的会话策略。
 
@@ -51,3 +51,9 @@
 - Parent broadcast aggregation currently distinguishes all-success vs partial-failed after all children finish; richer per-attempt error metadata is not persisted yet.
 - Docker bridge smoke validates Compose DNS/proxy locally, but WAF/LB/Ingress/Gateway/Service Mesh behavior still needs later deployment hardening tests.
 - Web production build still emits a large chunk warning from Ant Design bundle; functionality passes, later route-level code splitting can optimize it.
+
+
+## 2026-05-19 — dev bootstrap caveats
+
+- Initialization credentials are intentionally documented for development; they must not be used as production credentials.
+- `scripts/dev.sh` starts local long-running processes and writes `.dev/*` logs; `.dev/` is ignored by git.

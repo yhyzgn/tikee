@@ -6,7 +6,7 @@
 
 ## 当前上下文
 
-- 后端根 binary：`src/main.rs`，命令 `scheduler serve --config examples/dev.toml`。
+- 后端根 binary：`src/main.rs`，命令 `scheduler serve --config config/dev.toml`。
 - Rust crate 位于 `./crates/*`。
 - Web 工程位于 `./web`，React + TypeScript + Vite + Ant Design，Bun 管理。
 - Worker Tunnel 默认监听 `127.0.0.1:9091`，Worker 必须主动出站连接。
@@ -20,7 +20,7 @@
 3. 新增 `docker-compose.yml`，至少包含 scheduler server；可选包含 web 服务。
 4. 新增 `deploy/k8s/` 基础 YAML：Deployment、Service、ConfigMap、PVC（SQLite dev only）或外部 DB 配置入口。
 5. 明确 server 与 worker 跨网络部署：worker 只需访问 Worker Tunnel 服务地址，不暴露入站端口。
-6. 更新 `examples/` 配置，提供容器监听 `0.0.0.0` 示例。
+6. 更新 `config/` 配置，提供容器监听 `0.0.0.0` 示例。
 7. 验证 Docker build / Compose 配置；若本机 Docker 不可用，记录验证缺口并至少完成配置静态检查。
 
 ## 验证命令

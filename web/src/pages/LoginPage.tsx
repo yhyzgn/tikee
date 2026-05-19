@@ -21,7 +21,7 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
         {error ? <Alert type="error" showIcon message="登录失败" description={error} /> : null}
         <Form<LoginRequest>
           layout="vertical"
-          initialValues={{ username: 'admin', password: 'admin' }}
+          initialValues={{ username: 'scheduler_init', password: 'Scheduler@2026!' }}
           onFinish={async (values) => {
             setLoading(true);
             setError(null);

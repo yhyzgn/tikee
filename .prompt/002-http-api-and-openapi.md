@@ -22,7 +22,7 @@
   - `scheduler-config`
   - `scheduler-server`
 - `scheduler-server` 当前提供：
-  - CLI: `scheduler serve --config examples/dev.toml`
+  - CLI: `scheduler serve --config config/dev.toml`
   - HTTP: `GET /healthz`、`GET /readyz`
 - 依赖默认使用 Rust 1.95 兼容的最新稳定版。
 
@@ -64,7 +64,7 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo build --workspace --all-features
-cargo run --bin scheduler -- serve --config examples/dev.toml
+cargo run --bin scheduler -- serve --config config/dev.toml
 curl -fsS http://127.0.0.1:9090/healthz
 curl -fsS http://127.0.0.1:9090/readyz
 curl -fsS http://127.0.0.1:9090/api-docs/openapi.json
