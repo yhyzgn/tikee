@@ -55,7 +55,33 @@ body {
   color: #0f172a;
   font-size: 18px;
   font-weight: 800;
+  line-height: 1.2;
   letter-spacing: -0.02em;
+}
+
+.metric-card {
+  height: 100%;
+}
+
+.metric-card .ant-card-body {
+  padding: 20px;
+}
+
+.ant-form-inline .ant-form-item {
+  margin-block: 8px;
+}
+
+.app-shell__user {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.instance-status-tag {
+  min-width: 80px;
+  text-align: center;
+  font-weight: 600;
+  text-transform: capitalize;
 }
 
 .app-shell__brand-subtitle,

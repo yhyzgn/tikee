@@ -42,31 +42,42 @@ export function InstancesPage({ jobs, instances }: InstancesPageProps) {
     }
   };
 
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'succeeded': return 'success';
+      case 'failed': return 'error';
+      case 'partial_failed': return 'warning';
+      case 'running': return 'processing';
+      case 'pending': return 'gold';
+      default: return 'default';
+    }
+  };
+
   const columns: ColumnsType<JobInstanceSummary> = [
-    { title: 'Instance', dataIndex: 'id', ellipsis: true },
-    { title: 'Job', dataIndex: 'job_id', render: (value: string) => jobName.get(value) ?? value },
-    { title: 'Status', dataIndex: 'status', render: (value: string) => <Tag color={value === 'pending' ? 'gold' : 'blue'}>{value}</Tag> },
-    { title: 'Trigger', dataIndex: 'trigger_type' },
-    { title: 'Mode', dataIndex: 'execution_mode', render: (value: string) => <Tag color={value === 'broadcast' ? 'purple' : 'default'}>{value}</Tag> },
-    { title: 'Created At', dataIndex: 'created_at' },
+    { title: 'Instance', dataIndex: 'id', ellipsis: true, width: 140 },
+    { title: 'Job', dataIndex: 'job_id', render: (value: string) => <strong>{jobName.get(value) ?? value}</strong> },
+    { title: 'Status', dataIndex: 'status', render: (value: string) => <Tag color={getStatusColor(value)} className="instance-status-tag">{value}</Tag> },
+    { title: 'Trigger', dataIndex: 'trigger_type', render: (value: string) => <Tag>{value}</Tag> },
+    { title: 'Mode', dataIndex: 'execution_mode', render: (value: string) => <Tag color={value === 'broadcast' ? 'purple' : 'default'} className="soft-tag">{value}</Tag> },
+    { title: 'Created At', dataIndex: 'created_at', width: 180 },
     {
       title: 'Logs',
+      width: 100,
       render: (_, instance) => <Button type="link" onClick={() => void openLogs(instance)}>查看日志</Button>,
     },
   ];
 
   const attemptColumns: ColumnsType<JobInstanceAttemptSummary> = [
     { title: 'Worker', dataIndex: 'worker_id', ellipsis: true },
-    { title: 'Status', dataIndex: 'status', render: (value: string) => <Tag>{value}</Tag> },
-    { title: 'Updated At', dataIndex: 'updated_at' },
+    { title: 'Status', dataIndex: 'status', render: (value: string) => <Tag color={getStatusColor(value)} className="instance-status-tag">{value}</Tag> },
+    { title: 'Updated At', dataIndex: 'updated_at', width: 180 },
   ];
 
   const logColumns: ColumnsType<JobInstanceLogSummary> = [
-    { title: '#', dataIndex: 'sequence', width: 80 },
-    { title: 'Level', dataIndex: 'level', width: 100, render: (value: string) => <Tag>{value}</Tag> },
-    { title: 'Worker', dataIndex: 'worker_id', ellipsis: true },
+    { title: '#', dataIndex: 'sequence', width: 60 },
+    { title: 'Level', dataIndex: 'level', width: 90, render: (value: string) => <Tag color={value === 'error' ? 'red' : value === 'warn' ? 'orange' : 'blue'}>{value}</Tag> },
+    { title: 'Worker', dataIndex: 'worker_id', ellipsis: true, width: 120 },
     { title: 'Message', dataIndex: 'message' },
-    { title: 'Created At', dataIndex: 'created_at' },
   ];
 
   return (

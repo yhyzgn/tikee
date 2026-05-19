@@ -148,14 +148,22 @@ pub async fn trigger_job(
 ) -> Result<Json<JobInstanceApiResponse>, ApiError> {
     auth::require_admin(&headers)?;
     let job = parse_trigger_path(&job_action)?;
+    
+    let job_summary = state
+        .jobs
+        .get(&job)
+        .await
+        .map_err(|error| ApiError::storage(&error))?
+        .ok_or_else(|| ApiError::not_found(format!("job not found: {job}")))?;
+
     let trigger_type = parse_trigger_type(request.trigger_type.as_deref().unwrap_or("api"))?;
     let execution_mode =
         parse_execution_mode(request.execution_mode.as_deref().unwrap_or("single"))?;
     let broadcast_worker_ids = if execution_mode == ExecutionMode::Broadcast {
-        let worker_ids = state.registry.worker_ids().await;
+        let worker_ids = state.registry.find_eligible_workers(&job_summary.namespace, &job_summary.app).await;
         if worker_ids.is_empty() {
             return Err(ApiError::bad_request(
-                "broadcast execution requires at least one online worker",
+                "broadcast execution requires at least one eligible online worker",
             ));
         }
         Some(worker_ids)

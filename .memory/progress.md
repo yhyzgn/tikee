@@ -45,4 +45,5 @@
 - [x] 011-instance-logs：实例执行日志与 Web 日志查看基础
 - [x] 012-auth-rbac-foundation：登录与权限感知操作基础
 - [x] 013-broadcast-execution：广播执行基础
-- [ ] 014-worker-capability-routing：Worker 能力 / 标签 / namespace / app 基础路由
+- [x] 014-worker-capability-routing：Worker 能力 / 标签 / namespace / app 基础路由
+- [ ] 015-dynamic-script-sandbox：多语言脚本沙箱执行基础

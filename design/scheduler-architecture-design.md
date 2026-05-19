@@ -2015,6 +2015,7 @@ scheduler/
 - [x] 单机执行 + 广播执行
   - [x] 最小单机执行链路（pending instance -> first available worker -> running/succeeded/failed）
   - [x] 广播执行
+  - [x] 基于 namespace 和 app 的 Worker 能力路由
 - [x] Rust SDK (Worker 注册 + 心跳 + 任务执行)
   - [x] Rust Worker SDK 最小主动连接/注册/心跳客户端
   - [x] 基础 TaskProcessor trait / TaskContext / TaskOutcome

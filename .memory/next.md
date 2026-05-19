@@ -2,17 +2,16 @@
 
 ## 当前建议阶段
 
-执行 `.prompt/014-worker-capability-routing.md`。
+执行 `.prompt/015-dynamic-script-sandbox.md`。
 
 ## 目标
 
-在 013 已完成的 single/broadcast 执行闭环基础上，实现 Worker 能力 / 标签 / namespace / app 的基础路由，让任务只发送给符合条件的在线 Worker。
+在 Phase 014 已完成的 Worker namespace/app 基础路由上，进一步推进 Worker 的执行能力，实现多语言动态脚本（例如 Shell, Python 等）的受控执行与基础沙箱策略。
 
 ## 开始前检查
 
-- 先确认 013-broadcast-execution 已提交并推送。
-- 禁止使用浏览器 API 文档 UI；仅保留 `/api-docs/openapi.json` 作为机器可读接口契约。
-- 保持 HTTP API envelope：`{code,message,data}`，`data` 为 null 时也必须返回。
-- Worker 仍只能主动建立 `OpenTunnel`；Server 不得直接回连 Worker。
-- Docker/Compose 验证必须使用默认 bridge 网络，不得用 host 网络规避网络层问题。
-- 完成后更新 `.memory/*`、`design/scheduler-architecture-design.md`、新增 `.prompt/015-*.md`。
+- 先确认 014-worker-capability-routing 已提交并推送。
+- 遵循 design 文档关于安全沙箱与动态脚本的设计。
+- Worker 需要声明支持的 script 能力并在 Server 侧可见。
+- HTTP 接口和 UI 要配合展示对应的执行记录或脚本提交。
+- 完成后更新 `.memory/*`、`design/scheduler-architecture-design.md`、新增 `.prompt/016-*.md`。

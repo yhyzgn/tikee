@@ -344,8 +344,8 @@ mod tests {
         let registry = crate::tunnel::WorkerRegistry::default();
         let (tx1, _rx1) = tokio::sync::mpsc::channel(1);
         let (tx2, _rx2) = tokio::sync::mpsc::channel(1);
-        registry.register(worker("worker-a"), tx1).await;
-        registry.register(worker("worker-b"), tx2).await;
+        registry.register(worker("worker-a", "billing"), tx1).await;
+        registry.register(worker("worker-b", "billing"), tx2).await;
         let app = router_with_state(AppState::new(
             JobRepository::new(db.clone()),
             JobInstanceRepository::new(db.clone()),
@@ -534,16 +534,66 @@ mod tests {
         .unwrap_or_else(|error| panic!("router should respond: {error}"))
     }
 
-    fn worker(worker_id: &str) -> RegisterWorker {
+    fn worker(worker_id: &str, app: &str) -> RegisterWorker {
         RegisterWorker {
             worker_id: worker_id.to_owned(),
-            app: "billing".to_owned(),
+            app: app.to_owned(),
             namespace: "default".to_owned(),
             cluster: "local".to_owned(),
             region: "local".to_owned(),
             capabilities: Vec::new(),
-            labels: HashMap::default(),
+            labels: std::collections::HashMap::default(),
         }
+    }
+
+    #[tokio::test]
+    async fn broadcast_trigger_filters_workers_by_namespace_and_app() {
+        let db = connect_and_migrate("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("test storage should initialize: {error}"));
+        let registry = crate::tunnel::WorkerRegistry::default();
+        let (tx1, _rx1) = tokio::sync::mpsc::channel(1);
+        let (tx2, _rx2) = tokio::sync::mpsc::channel(1);
+        registry.register(worker("worker-a", "billing"), tx1).await;
+        registry.register(worker("worker-b", "analytics"), tx2).await;
+        let app = router_with_state(AppState::new(
+            JobRepository::new(db.clone()),
+            JobInstanceRepository::new(db.clone()),
+            JobInstanceLogRepository::new(db.clone()),
+            JobInstanceAttemptRepository::new(db),
+            registry,
+        ));
+
+        let created = post_json(
+            app.clone(),
+            "/api/v1/jobs",
+            r#"{"namespace":"default","app":"billing","name":"broadcast-filter"}"#,
+        )
+        .await;
+        let job_id = created["data"]["id"]
+            .as_str()
+            .unwrap_or_else(|| panic!("created job should contain id"));
+
+        let triggered = post_json(
+            app.clone(),
+            &format!("/api/v1/jobs/{job_id}:trigger"),
+            r#"{"trigger_type":"api","execution_mode":"broadcast"}"#,
+        )
+        .await;
+        let instance_id = triggered["data"]["id"]
+            .as_str()
+            .unwrap_or_else(|| panic!("triggered instance should contain id"));
+        assert_eq!(triggered["data"]["execution_mode"], "broadcast");
+
+        let attempts =
+            request_with(app, &format!("/api/v1/instances/{instance_id}/attempts")).await;
+        let body = axum::body::to_bytes(attempts.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+        assert_eq!(json["data"]["items"].as_array().map(Vec::len), Some(1));
+        assert_eq!(json["data"]["items"][0]["worker_id"], "worker-a");
     }
 
     async fn router() -> axum::Router {

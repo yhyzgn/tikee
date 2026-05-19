@@ -29,17 +29,17 @@ export function Dashboard({ jobs, instances }: DashboardProps) {
         </div>
       </section>
 
-      <Row gutter={[16, 16]}>
-        <Col xs={24} md={6}>
+      <Row gutter={[20, 20]}>
+        <Col xs={24} sm={12} xl={6}>
           <Card className="metric-card"><Statistic prefix={<ThunderboltOutlined />} title="任务总数" value={jobs.length} /></Card>
         </Col>
-        <Col xs={24} md={6}>
+        <Col xs={24} sm={12} xl={6}>
           <Card className="metric-card"><Statistic prefix={<ApiOutlined />} title="启用任务" value={enabledJobs} /></Card>
         </Col>
-        <Col xs={24} md={6}>
+        <Col xs={24} sm={12} xl={6}>
           <Card className="metric-card"><Statistic prefix={<ClockCircleOutlined />} title="等待实例" value={pendingInstances} /></Card>
         </Col>
-        <Col xs={24} md={6}>
+        <Col xs={24} sm={12} xl={6}>
           <Card className="metric-card"><Statistic prefix={<DeploymentUnitOutlined />} title="广播实例" value={broadcastInstances} /></Card>
         </Col>
       </Row>

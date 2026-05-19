@@ -519,6 +519,21 @@ impl JobRepository {
         self.hydrate_job_summaries(rows).await
     }
 
+    /// Get one job by id.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when database access fails.
+    pub async fn get(&self, job_id: &str) -> Result<Option<JobSummary>, sea_orm::DbErr> {
+        let rows = job::Entity::find_by_id(job_id.to_owned())
+            .find_also_related(app::Entity)
+            .all(&self.db)
+            .await?;
+        
+        let summaries = self.hydrate_job_summaries(rows).await?;
+        Ok(summaries.into_iter().next())
+    }
+
     /// List enabled jobs whose schedule type is managed by the scheduler tick loop.
     ///
     /// # Errors

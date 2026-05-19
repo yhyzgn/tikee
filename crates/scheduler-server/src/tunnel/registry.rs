@@ -61,6 +61,17 @@ impl WorkerRegistry {
         self.workers.read().await.keys().cloned().collect()
     }
 
+    /// Return worker ids matching the given namespace and app.
+    pub async fn find_eligible_workers(&self, namespace: &str, app: &str) -> Vec<String> {
+        self.workers
+            .read()
+            .await
+            .values()
+            .filter(|w| is_match(&w.namespace, namespace) && is_match(&w.app, app))
+            .map(|w| w.worker_id.clone())
+            .collect()
+    }
+
     /// Dispatch one task to a specific currently registered worker.
     ///
     /// # Errors
@@ -78,24 +89,10 @@ impl WorkerRegistry {
             .ok()?;
         Some(worker_id)
     }
+}
 
-    /// Dispatch one task to the first currently registered worker.
-    ///
-    /// # Errors
-    ///
-    /// Returns `None` when no worker is connected or the worker stream is closed.
-    pub async fn dispatch_to_first(&self, task: DispatchTask) -> Option<String> {
-        let worker = self.workers.read().await.values().next().cloned()?;
-        let worker_id = worker.worker_id.clone();
-        worker
-            .outbound
-            .send(Ok(ServerMessage {
-                kind: Some(server_message::Kind::DispatchTask(task)),
-            }))
-            .await
-            .ok()?;
-        Some(worker_id)
-    }
+fn is_match(worker_val: &str, job_val: &str) -> bool {
+    worker_val == job_val || worker_val == "*" || worker_val.is_empty() || job_val == "*" || job_val.is_empty()
 }
 
 /// Registered worker metadata.

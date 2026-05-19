@@ -37,6 +37,7 @@ pub async fn serve(config: SchedulerConfig) -> Result<()> {
     ));
     let tunnel_instances = instances.clone();
     let scheduler_instances = instances.clone();
+    let dispatcher_jobs = jobs.clone();
     let dispatcher_instances = instances;
     let dispatcher_attempts = attempts.clone();
     let tunnel_attempts = attempts;
@@ -58,7 +59,7 @@ pub async fn serve(config: SchedulerConfig) -> Result<()> {
             Ok::<(), anyhow::Error>(())
         },
         async {
-            tunnel::dispatcher::run(dispatcher_instances, dispatcher_attempts, registry).await;
+            tunnel::dispatcher::run(dispatcher_jobs, dispatcher_instances, dispatcher_attempts, registry).await;
             #[allow(unreachable_code)]
             Ok::<(), anyhow::Error>(())
         },
