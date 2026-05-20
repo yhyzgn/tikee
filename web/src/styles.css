@@ -534,6 +534,19 @@ body {
   background: #2563eb;
   box-shadow: 0 0 0 1px #93c5fd, 0 4px 10px rgba(37, 99, 235, 0.25);
   cursor: crosshair;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.82);
+  transition: opacity 0.14s ease, transform 0.14s ease, box-shadow 0.14s ease;
+}
+
+.workflow-node-card:hover .workflow-node-port,
+.workflow-node-card:focus-within .workflow-node-port,
+.workflow-node-card--linking .workflow-node-port,
+.workflow-node-canvas--linking .workflow-node-port {
+  opacity: 1;
+  pointer-events: auto;
+  transform: scale(1);
 }
 
 .workflow-node-port--input {
@@ -547,7 +560,13 @@ body {
 }
 
 .workflow-node-port:hover {
-  transform: scale(1.15);
+  transform: scale(1.18);
+  box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.18), 0 8px 16px rgba(37, 99, 235, 0.28);
+}
+
+.workflow-node-canvas__temp-edge {
+  stroke-dasharray: 8 6;
+  filter: drop-shadow(0 5px 9px rgba(14, 165, 233, 0.24));
 }
 
 .workflow-create-inline {

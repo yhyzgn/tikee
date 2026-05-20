@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type PointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { Alert, Button, Card, Col, Form, Input, List, Row, Segmented, Select, Space, Tag, Timeline, Typography, message } from 'antd';
 import {
   advanceWorkflowInstance,
@@ -46,12 +46,26 @@ const STATUS_COLORS: Record<string, string> = {
   skipped: 'warning',
 };
 
-const NODE_LIMITS: Record<string, { in: number; out: number }> = {
-  job: { in: 8, out: 8 },
-  map: { in: 8, out: 8 },
-  map_reduce: { in: 8, out: 8 },
-  sub_workflow: { in: 8, out: 8 },
-};
+const NODE_CATALOG = [
+  { kind: 'start', label: 'Start', limits: { in: 0, out: 4 } },
+  { kind: 'end', label: 'End', limits: { in: 8, out: 0 } },
+  { kind: 'job', label: 'Job', limits: { in: 8, out: 8 } },
+  { kind: 'script', label: 'Script', limits: { in: 8, out: 8 } },
+  { kind: 'http', label: 'HTTP', limits: { in: 8, out: 8 } },
+  { kind: 'condition', label: 'Condition', limits: { in: 8, out: 2 } },
+  { kind: 'parallel', label: 'Parallel', limits: { in: 8, out: 16 } },
+  { kind: 'join', label: 'Join', limits: { in: 16, out: 4 } },
+  { kind: 'delay', label: 'Delay', limits: { in: 8, out: 8 } },
+  { kind: 'approval', label: 'Approval', limits: { in: 8, out: 4 } },
+  { kind: 'notification', label: 'Notify', limits: { in: 8, out: 8 } },
+  { kind: 'map', label: 'Map', limits: { in: 8, out: 8 } },
+  { kind: 'map_reduce', label: 'MapReduce', limits: { in: 16, out: 4 } },
+  { kind: 'sub_workflow', label: 'SubFlow', limits: { in: 8, out: 4 } },
+] as const;
+
+const NODE_LIMITS: Record<string, { in: number; out: number }> = Object.fromEntries(
+  NODE_CATALOG.map((node) => [node.kind, node.limits]),
+);
 
 function parseDefinition(raw: string): WorkflowDefinition {
   return JSON.parse(raw) as WorkflowDefinition;
@@ -98,7 +112,10 @@ function makeNode(kind: string, index: number): WorkflowNodeSpec {
   if (kind === 'sub_workflow') {
     return { key, name: key, kind, child_workflow_id: 'wf_child', config };
   }
-  return { key, name: key, kind: 'job', job_id: `job_${key.replaceAll('-', '_')}`, config };
+  if (kind === 'job') {
+    return { key, name: key, kind, job_id: `job_${key.replaceAll('-', '_')}`, config };
+  }
+  return { key, name: key, kind, config };
 }
 
 function nodePosition(node: WorkflowNodeSpec, index: number) {
@@ -122,11 +139,17 @@ function edgeColor(condition?: string | null) {
 
 function DagPreview({ definition, instance, editable = false, onChange }: { definition: WorkflowDefinition; instance?: WorkflowInstanceSummary | null; editable?: boolean; onChange?: (definition: WorkflowDefinition) => void }) {
   const [dragging, setDragging] = useState<{ key: string; offsetX: number; offsetY: number } | null>(null);
-  const [pendingEdgeFrom, setPendingEdgeFrom] = useState<string | null>(null);
+  const [linkDrag, setLinkDrag] = useState<{ from: string; x: number; y: number } | null>(null);
+  const spaceRef = useRef<HTMLDivElement | null>(null);
   const statuses = new Map(instance?.nodes.map((node) => [node.node_key, node.status]) ?? []);
   const positions = new Map(definition.nodes.map((node, index) => [node.key, nodePosition(node, index)]));
 
   const update = (next: WorkflowDefinition) => onChange?.(next);
+  const toCanvasPoint = (event: PointerEvent<HTMLElement>) => {
+    const rect = spaceRef.current?.getBoundingClientRect();
+    if (!rect) return { x: event.clientX, y: event.clientY };
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  };
   const removeNode = (key: string) => update({ nodes: definition.nodes.filter((node) => node.key !== key), edges: definition.edges.filter((edge) => edge.from !== key && edge.to !== key) });
   const removeEdge = (edge: WorkflowEdgeSpec) => update({ ...definition, edges: definition.edges.filter((item) => !(item.from === edge.from && item.to === edge.to && item.condition === edge.condition)) });
   const addNode = (kind: string) => update({ ...definition, nodes: [...definition.nodes, makeNode(kind, definition.nodes.length + 1)] });
@@ -155,26 +178,35 @@ function DagPreview({ definition, instance, editable = false, onChange }: { defi
   const pointerDown = (node: WorkflowNodeSpec, event: PointerEvent<HTMLDivElement>) => {
     if (!editable || (event.target as HTMLElement).closest('button,.workflow-node-port')) return;
     const position = positions.get(node.key) ?? { x: 0, y: 0 };
-    setDragging({ key: node.key, offsetX: event.clientX - position.x, offsetY: event.clientY - position.y });
+    const point = toCanvasPoint(event);
+    setDragging({ key: node.key, offsetX: point.x - position.x, offsetY: point.y - position.y });
     event.currentTarget.setPointerCapture(event.pointerId);
   };
   const pointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    if (!editable || !dragging) return;
-    const nextX = Math.max(18, event.clientX - dragging.offsetX);
-    const nextY = Math.max(18, event.clientY - dragging.offsetY);
+    if (!editable) return;
+    if (linkDrag) {
+      setLinkDrag({ ...linkDrag, ...toCanvasPoint(event) });
+      return;
+    }
+    if (!dragging) return;
+    const point = toCanvasPoint(event);
+    const nextX = Math.max(18, point.x - dragging.offsetX);
+    const nextY = Math.max(18, point.y - dragging.offsetY);
     update({ ...definition, nodes: definition.nodes.map((node) => node.key === dragging.key ? withNodePosition(node, nextX, nextY) : node) });
   };
-  const connectFrom = (key: string) => {
+  const startLinkDrag = (key: string, event: PointerEvent<HTMLButtonElement>) => {
     if (!editable) return;
-    setPendingEdgeFrom(key);
+    event.preventDefault();
+    event.stopPropagation();
     setDragging(null);
-    message.info(`从 ${key} 输出端口开始连线：点击目标节点输入端口`);
+    setLinkDrag({ from: key, ...toCanvasPoint(event) });
   };
-  const connectTo = (key: string) => {
-    if (!editable || !pendingEdgeFrom) return;
-    connectNodes(pendingEdgeFrom, key);
-    setPendingEdgeFrom(null);
-    setDragging(null);
+  const finishLinkDrag = (key: string, event: PointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!editable || !linkDrag) return;
+    connectNodes(linkDrag.from, key);
+    setLinkDrag(null);
   };
 
   const canvasWidth = Math.max(980, ...definition.nodes.map((node, index) => (positions.get(node.key)?.x ?? index * 220) + 280));
@@ -184,16 +216,13 @@ function DagPreview({ definition, instance, editable = false, onChange }: { defi
     <div className="workflow-dag-editor">
       {editable ? (
         <Space wrap className="workflow-dag-toolbar">
-          <Button onClick={() => addNode('job')}>+ Job</Button>
-          <Button onClick={() => addNode('map')}>+ Map</Button>
-          <Button onClick={() => addNode('map_reduce')}>+ MapReduce</Button>
-          <Button onClick={() => addNode('sub_workflow')}>+ 子工作流</Button>
+          {NODE_CATALOG.map((node) => <Button key={node.kind} onClick={() => addNode(node.kind)}>+ {node.label}</Button>)}
           <Button onClick={addEdge} disabled={definition.nodes.length < 2}>连接最后两个节点</Button>
-          {pendingEdgeFrom ? <Tag color="blue">从 {pendingEdgeFrom} 连线中：点击输入端口完成</Tag> : null}
+          {linkDrag ? <Tag color="blue">从 {linkDrag.from} 拖线中：松到目标输入端口完成</Tag> : null}
         </Space>
       ) : null}
-      <div className="workflow-node-canvas" style={{ height: Math.min(720, canvasHeight + 40) }} onPointerMove={pointerMove} onPointerUp={() => setDragging(null)}>
-        <div className="workflow-node-canvas__space" style={{ width: canvasWidth, height: canvasHeight }}>
+      <div className={`workflow-node-canvas ${linkDrag ? 'workflow-node-canvas--linking' : ''}`} style={{ height: Math.min(720, canvasHeight + 40) }} onPointerMove={pointerMove} onPointerUp={() => { setDragging(null); setLinkDrag(null); }}>
+        <div ref={spaceRef} className="workflow-node-canvas__space" style={{ width: canvasWidth, height: canvasHeight }}>
           <svg className="workflow-node-canvas__edges" width={canvasWidth} height={canvasHeight}>
             <defs>
               <marker id="workflow-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
@@ -212,6 +241,16 @@ function DagPreview({ definition, instance, editable = false, onChange }: { defi
               const color = edgeColor(edge.condition);
               return <path key={`${edge.from}-${edge.to}-${index}`} d={`M ${x1} ${y1} C ${x1 + mid} ${y1}, ${x2 - mid} ${y2}, ${x2} ${y2}`} stroke={color} strokeWidth="2.5" fill="none" markerEnd="url(#workflow-arrow)" />;
             })}
+            {linkDrag ? (() => {
+              const from = positions.get(linkDrag.from);
+              if (!from) return null;
+              const x1 = from.x + 218;
+              const y1 = from.y + 70;
+              const x2 = linkDrag.x;
+              const y2 = linkDrag.y;
+              const mid = Math.max(80, Math.abs(x2 - x1) / 2);
+              return <path className="workflow-node-canvas__temp-edge" d={`M ${x1} ${y1} C ${x1 + mid} ${y1}, ${x2 - mid} ${y2}, ${x2} ${y2}`} stroke="#0ea5e9" strokeWidth="2.5" fill="none" markerEnd="url(#workflow-arrow)" />;
+            })() : null}
           </svg>
           {definition.nodes.map((node, index) => {
             const position = positions.get(node.key) ?? { x: 0, y: 0 };
@@ -220,9 +259,9 @@ function DagPreview({ definition, instance, editable = false, onChange }: { defi
             const outgoing = definition.edges.filter((edge) => edge.from === node.key);
             const limits = nodeLimits(node);
             return (
-              <div className={`workflow-node-card ${editable ? 'workflow-node-card--editable' : ''} ${pendingEdgeFrom === node.key ? 'workflow-node-card--linking' : ''}`} key={node.key} style={{ left: position.x, top: position.y }} onPointerDown={(event) => pointerDown(node, event)}>
-                <button className="workflow-node-port workflow-node-port--input" type="button" onPointerDown={(event) => { event.preventDefault(); event.stopPropagation(); connectTo(node.key); }} onClick={(event) => { event.preventDefault(); event.stopPropagation(); connectTo(node.key); }} title={`输入端口：${incoming.length}/${limits.in}`} />
-                <button className="workflow-node-port workflow-node-port--output" type="button" onPointerDown={(event) => { event.preventDefault(); event.stopPropagation(); connectFrom(node.key); }} onClick={(event) => { event.preventDefault(); event.stopPropagation(); connectFrom(node.key); }} title={`输出端口：${outgoing.length}/${limits.out}`} />
+              <div className={`workflow-node-card ${editable ? 'workflow-node-card--editable' : ''} ${linkDrag?.from === node.key ? 'workflow-node-card--linking' : ''}`} key={node.key} style={{ left: position.x, top: position.y }} onPointerDown={(event) => pointerDown(node, event)}>
+                {limits.in > 0 ? <button className="workflow-node-port workflow-node-port--input" type="button" onPointerUp={(event) => finishLinkDrag(node.key, event)} onPointerDown={(event) => event.stopPropagation()} title={`输入端口：${incoming.length}/${limits.in}`} /> : null}
+                {limits.out > 0 ? <button className="workflow-node-port workflow-node-port--output" type="button" onPointerDown={(event) => startLinkDrag(node.key, event)} title={`输出端口：${outgoing.length}/${limits.out}`} /> : null}
                 <div className="workflow-node-card__header">
                   <span className="workflow-node-card__index">{index + 1}</span>
                   <span className="workflow-node-card__title">{node.name ?? node.key}</span>

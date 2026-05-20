@@ -659,3 +659,9 @@ Git:
 
 - Fixed workflow canvas linking reliability by triggering port actions on pointerdown as well as click, enlarging the invisible port hit area, cancelling drag state during linking, and highlighting the source node while linking.
 - Temporarily relaxed per-type port limits to 8 in/out for all node types to avoid UX-blocking false negatives while the exact product semantics are still evolving.
+
+### 2026-05-20 17:28 工作流节点画布连线交互
+- 用户要求像 Blender 节点编辑器一样：鼠标靠近节点边缘显示输入/输出端口，从输出端口按住拖出箭头，释放到下一个节点输入端口完成连线。
+- 已在 `web/src/pages/WorkflowsPage.tsx` 使用 canvas-local pointer 坐标实现拖拽节点与拖拽连线，避免滚动画布/视口坐标偏移。
+- 已在 `web/src/styles.css` 隐藏默认端口，仅 hover/连线态显示端口，并增加临时连线虚线和阴影。
+- 已在 `crates/scheduler-storage/src/repository/workflow.rs` 扩展 workflow 节点类型白名单，避免 Web 新节点保存时报 unsupported node kind。

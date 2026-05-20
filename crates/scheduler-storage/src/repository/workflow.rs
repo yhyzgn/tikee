@@ -942,7 +942,22 @@ pub fn validate_workflow_definition(definition: &WorkflowDefinition) -> Workflow
             errors.push(format!("duplicate node key: {}", node.key));
         }
     }
-    let allowed_kinds = ["job", "map", "map_reduce", "sub_workflow"];
+    let allowed_kinds = [
+        "start",
+        "end",
+        "job",
+        "script",
+        "http",
+        "condition",
+        "parallel",
+        "join",
+        "delay",
+        "approval",
+        "notification",
+        "map",
+        "map_reduce",
+        "sub_workflow",
+    ];
     for node in &definition.nodes {
         let kind = node.kind.as_deref().unwrap_or("job");
         if !allowed_kinds.contains(&kind) {
