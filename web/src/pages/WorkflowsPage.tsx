@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type PointerEvent } from 'react';
+import { useEffect, useMemo, useState, type MouseEvent, type PointerEvent } from 'react';
 import { Alert, Button, Card, Col, Form, Input, List, Row, Segmented, Select, Space, Tag, Timeline, Typography, message } from 'antd';
 import {
   advanceWorkflowInstance,
@@ -24,9 +24,9 @@ import {
 
 const DEFAULT_WORKFLOW: WorkflowDefinition = {
   nodes: [
-    { key: 'extract', name: 'Extract', kind: 'job', job_id: 'job_extract' },
-    { key: 'map-users', name: 'Map users', kind: 'map', map_items: [{ shard: 1 }, { shard: 2 }] },
-    { key: 'reduce', name: 'Reduce', kind: 'map_reduce', map_items: [{ shard: 1 }, { shard: 2 }] },
+    { key: 'extract', name: 'Extract', kind: 'job', job_id: 'job_extract', config: { ui: { x: 80, y: 120 } } },
+    { key: 'map-users', name: 'Map users', kind: 'map', map_items: [{ shard: 1 }, { shard: 2 }], config: { ui: { x: 360, y: 80 } } },
+    { key: 'reduce', name: 'Reduce', kind: 'map_reduce', map_items: [{ shard: 1 }, { shard: 2 }], config: { ui: { x: 650, y: 160 } } },
   ],
   edges: [
     { from: 'extract', to: 'map-users', condition: 'on_success' },
@@ -46,6 +46,13 @@ const STATUS_COLORS: Record<string, string> = {
   skipped: 'warning',
 };
 
+const NODE_LIMITS: Record<string, { in: number; out: number }> = {
+  job: { in: 1, out: 4 },
+  map: { in: 1, out: 4 },
+  map_reduce: { in: 8, out: 2 },
+  sub_workflow: { in: 1, out: 2 },
+};
+
 function parseDefinition(raw: string): WorkflowDefinition {
   return JSON.parse(raw) as WorkflowDefinition;
 }
@@ -63,6 +70,7 @@ function definitionToYaml(definition: WorkflowDefinition): string {
     if (node.job_id) lines.push(`    job_id: ${node.job_id}`);
     if (node.child_workflow_id) lines.push(`    child_workflow_id: ${node.child_workflow_id}`);
     if (node.map_items) lines.push(`    map_items: ${JSON.stringify(node.map_items)}`);
+    if (node.config) lines.push(`    config: ${JSON.stringify(node.config)}`);
   }
   lines.push('edges:');
   for (const edge of definition.edges) {
@@ -73,15 +81,24 @@ function definitionToYaml(definition: WorkflowDefinition): string {
   return lines.join('\n');
 }
 
+function nodeKind(node: WorkflowNodeSpec): string {
+  return node.kind ?? 'job';
+}
+
+function nodeLimits(node: WorkflowNodeSpec) {
+  return NODE_LIMITS[nodeKind(node)] ?? { in: 1, out: 1 };
+}
+
 function makeNode(kind: string, index: number): WorkflowNodeSpec {
   const key = `${kind.replace('_', '-')}-${index}`;
+  const config = { ui: { x: 90 + index * 44, y: 100 + index * 34 } };
   if (kind === 'map' || kind === 'map_reduce') {
-    return { key, name: key, kind, map_items: [{ shard: 1 }, { shard: 2 }] };
+    return { key, name: key, kind, map_items: [{ shard: 1 }, { shard: 2 }], config };
   }
   if (kind === 'sub_workflow') {
-    return { key, name: key, kind, child_workflow_id: 'wf_child' };
+    return { key, name: key, kind, child_workflow_id: 'wf_child', config };
   }
-  return { key, name: key, kind: 'job', job_id: `job_${key.replaceAll('-', '_')}` };
+  return { key, name: key, kind: 'job', job_id: `job_${key.replaceAll('-', '_')}`, config };
 }
 
 function nodePosition(node: WorkflowNodeSpec, index: number) {
@@ -112,18 +129,29 @@ function DagPreview({ definition, instance, editable = false, onChange }: { defi
   const update = (next: WorkflowDefinition) => onChange?.(next);
   const removeNode = (key: string) => update({ nodes: definition.nodes.filter((node) => node.key !== key), edges: definition.edges.filter((edge) => edge.from !== key && edge.to !== key) });
   const removeEdge = (edge: WorkflowEdgeSpec) => update({ ...definition, edges: definition.edges.filter((item) => !(item.from === edge.from && item.to === edge.to && item.condition === edge.condition)) });
-  const addNode = (kind: string) => {
-    const nextNode = withNodePosition(makeNode(kind, definition.nodes.length + 1), 80 + definition.nodes.length * 38, 90 + definition.nodes.length * 34);
-    update({ ...definition, nodes: [...definition.nodes, nextNode] });
-  };
+  const addNode = (kind: string) => update({ ...definition, nodes: [...definition.nodes, makeNode(kind, definition.nodes.length + 1)] });
   const addEdge = () => {
     if (definition.nodes.length < 2) return;
     const from = definition.nodes.at(-2)?.key;
     const to = definition.nodes.at(-1)?.key;
     if (!from || !to) return;
-    update({ ...definition, edges: [...definition.edges, { from, to, condition: 'on_success' }] });
+    connectNodes(from, to);
   };
   const changeEdge = (index: number, patch: Partial<WorkflowEdgeSpec>) => update({ ...definition, edges: definition.edges.map((edge, edgeIndex) => edgeIndex === index ? { ...edge, ...patch } : edge) });
+  const connectNodes = (from: string, to: string) => {
+    if (from === to) { message.warning('不能连接到自身'); return; }
+    const fromNode = definition.nodes.find((node) => node.key === from);
+    const toNode = definition.nodes.find((node) => node.key === to);
+    if (!fromNode || !toNode) return;
+    const fromCount = definition.edges.filter((edge) => edge.from === from).length;
+    const toCount = definition.edges.filter((edge) => edge.to === to).length;
+    const fromLimit = nodeLimits(fromNode).out;
+    const toLimit = nodeLimits(toNode).in;
+    if (fromCount >= fromLimit) { message.warning(`${from} 的输出最多 ${fromLimit} 条`); return; }
+    if (toCount >= toLimit) { message.warning(`${to} 的输入最多 ${toLimit} 条`); return; }
+    if (definition.edges.some((edge) => edge.from === from && edge.to === to)) { message.info('这条连线已存在'); return; }
+    update({ ...definition, edges: [...definition.edges, { from, to, condition: 'on_success' }] });
+  };
   const pointerDown = (node: WorkflowNodeSpec, event: PointerEvent<HTMLDivElement>) => {
     if (!editable || (event.target as HTMLElement).closest('button,.workflow-node-port')) return;
     const position = positions.get(node.key) ?? { x: 0, y: 0 };
@@ -136,20 +164,21 @@ function DagPreview({ definition, instance, editable = false, onChange }: { defi
     const nextY = Math.max(18, event.clientY - dragging.offsetY);
     update({ ...definition, nodes: definition.nodes.map((node) => node.key === dragging.key ? withNodePosition(node, nextX, nextY) : node) });
   };
-  const connectFrom = (key: string) => {
+  const connectFrom = (key: string, event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
     if (!editable) return;
     setPendingEdgeFrom(key);
-    message.info(`选择 ${key} 的输出端口，接下来点击目标节点输入端口完成连线`);
+    message.info(`从 ${key} 输出端口开始连线：点击目标节点输入端口`);
   };
-  const connectTo = (key: string) => {
-    if (!editable || !pendingEdgeFrom || pendingEdgeFrom === key) return;
-    const exists = definition.edges.some((edge) => edge.from === pendingEdgeFrom && edge.to === key);
-    if (!exists) update({ ...definition, edges: [...definition.edges, { from: pendingEdgeFrom, to: key, condition: 'on_success' }] });
+  const connectTo = (key: string, event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (!editable || !pendingEdgeFrom) return;
+    connectNodes(pendingEdgeFrom, key);
     setPendingEdgeFrom(null);
   };
 
-  const canvasWidth = Math.max(900, ...definition.nodes.map((node, index) => (positions.get(node.key)?.x ?? index * 220) + 260));
-  const canvasHeight = Math.max(480, ...definition.nodes.map((node, index) => (positions.get(node.key)?.y ?? index * 100) + 180));
+  const canvasWidth = Math.max(980, ...definition.nodes.map((node, index) => (positions.get(node.key)?.x ?? index * 220) + 280));
+  const canvasHeight = Math.max(560, ...definition.nodes.map((node, index) => (positions.get(node.key)?.y ?? index * 100) + 210));
 
   return (
     <div className="workflow-dag-editor">
@@ -160,10 +189,10 @@ function DagPreview({ definition, instance, editable = false, onChange }: { defi
           <Button onClick={() => addNode('map_reduce')}>+ MapReduce</Button>
           <Button onClick={() => addNode('sub_workflow')}>+ 子工作流</Button>
           <Button onClick={addEdge} disabled={definition.nodes.length < 2}>连接最后两个节点</Button>
-          {pendingEdgeFrom ? <Tag color="blue">正在从 {pendingEdgeFrom} 连线：点击目标输入端口</Tag> : null}
+          {pendingEdgeFrom ? <Tag color="blue">从 {pendingEdgeFrom} 连线中：点击输入端口完成</Tag> : null}
         </Space>
       ) : null}
-      <div className="workflow-node-canvas" style={{ height: Math.min(620, canvasHeight + 40) }} onPointerMove={pointerMove} onPointerUp={() => setDragging(null)}>
+      <div className="workflow-node-canvas" style={{ height: Math.min(720, canvasHeight + 40) }} onPointerMove={pointerMove} onPointerUp={() => setDragging(null)}>
         <div className="workflow-node-canvas__space" style={{ width: canvasWidth, height: canvasHeight }}>
           <svg className="workflow-node-canvas__edges" width={canvasWidth} height={canvasHeight}>
             <defs>
@@ -189,24 +218,25 @@ function DagPreview({ definition, instance, editable = false, onChange }: { defi
             const status = statuses.get(node.key) ?? 'design';
             const incoming = definition.edges.filter((edge) => edge.to === node.key);
             const outgoing = definition.edges.filter((edge) => edge.from === node.key);
+            const limits = nodeLimits(node);
             return (
               <div className={`workflow-node-card ${editable ? 'workflow-node-card--editable' : ''}`} key={node.key} style={{ left: position.x, top: position.y }} onPointerDown={(event) => pointerDown(node, event)}>
-                <button className="workflow-node-port workflow-node-port--input" type="button" onClick={() => connectTo(node.key)} title="输入端口" />
-                <button className="workflow-node-port workflow-node-port--output" type="button" onClick={() => connectFrom(node.key)} title="输出端口" />
+                <button className="workflow-node-port workflow-node-port--input" type="button" onClick={(event) => connectTo(node.key, event)} onPointerDown={(event) => event.stopPropagation()} title={`输入端口：${incoming.length}/${limits.in}`} />
+                <button className="workflow-node-port workflow-node-port--output" type="button" onClick={(event) => connectFrom(node.key, event)} onPointerDown={(event) => event.stopPropagation()} title={`输出端口：${outgoing.length}/${limits.out}`} />
                 <div className="workflow-node-card__header">
                   <span className="workflow-node-card__index">{index + 1}</span>
                   <span className="workflow-node-card__title">{node.name ?? node.key}</span>
                   <Tag color={STATUS_COLORS[status] ?? 'default'}>{status}</Tag>
                 </div>
                 <div className="workflow-node-card__body">
-                  <Tag color="cyan">{node.kind ?? 'job'}</Tag>
+                  <Tag color="cyan">{nodeKind(node)}</Tag>
                   <Typography.Text className="workflow-node-card__key">{node.key}</Typography.Text>
                   {node.job_id ? <Typography.Text type="secondary">job: {node.job_id}</Typography.Text> : null}
                   {node.child_workflow_id ? <Typography.Text type="secondary">child: {node.child_workflow_id}</Typography.Text> : null}
                 </div>
                 <div className="workflow-node-card__ports">
-                  <span>in {incoming.length}</span>
-                  <span>out {outgoing.length}</span>
+                  <span>in {incoming.length}/{limits.in}</span>
+                  <span>out {outgoing.length}/{limits.out}</span>
                 </div>
                 {editable ? <Button size="small" danger className="workflow-node-card__delete" onClick={() => removeNode(node.key)}>删除</Button> : null}
               </div>
@@ -214,7 +244,7 @@ function DagPreview({ definition, instance, editable = false, onChange }: { defi
           })}
         </div>
       </div>
-      {editable ? (
+      {editable && definition.edges.length > 0 ? (
         <Card size="small" title="边关系" className="workflow-edge-editor">
           <Space direction="vertical" style={{ width: '100%' }}>
             {definition.edges.map((edge, index) => (
@@ -236,14 +266,14 @@ function DagPreview({ definition, instance, editable = false, onChange }: { defi
 export function WorkflowsPage() {
   const [items, setItems] = useState<WorkflowSummary[]>([]);
   const [loading, setLoading] = useState(false);
-  const [mode, setMode] = useState<'visual' | 'json' | 'yaml'>('visual');
+  const [previewMode, setPreviewMode] = useState<'visual' | 'json' | 'yaml'>('visual');
   const [draft, setDraft] = useState(DEFAULT_DEFINITION);
   const [dryRun, setDryRun] = useState<WorkflowDryRunResponse | null>(null);
   const [activeWorkflow, setActiveWorkflow] = useState<WorkflowSummary | null>(null);
   const [activeInstance, setActiveInstance] = useState<WorkflowInstanceSummary | null>(null);
   const [events, setEvents] = useState<InstanceEventSummary[]>([]);
   const [shards, setShards] = useState<WorkflowShardSummary[]>([]);
-  const [form] = Form.useForm<{ name: string; definition: string }>();
+  const [form] = Form.useForm<{ name: string }>();
 
   const fetchItems = async () => {
     setLoading(true);
@@ -274,17 +304,17 @@ export function WorkflowsPage() {
   const previewDefinition = useMemo(() => {
     try { return parseDefinition(draft); } catch { return null; }
   }, [draft]);
+  const yamlPreview = previewDefinition ? definitionToYaml(previewDefinition) : '';
 
   const updateDefinition = (definition: WorkflowDefinition) => {
     const next = stringifyDefinition(definition);
     setDraft(next);
-    form.setFieldValue('definition', next);
     setDryRun(null);
   };
 
-  const submit = async (values: { name: string; definition: string }) => {
+  const submit = async (values: { name: string }) => {
     let definition: WorkflowDefinition;
-    try { definition = parseDefinition(values.definition); }
+    try { definition = parseDefinition(draft); }
     catch { message.error('Workflow definition 必须是合法 JSON'); return; }
     const created = await createWorkflow({ name: values.name, definition });
     message.success('Workflow 已创建');
@@ -349,20 +379,6 @@ export function WorkflowsPage() {
     setShards(await listWorkflowShards(activeInstance.id));
   };
 
-  const switchMode = (nextMode: 'visual' | 'json' | 'yaml') => {
-    if (nextMode === 'yaml' && previewDefinition) {
-      setMode(nextMode);
-      setDraft(definitionToYaml(previewDefinition));
-      message.info('YAML 当前为只读预览；切回可视化/JSON 会恢复当前 JSON 定义');
-      return;
-    }
-    if ((mode === 'yaml' || nextMode === 'visual') && !previewDefinition) {
-      setDraft(DEFAULT_DEFINITION);
-      form.setFieldValue('definition', DEFAULT_DEFINITION);
-    }
-    setMode(nextMode);
-  };
-
   return (
     <Space direction="vertical" size={18} style={{ width: '100%' }}>
       <div className="hero-panel workflow-hero">
@@ -370,43 +386,26 @@ export function WorkflowsPage() {
           <Tag className="soft-tag" color="blue">Phase 2 · Workflow Engine</Tag>
           <Typography.Title level={1}>工作流编排</Typography.Title>
           <Typography.Paragraph className="hero-panel__desc">
-            支持 DAG 校验、拖拽式节点编排、条件边推进、Map / MapReduce / 子工作流节点建模，以及面向调试的事件流。
+            支持 DAG 校验、节点画布、端口连线、条件边推进、Map / MapReduce / 子工作流节点建模，以及面向调试的事件流。
           </Typography.Paragraph>
         </div>
         <div className="hero-panel__summary"><strong>{items.length}</strong><span>flows</span></div>
       </div>
 
-      <Row gutter={[18, 18]}>
-        <Col xs={24} xl={11}>
-          <Card title="创建 / Dry-run" extra={<Segmented value={mode} onChange={(value) => switchMode(value as 'visual' | 'json' | 'yaml')} options={[{ label: '可视化', value: 'visual' }, { label: 'JSON', value: 'json' }, { label: 'YAML 预览', value: 'yaml' }]} />}>
-            <Form form={form} layout="vertical" initialValues={{ definition: DEFAULT_DEFINITION }} onFinish={submit}>
-              <Form.Item name="name" label="名称" rules={[{ required: true }]}><Input placeholder="daily-pipeline" /></Form.Item>
-              {mode !== 'visual' ? (
-                <Form.Item name="definition" label={mode === 'json' ? '定义 JSON' : '定义 YAML 预览'} rules={[{ required: true }]}>
-                  <Input.TextArea rows={14} spellCheck={false} value={draft} onChange={(event) => { setDraft(event.target.value); setDryRun(null); }} readOnly={mode === 'yaml'} />
-                </Form.Item>
-              ) : <Form.Item name="definition" hidden><Input.TextArea value={draft} /></Form.Item>}
-              <Space wrap>
-                <Button type="primary" htmlType="submit" disabled={mode === 'yaml'}>创建工作流</Button>
-                <Button onClick={dryRunDraft} disabled={mode === 'yaml'}>Dry-run 校验</Button>
-              </Space>
-            </Form>
-            {dryRun ? (
-              <Alert
-                style={{ marginTop: 16 }}
-                type={dryRun.validation.valid ? 'success' : 'error'}
-                message={dryRun.validation.valid ? 'Dry-run 通过' : 'Dry-run 失败'}
-                description={`start: ${dryRun.start_nodes.join(', ') || '-'} · nodes: ${dryRun.node_count} · edges: ${dryRun.edge_count}${dryRun.validation.errors.length ? ` · ${dryRun.validation.errors.join('; ')}` : ''}`}
-              />
-            ) : null}
-          </Card>
-        </Col>
-        <Col xs={24} xl={13}>
-          <Card title={mode === 'visual' ? '可视化拖拽编排' : 'DAG 可视化预览'}>
-            {previewDefinition ? <DagPreview definition={previewDefinition} instance={activeInstance} editable={mode === 'visual'} onChange={updateDefinition} /> : <Alert type="warning" message="JSON 解析失败，无法预览" />}
-          </Card>
-        </Col>
-      </Row>
+      <Card
+        title="可视化节点画布"
+        extra={<Space wrap><Segmented value={previewMode} onChange={(value) => setPreviewMode(value as 'visual' | 'json' | 'yaml')} options={[{ label: '画布', value: 'visual' }, { label: 'JSON', value: 'json' }, { label: 'YAML', value: 'yaml' }]} /><Button onClick={dryRunDraft}>Dry-run</Button></Space>}
+      >
+        <Form form={form} layout="inline" onFinish={submit} className="workflow-create-inline">
+          <Form.Item name="name" label="名称" rules={[{ required: true }]}><Input placeholder="daily-pipeline" style={{ width: 260 }} /></Form.Item>
+          <Form.Item><Button type="primary" htmlType="submit">创建工作流</Button></Form.Item>
+          {dryRun ? <Alert type={dryRun.validation.valid ? 'success' : 'error'} message={dryRun.validation.valid ? 'Dry-run 通过' : 'Dry-run 失败'} description={`start: ${dryRun.start_nodes.join(', ') || '-'} · nodes: ${dryRun.node_count} · edges: ${dryRun.edge_count}${dryRun.validation.errors.length ? ` · ${dryRun.validation.errors.join('; ')}` : ''}`} /> : null}
+        </Form>
+        {previewDefinition && previewMode === 'visual' ? <DagPreview definition={previewDefinition} instance={activeInstance} editable onChange={updateDefinition} /> : null}
+        {previewMode === 'json' ? <Input.TextArea className="workflow-definition-preview" rows={18} spellCheck={false} value={draft} onChange={(event) => { setDraft(event.target.value); setDryRun(null); }} /> : null}
+        {previewMode === 'yaml' ? <Input.TextArea className="workflow-definition-preview" rows={18} spellCheck={false} value={yamlPreview || 'JSON 解析失败，无法生成 YAML'} readOnly /> : null}
+        {!previewDefinition && previewMode === 'visual' ? <Alert type="warning" message="JSON 解析失败，无法预览画布" /> : null}
+      </Card>
 
       <Card title="工作流列表" extra={<Button onClick={fetchItems}>刷新</Button>}>
         <List
@@ -427,7 +426,7 @@ export function WorkflowsPage() {
       {activeWorkflow ? (
         <Row gutter={[18, 18]}>
           <Col xs={24} lg={14}>
-            <Card title={`运行视图 · ${activeWorkflow.name}`} extra={<Space wrap><Button onClick={materializeNext}>物化下一节点</Button><Button onClick={completeFirstQueued} disabled={!activeInstance}>推进首个队列节点</Button><Button onClick={recoverFirstFailed} disabled={!activeInstance}>重试失败节点</Button><Button onClick={refreshShards} disabled={!activeInstance}>刷新 Shards</Button></Space>} >
+            <Card title={`运行视图 · ${activeWorkflow.name}`} extra={<Space wrap><Button onClick={materializeNext}>物化下一节点</Button><Button onClick={completeFirstQueued} disabled={!activeInstance}>推进首个队列节点</Button><Button onClick={recoverFirstFailed} disabled={!activeInstance}>重试失败节点</Button><Button onClick={refreshShards} disabled={!activeInstance}>刷新 Shards</Button></Space>}>
               <DagPreview definition={activeWorkflow.definition} instance={activeInstance} />
               {shards.length > 0 ? <List size="small" style={{ marginTop: 16 }} dataSource={shards} renderItem={(shard) => <List.Item><Typography.Text>{shard.node_key}#{shard.shard_index} · {shard.status} · {JSON.stringify(shard.input)}</Typography.Text></List.Item>} /> : null}
             </Card>

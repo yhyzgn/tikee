@@ -67,3 +67,9 @@
 
 - Workflow visual editor upgraded from list/card layout to node-canvas style: grid canvas, absolute-positioned nodes, left input/right output ports, SVG Bézier arrow edges, port-click connection flow, and free node dragging with coordinates stored under node.config.ui.
 - JSON remains canonical; visual coordinates and edges are synced back into WorkflowDefinition.
+
+## 2026-05-20 — Workflow canvas layout/connection fixes
+
+- Removed the wide left definition panel from Workflows page; creation now only needs inline name + create button, and JSON/YAML/Dry-run are canvas card actions.
+- Fixed YAML preview by deriving YAML from current parsed JSON without replacing canonical draft state.
+- Fixed node port connection by stopping pointer propagation on ports, and added per-node-type in/out connection limits shown on each node.

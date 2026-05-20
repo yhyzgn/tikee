@@ -549,3 +549,20 @@ body {
 .workflow-node-port:hover {
   transform: scale(1.15);
 }
+
+.workflow-create-inline {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.workflow-create-inline .ant-alert {
+  flex: 1 1 360px;
+  min-width: 280px;
+}
+
+.workflow-definition-preview {
+  margin-top: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
