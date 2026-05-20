@@ -10,7 +10,7 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo build --workspace --all-features
 cargo run --bin scheduler -- serve --config config/dev.toml
-curl -fsS http://127.0.0.1:9090/healthz
+curl -fsS http://0.0.0.0:9090/healthz
 ```
 
 若前端初始化在 `./web`：
@@ -33,8 +33,8 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo build --workspace --all-features
 cargo run --bin scheduler -- serve --config config/dev.toml
-curl -fsS http://127.0.0.1:9090/healthz
-curl -fsS http://127.0.0.1:9090/readyz
+curl -fsS http://0.0.0.0:9090/healthz
+curl -fsS http://0.0.0.0:9090/readyz
 ```
 
 
@@ -46,13 +46,13 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo build --workspace --all-features
 cargo run --bin scheduler -- serve --config config/dev.toml
-curl -fsS http://127.0.0.1:9090/healthz
-curl -fsS http://127.0.0.1:9090/readyz
-curl -fsS http://127.0.0.1:9090/api-docs/openapi.json
-curl -fsS http://127.0.0.1:9090/api/v1/system/info
-curl -fsS http://127.0.0.1:9090/api/v1/cluster
-curl -fsS http://127.0.0.1:9090/api/v1/jobs
-curl -sS -o /tmp/create-job.json -w '%{http_code}' -H 'content-type: application/json' -d '{"name":"nightly"}' http://127.0.0.1:9090/api/v1/jobs
+curl -fsS http://0.0.0.0:9090/healthz
+curl -fsS http://0.0.0.0:9090/readyz
+curl -fsS http://0.0.0.0:9090/api-docs/openapi.json
+curl -fsS http://0.0.0.0:9090/api/v1/system/info
+curl -fsS http://0.0.0.0:9090/api/v1/cluster
+curl -fsS http://0.0.0.0:9090/api/v1/jobs
+curl -sS -o /tmp/create-job.json -w '%{http_code}' -H 'content-type: application/json' -d '{"name":"nightly"}' http://0.0.0.0:9090/api/v1/jobs
 ```
 
 
@@ -61,9 +61,9 @@ curl -sS -o /tmp/create-job.json -w '%{http_code}' -H 'content-type: application
 业务接口响应必须包含 `code`、`message`、`data`：
 
 ```bash
-curl -fsS http://127.0.0.1:9090/api/v1/system/info
-curl -fsS http://127.0.0.1:9090/api/v1/jobs
-curl -sS -o /tmp/create-job.json -w '%{http_code}' -H 'content-type: application/json' -d '{"name":"nightly"}' http://127.0.0.1:9090/api/v1/jobs
+curl -fsS http://0.0.0.0:9090/api/v1/system/info
+curl -fsS http://0.0.0.0:9090/api/v1/jobs
+curl -sS -o /tmp/create-job.json -w '%{http_code}' -H 'content-type: application/json' -d '{"name":"nightly"}' http://0.0.0.0:9090/api/v1/jobs
 ```
 
 Expected: success responses use `code=0`; failures use non-zero code; `data` key is always present.
@@ -77,9 +77,9 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo build --workspace --all-features
 cargo run --bin scheduler -- serve --config config/dev.toml
-curl -fsS http://127.0.0.1:9090/healthz
-curl -fsS http://127.0.0.1:9090/api-docs/openapi.json
-# Smoke also verifies 127.0.0.1:9091 accepts TCP connection for Worker Tunnel gRPC listener.
+curl -fsS http://0.0.0.0:9090/healthz
+curl -fsS http://0.0.0.0:9090/api-docs/openapi.json
+# Smoke also verifies 0.0.0.0:9998 accepts TCP connection for Worker Tunnel gRPC listener.
 ```
 
 
@@ -91,11 +91,11 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo build --workspace --all-features
 cargo run --bin scheduler -- serve --config config/dev.toml
-curl -fsS http://127.0.0.1:9090/healthz
-curl -fsS http://127.0.0.1:9090/api-docs/openapi.json
-curl -fsS http://127.0.0.1:9090/api/v1/jobs
-curl -fsS -H 'content-type: application/json' -d '{"namespace":"default","app":"demo","name":"nightly","schedule_type":"api"}' http://127.0.0.1:9090/api/v1/jobs
-curl -fsS http://127.0.0.1:9090/api/v1/jobs
+curl -fsS http://0.0.0.0:9090/healthz
+curl -fsS http://0.0.0.0:9090/api-docs/openapi.json
+curl -fsS http://0.0.0.0:9090/api/v1/jobs
+curl -fsS -H 'content-type: application/json' -d '{"namespace":"default","app":"demo","name":"nightly","schedule_type":"api"}' http://0.0.0.0:9090/api/v1/jobs
+curl -fsS http://0.0.0.0:9090/api/v1/jobs
 ```
 
 说明：本阶段新增 SeaORM storage crate；SQLite dev DB 使用 `config/dev.toml` 的 `sqlite://scheduler-dev.db?mode=rwc`。
@@ -109,13 +109,13 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo build --workspace --all-features
 cargo run --bin scheduler -- serve --config config/dev.toml
-curl -fsS http://127.0.0.1:9090/healthz
-curl -fsS http://127.0.0.1:9090/api-docs/openapi.json
-curl -fsS http://127.0.0.1:9090/api/v1/jobs
-curl -fsS -H 'content-type: application/json' -d '{"namespace":"default","app":"demo","name":"manual-demo"}' http://127.0.0.1:9090/api/v1/jobs
-curl -fsS -H 'content-type: application/json' -d '{"trigger_type":"api"}' http://127.0.0.1:9090/api/v1/jobs/<job_id>:trigger
-curl -fsS http://127.0.0.1:9090/api/v1/jobs/<job_id>/instances
-curl -fsS http://127.0.0.1:9090/api/v1/instances/<instance_id>
+curl -fsS http://0.0.0.0:9090/healthz
+curl -fsS http://0.0.0.0:9090/api-docs/openapi.json
+curl -fsS http://0.0.0.0:9090/api/v1/jobs
+curl -fsS -H 'content-type: application/json' -d '{"namespace":"default","app":"demo","name":"manual-demo"}' http://0.0.0.0:9090/api/v1/jobs
+curl -fsS -H 'content-type: application/json' -d '{"trigger_type":"api"}' http://0.0.0.0:9090/api/v1/jobs/<job_id>:trigger
+curl -fsS http://0.0.0.0:9090/api/v1/jobs/<job_id>/instances
+curl -fsS http://0.0.0.0:9090/api/v1/instances/<instance_id>
 ```
 
 
@@ -128,8 +128,8 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo build --workspace --all-features
 cargo run --bin scheduler -- serve --config config/dev.toml
-curl -fsS http://127.0.0.1:9090/healthz
-curl -fsS http://127.0.0.1:9090/api-docs/openapi.json
+curl -fsS http://0.0.0.0:9090/healthz
+curl -fsS http://0.0.0.0:9090/api-docs/openapi.json
 ```
 
 说明：Rust Worker SDK 集成测试会启动内存 Worker Tunnel server，验证主动连接、注册与心跳 ping；Java SDK 当前验证 Maven 多模块编译测试。
@@ -152,9 +152,9 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo build --workspace --all-features
 cargo run --bin scheduler -- serve --config config/dev.toml
-curl -fsS http://127.0.0.1:9090/healthz
-curl -fsS http://127.0.0.1:9090/api-docs/openapi.json
-curl -fsS http://127.0.0.1:9090/api/v1/jobs
+curl -fsS http://0.0.0.0:9090/healthz
+curl -fsS http://0.0.0.0:9090/api-docs/openapi.json
+curl -fsS http://0.0.0.0:9090/api/v1/jobs
 ```
 
 说明：Web build 当前有 Vite 大 chunk 警告（Ant Design bundle），不影响构建通过；后续可用路由级动态 import 拆包。
@@ -167,9 +167,9 @@ docker compose config
 docker build -t scheduler:dev .
 docker build -t scheduler-web:dev ./web
 docker compose up -d --no-build
-curl -fsS http://127.0.0.1:9090/healthz
-curl -fsS http://127.0.0.1:8080/
-curl -fsS http://127.0.0.1:8080/api/v1/jobs
+curl -fsS http://0.0.0.0:9090/healthz
+curl -fsS http://0.0.0.0:8080/
+curl -fsS http://0.0.0.0:8080/api/v1/jobs
 docker compose down
 python - <<'PY'
 from pathlib import Path
@@ -202,8 +202,8 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo build --workspace --all-features
 cargo run --bin scheduler -- serve --config config/dev.toml
-curl -fsS http://127.0.0.1:9090/healthz
-curl -fsS http://127.0.0.1:9090/api/v1/jobs
+curl -fsS http://0.0.0.0:9090/healthz
+curl -fsS http://0.0.0.0:9090/api/v1/jobs
 mvn -f java/pom.xml -q test
 bun install --cwd web
 bun run --cwd web lint
@@ -214,8 +214,8 @@ docker compose config
 docker build -t scheduler:dev .
 docker build -t scheduler-web:dev ./web
 docker compose up -d --no-build
-curl -fsS http://127.0.0.1:9090/healthz
-curl -fsS http://127.0.0.1:8080/api/v1/jobs
+curl -fsS http://0.0.0.0:9090/healthz
+curl -fsS http://0.0.0.0:8080/api/v1/jobs
 docker compose down
 ```
 
@@ -228,9 +228,9 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo build --workspace --all-features
 cargo run --bin scheduler -- serve --config config/dev.toml
-curl -fsS http://127.0.0.1:9090/healthz
-curl -fsS -H 'content-type: application/json' -d '{"namespace":"default","app":"demo","name":"fast","schedule_type":"fixed_rate","schedule_expr":"1s"}' http://127.0.0.1:9090/api/v1/jobs
-curl -fsS http://127.0.0.1:9090/api/v1/jobs/<job_id>/instances
+curl -fsS http://0.0.0.0:9090/healthz
+curl -fsS -H 'content-type: application/json' -d '{"namespace":"default","app":"demo","name":"fast","schedule_type":"fixed_rate","schedule_expr":"1s"}' http://0.0.0.0:9090/api/v1/jobs
+curl -fsS http://0.0.0.0:9090/api/v1/jobs/<job_id>/instances
 mvn -f java/pom.xml -q test
 bun install --cwd web
 bun run --cwd web lint
@@ -241,8 +241,8 @@ docker compose config
 docker build -t scheduler:dev .
 docker build -t scheduler-web:dev ./web
 docker compose up -d --no-build
-curl -fsS http://127.0.0.1:9090/healthz
-curl -fsS http://127.0.0.1:8080/api/v1/jobs
+curl -fsS http://0.0.0.0:9090/healthz
+curl -fsS http://0.0.0.0:8080/api/v1/jobs
 docker compose down
 ```
 
@@ -263,8 +263,8 @@ docker compose config
 docker build -t scheduler:dev .
 docker build -t scheduler-web:dev ./web
 docker compose up -d --no-build
-curl -fsS http://127.0.0.1:9090/healthz
-curl -fsS http://127.0.0.1:8080/api/v1/jobs
+curl -fsS http://0.0.0.0:9090/healthz
+curl -fsS http://0.0.0.0:8080/api/v1/jobs
 docker compose down
 ```
 
@@ -297,8 +297,8 @@ docker compose config
 docker build -t scheduler:dev .
 docker build -t scheduler-web:dev ./web
 docker compose up -d --no-build
-curl -fsS http://127.0.0.1:9090/healthz
-curl -fsS http://127.0.0.1:8080
+curl -fsS http://0.0.0.0:9090/healthz
+curl -fsS http://0.0.0.0:8080
 docker compose down
 ```
 
@@ -306,10 +306,10 @@ docker compose down
 
 ```bash
 cargo run --bin scheduler -- serve --config config/dev.toml
-curl -fsS http://127.0.0.1:9090/api/v1/auth/login -H 'content-type: application/json' -d '{"username":"scheduler_init","password":"Scheduler@2026!"}'
-TOKEN=$(curl -fsS http://127.0.0.1:9090/api/v1/auth/login -H 'content-type: application/json' -d '{"username":"scheduler_init","password":"Scheduler@2026!"}' | jq -r '.data.token')
-curl -fsS http://127.0.0.1:9090/api/v1/auth/me -H "authorization: Bearer $TOKEN"
-curl -fsS http://127.0.0.1:9090/api/v1/jobs -H 'content-type: application/json' -H "authorization: Bearer $TOKEN" -d '{"namespace":"default","app":"smoke","name":"auth-smoke"}'
+curl -fsS http://0.0.0.0:9090/api/v1/auth/login -H 'content-type: application/json' -d '{"username":"scheduler_init","password":"Scheduler@2026!"}'
+TOKEN=$(curl -fsS http://0.0.0.0:9090/api/v1/auth/login -H 'content-type: application/json' -d '{"username":"scheduler_init","password":"Scheduler@2026!"}' | jq -r '.data.token')
+curl -fsS http://0.0.0.0:9090/api/v1/auth/me -H "authorization: Bearer $TOKEN"
+curl -fsS http://0.0.0.0:9090/api/v1/jobs -H 'content-type: application/json' -H "authorization: Bearer $TOKEN" -d '{"namespace":"default","app":"smoke","name":"auth-smoke"}'
 ```
 
 
@@ -330,11 +330,11 @@ DOCKER_BUILDKIT=1 docker build -t scheduler:dev .
 DOCKER_BUILDKIT=1 docker build -t scheduler-web:dev ./web
 docker compose down --remove-orphans || true
 docker compose up -d --no-build
-curl -fsS http://127.0.0.1:9090/healthz
-curl -fsS http://127.0.0.1:8080
-curl -fsS http://127.0.0.1:8080/api/v1/system/info
-curl -fsS http://127.0.0.1:8080/api-docs/openapi.json
-curl -fsS http://127.0.0.1:9090/api-docs/openapi.json
+curl -fsS http://0.0.0.0:9090/healthz
+curl -fsS http://0.0.0.0:8080
+curl -fsS http://0.0.0.0:8080/api/v1/system/info
+curl -fsS http://0.0.0.0:8080/api-docs/openapi.json
+curl -fsS http://0.0.0.0:9090/api-docs/openapi.json
 docker compose ps
 docker compose down
 ```
@@ -358,8 +358,8 @@ DOCKER_BUILDKIT=1 docker build -t scheduler:dev .
 DOCKER_BUILDKIT=1 docker build -t scheduler-web:dev ./web
 docker compose down --remove-orphans || true
 docker compose up -d --no-build
-curl -fsS http://127.0.0.1:9090/healthz
-curl -fsS http://127.0.0.1:8080
+curl -fsS http://0.0.0.0:9090/healthz
+curl -fsS http://0.0.0.0:8080
 docker compose down
 ```
 
@@ -377,9 +377,9 @@ bun run --cwd web typecheck
 bun test --cwd web
 bun run --cwd web build
 cargo run --bin scheduler -- serve --config config/dev.toml
-curl -fsS http://127.0.0.1:9090/healthz
-curl -fsS http://127.0.0.1:9090/api/v1/jobs
-curl -fsS http://127.0.0.1:9090/api/v1/jobs/job_019e3ec775b177b0bd1f804874c84f3c/instances
+curl -fsS http://0.0.0.0:9090/healthz
+curl -fsS http://0.0.0.0:9090/api/v1/jobs
+curl -fsS http://0.0.0.0:9090/api/v1/jobs/job_019e3ec775b177b0bd1f804874c84f3c/instances
 ./scripts/dev.sh
 ```
 
@@ -397,8 +397,8 @@ bun test --cwd web
 bun run --cwd web build
 docker compose config
 cargo run --bin scheduler -- serve --config config/dev.toml
-curl -fsS http://127.0.0.1:9090/healthz
-curl -fsS http://127.0.0.1:9090/api/v1/auth/login \
+curl -fsS http://0.0.0.0:9090/healthz
+curl -fsS http://0.0.0.0:9090/api/v1/auth/login \
   -H 'content-type: application/json' \
   -d '{"username":"scheduler_init","password":"Scheduler@2026!"}'
 ```

@@ -57,10 +57,10 @@ DOCKER_BUILDKIT=1 docker build -t scheduler:dev .
 DOCKER_BUILDKIT=1 docker build -t scheduler-web:dev ./web
 docker compose down --remove-orphans || true
 docker compose up -d --no-build
-curl -fsS http://127.0.0.1:9090/healthz
-curl -fsS http://127.0.0.1:8080
-curl -fsS http://127.0.0.1:8080/api/v1/system/info
-curl -fsS http://127.0.0.1:8080/api-docs/openapi.json
+curl -fsS http://0.0.0.0:9090/healthz
+curl -fsS http://0.0.0.0:8080
+curl -fsS http://0.0.0.0:8080/api/v1/system/info
+curl -fsS http://0.0.0.0:8080/api-docs/openapi.json
 docker compose down
 ```
 

@@ -61,6 +61,6 @@ COPY --from=builder /tmp/scheduler /usr/local/bin/scheduler
 COPY config ./config
 
 VOLUME ["/data"]
-EXPOSE 9090 9091
+EXPOSE 9090 9998
 ENTRYPOINT ["scheduler"]
 CMD ["serve", "--config", "/app/config/container.toml"]

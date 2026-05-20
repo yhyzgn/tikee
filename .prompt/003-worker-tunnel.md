@@ -65,8 +65,8 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo build --workspace --all-features
 cargo run --bin scheduler -- serve --config config/dev.toml
-curl -fsS http://127.0.0.1:9090/healthz
-curl -fsS http://127.0.0.1:9090/api-docs/openapi.json
+curl -fsS http://0.0.0.0:9090/healthz
+curl -fsS http://0.0.0.0:9090/api-docs/openapi.json
 ```
 
 如增加 gRPC 端口或同端口 multiplex 方案，必须补充对应 smoke test。

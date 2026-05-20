@@ -33,9 +33,9 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo build --workspace --all-features
 cargo run --bin scheduler -- serve --config config/dev.toml
-curl -fsS http://127.0.0.1:9090/healthz
-curl -fsS http://127.0.0.1:9090/api/v1/jobs
-curl -fsS -H 'content-type: application/json' -d '{"namespace":"default","app":"demo","name":"manual-demo"}' http://127.0.0.1:9090/api/v1/jobs
+curl -fsS http://0.0.0.0:9090/healthz
+curl -fsS http://0.0.0.0:9090/api/v1/jobs
+curl -fsS -H 'content-type: application/json' -d '{"namespace":"default","app":"demo","name":"manual-demo"}' http://0.0.0.0:9090/api/v1/jobs
 ```
 
 完成后更新 `.memory/*`、后续 `.prompt`，提交并推送。

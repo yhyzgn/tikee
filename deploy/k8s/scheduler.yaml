@@ -12,7 +12,7 @@ data:
   container.toml: |
     [server]
     listen_addr = "0.0.0.0:9090"
-    worker_tunnel_addr = "0.0.0.0:9091"
+    worker_tunnel_addr = "0.0.0.0:9998"
 
     [storage]
     database_url = "sqlite:///data/scheduler.db?mode=rwc"
@@ -58,7 +58,7 @@ spec:
             - name: http
               containerPort: 9090
             - name: worker-tunnel
-              containerPort: 9091
+              containerPort: 9998
           readinessProbe:
             httpGet:
               path: /readyz
@@ -114,7 +114,7 @@ spec:
     app.kubernetes.io/component: server
   ports:
     - name: grpc-worker-tunnel
-      port: 9091
+      port: 9998
       targetPort: worker-tunnel
 ---
 apiVersion: apps/v1

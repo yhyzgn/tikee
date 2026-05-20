@@ -9,7 +9,7 @@
 - 根 `src/main.rs` 是后端 binary entrypoint。
 - Rust 模块位于 `./crates/*`。
 - 已有 `scheduler-proto`，包含 Worker Tunnel proto/gRPC bindings。
-- `scheduler-server` 已启动 HTTP `9090` 与 Worker Tunnel gRPC `9091`。
+- `scheduler-server` 已启动 HTTP `9090` 与 Worker Tunnel gRPC `9998`。
 - HTTP API 统一 `{code,message,data}` envelope。
 
 ## 硬性约束
@@ -39,8 +39,8 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo build --workspace --all-features
 cargo run --bin scheduler -- serve --config config/dev.toml
-curl -fsS http://127.0.0.1:9090/healthz
-curl -fsS http://127.0.0.1:9090/api/v1/jobs
+curl -fsS http://0.0.0.0:9090/healthz
+curl -fsS http://0.0.0.0:9090/api/v1/jobs
 ```
 
 完成后更新 `.memory/*`、后续 `.prompt`，提交并推送。

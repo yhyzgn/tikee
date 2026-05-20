@@ -18,7 +18,7 @@ use tonic::{Status, Streaming};
 /// Worker runtime configuration used during registration.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkerConfig {
-    /// Scheduler Worker Tunnel endpoint, for example `http://127.0.0.1:9091`.
+    /// Scheduler Worker Tunnel endpoint, for example `http://0.0.0.0:9998`.
     pub endpoint: String,
     /// Stable worker identity.
     pub worker_id: String,

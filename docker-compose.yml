@@ -7,7 +7,7 @@ services:
     command: ["serve", "--config", "/app/config/container.toml"]
     ports:
       - "9090:9090"
-      - "9091:9091"
+      - "9998:9998"
     volumes:
       - scheduler-data:/data
   web:

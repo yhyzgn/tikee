@@ -69,8 +69,8 @@ Verification:
 - `cargo test --workspace --all-features` ✅
 - `cargo build --workspace --all-features` ✅
 - `cargo run --bin scheduler -- serve --config config/dev.toml` ✅
-- `curl -fsS http://127.0.0.1:9090/healthz` ✅ returned `{"status":"ok","uptime_seconds":0}`
-- `curl -fsS http://127.0.0.1:9090/readyz` ✅ returned `{"status":"ok","uptime_seconds":0}`
+- `curl -fsS http://0.0.0.0:9090/healthz` ✅ returned `{"status":"ok","uptime_seconds":0}`
+- `curl -fsS http://0.0.0.0:9090/readyz` ✅ returned `{"status":"ok","uptime_seconds":0}`
 
 Git:
 - 待提交并推送。
@@ -176,7 +176,7 @@ Work:
 - 定义最小 Worker Tunnel 消息：RegisterWorker、Heartbeat、WorkerRegistered、Ping。
 - 实现 server 侧 `WorkerTunnelService::Connect` skeleton。
 - 实现内存 `WorkerRegistry`，记录 worker id、app、namespace、cluster、region、capabilities、labels 和 heartbeat sequence。
-- server 启动时同时监听 HTTP `9090` 与 Worker Tunnel gRPC `9091`。
+- server 启动时同时监听 HTTP `9090` 与 Worker Tunnel gRPC `9998`。
 - 设计路线图中将 “gRPC 协议定义与代码生成” 标记为完成 `[x]`。
 - 新增 `.prompt/004-storage-and-scheduler.md`。
 
@@ -188,7 +188,7 @@ Verification:
 - `cargo run --bin scheduler -- serve --config config/dev.toml` ✅
 - HTTP `/healthz` ✅
 - OpenAPI `/api-docs/openapi.json` ✅
-- Worker Tunnel TCP listener `127.0.0.1:9091` ✅
+- Worker Tunnel TCP listener `0.0.0.0:9998` ✅
 
 Git:
 - 待提交并推送。
@@ -229,7 +229,7 @@ Git:
 ## 2026-05-19 — 008-container-deployment
 
 - 新增后端多阶段 Dockerfile：Rust release builder + Debian slim runtime，默认运行 `scheduler serve --config /app/config/container.toml`。
-- 新增 `config/container.toml`，容器内 HTTP `0.0.0.0:9090`、Worker Tunnel `0.0.0.0:9091`、SQLite dev 数据落 `/data/scheduler.db`。
+- 新增 `config/container.toml`，容器内 HTTP `0.0.0.0:9090`、Worker Tunnel `0.0.0.0:9998`、SQLite dev 数据落 `/data/scheduler.db`。
 - 新增 Web Dockerfile：Bun 构建 React/Ant Design 静态资源，nginx 托管并代理 `/api/`、`/api-docs/` 到 scheduler HTTP 服务。
 - 新增 `docker-compose.yml`，包含 scheduler server 与 web 两个服务；Worker Tunnel 只暴露为 worker 主动出站连接入口。
 - 新增 `deploy/k8s/scheduler.yaml` 与 README，包含 Namespace、ConfigMap、SQLite dev PVC、server Deployment/Service、worker tunnel Service、web Deployment/Service。
@@ -692,3 +692,8 @@ Git:
 - 用户反馈线条点击后只能编辑条件，无法再拖动两端。
 - 根因是 SVG 边 handle 处在节点卡片/浮层下方或命中层不稳定。
 - 已新增 `.workflow-edge-rehandle` 绝对定位按钮层，z-index 高于节点和弹窗，按选中边端点坐标显示，pointerdown 直接进入重连模式。
+
+### 2026-05-20 032 地址与端口统一
+- 用户要求普通节点默认边关系为 always，并将项目中的 127.0.0.1 统一为 0.0.0.0、9091 统一为 9998。
+- 已排除 `.git`、`target`、`node_modules`、`dist`、`.omx/logs`、`.dev` 日志后全项目替换并复查无残留。
+- 注意：`0.0.0.0` 适合作为监听/容器绑定地址；脚本 smoke 也按用户约束使用该地址进行健康检查。

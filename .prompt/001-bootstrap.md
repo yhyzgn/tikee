@@ -67,8 +67,8 @@ cargo build --workspace --all-features
 
 ```bash
 cargo run --bin scheduler -- serve --config config/dev.toml
-curl -fsS http://127.0.0.1:9090/healthz
-curl -fsS http://127.0.0.1:9090/readyz
+curl -fsS http://0.0.0.0:9090/healthz
+curl -fsS http://0.0.0.0:9090/readyz
 ```
 
 如果端口或命令调整，必须更新 `.memory/commands.md`。

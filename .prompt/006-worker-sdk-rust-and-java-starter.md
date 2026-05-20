@@ -10,8 +10,8 @@
 ## 当前上下文
 
 - Worker 必须主动出站连接 scheduler，不要求业务应用暴露入站端口。
-- Worker Tunnel 当前默认监听 `127.0.0.1:9091`。
-- HTTP 默认监听 `127.0.0.1:9090`。
+- Worker Tunnel 当前默认监听 `0.0.0.0:9998`。
+- HTTP 默认监听 `0.0.0.0:9090`。
 - 存储层已使用 SeaORM 1.1.20 稳定线，支持 SQLite dev DB 和 MySQL feature-enabled migration。
 - 已有基础 API 触发链路：`POST /api/v1/jobs/{job}:trigger` 创建 `pending` job instance，`GET /api/v1/jobs/{job}/instances` 查询实例列表，`GET /api/v1/instances/{instance}` 查询实例详情。
 - Axum 内部路由用单段参数承接 `{job}:trigger`，handler 会解析 `:trigger` 后缀；OpenAPI 对外仍暴露 `/api/v1/jobs/{job}:trigger`。

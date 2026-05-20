@@ -13,7 +13,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "scheduler.worker")
 public class SchedulerWorkerProperties {
     /** Scheduler Worker Tunnel endpoint. */
-    private String endpoint = "http://127.0.0.1:9091";
+    private String endpoint = "http://0.0.0.0:9998";
     /** Stable worker id. */
     private String workerId = "spring-worker";
     /** Namespace reported during registration. */

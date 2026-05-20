@@ -31,8 +31,8 @@ pub struct ServerConfig {
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {
-            listen_addr: SocketAddr::from(([127, 0, 0, 1], 9090)),
-            worker_tunnel_addr: SocketAddr::from(([127, 0, 0, 1], 9091)),
+            listen_addr: SocketAddr::from(([0, 0, 0, 0], 9090)),
+            worker_tunnel_addr: SocketAddr::from(([0, 0, 0, 0], 9998)),
         }
     }
 }
@@ -104,13 +104,13 @@ mod tests {
     use super::{SchedulerConfig, load_config};
 
     #[test]
-    fn default_config_uses_localhost_9090() {
+    fn default_config_listens_on_all_interfaces() {
         let config =
             load_config(None).unwrap_or_else(|error| panic!("default config should load: {error}"));
 
         assert_eq!(
             config.server.listen_addr,
-            SocketAddr::from(([127, 0, 0, 1], 9090))
+            SocketAddr::from(([0, 0, 0, 0], 9090))
         );
     }
 

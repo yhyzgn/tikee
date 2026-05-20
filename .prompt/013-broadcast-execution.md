@@ -59,8 +59,8 @@ docker compose config
 docker build -t scheduler:dev .
 docker build -t scheduler-web:dev ./web
 docker compose up -d --no-build
-curl -fsS http://127.0.0.1:9090/healthz
-curl -fsS http://127.0.0.1:8080
+curl -fsS http://0.0.0.0:9090/healthz
+curl -fsS http://0.0.0.0:8080
 docker compose down
 ```
 

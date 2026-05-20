@@ -17,9 +17,9 @@
 
 默认访问地址：
 
-- Web UI: <http://127.0.0.1:5173>
-- Backend API: <http://127.0.0.1:9090>
-- OpenAPI JSON: <http://127.0.0.1:9090/api-docs/openapi.json>
+- Web UI: <http://0.0.0.0:5173>
+- Backend API: <http://0.0.0.0:9090>
+- OpenAPI JSON: <http://0.0.0.0:9090/api-docs/openapi.json>
 
 > 项目不提供浏览器 API 文档 UI；仅保留机器可读的 OpenAPI JSON。
 
@@ -46,8 +46,8 @@ export SCHEDULER_DEV_ADMIN_PASSWORD="Scheduler@2026!"
 
 配置文件统一放在 `config/`：
 
-- `config/dev.toml`：本地开发配置，监听 `127.0.0.1:9090` / `127.0.0.1:9091`。
-- `config/container.toml`：容器部署配置，监听 `0.0.0.0:9090` / `0.0.0.0:9091`。
+- `config/dev.toml`：本地开发配置，监听 `0.0.0.0:9090` / `0.0.0.0:9998`。
+- `config/container.toml`：容器部署配置，监听 `0.0.0.0:9090` / `0.0.0.0:9998`。
 
 ## 常用验证命令
 

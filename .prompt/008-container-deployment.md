@@ -9,8 +9,8 @@
 - 后端根 binary：`src/main.rs`，命令 `scheduler serve --config config/dev.toml`。
 - Rust crate 位于 `./crates/*`。
 - Web 工程位于 `./web`，React + TypeScript + Vite + Ant Design，Bun 管理。
-- Worker Tunnel 默认监听 `127.0.0.1:9091`，Worker 必须主动出站连接。
-- HTTP 管理 API 默认监听 `127.0.0.1:9090`。
+- Worker Tunnel 默认监听 `0.0.0.0:9998`，Worker 必须主动出站连接。
+- HTTP 管理 API 默认监听 `0.0.0.0:9090`。
 - SQLite dev DB URL：`sqlite://scheduler-dev.db?mode=rwc`。
 
 ## 建议任务

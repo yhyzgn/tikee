@@ -7,7 +7,7 @@
 - MySQL migration 已通过 SeaORM feature 启用，但当前自动化验证只覆盖 SQLite in-memory 与 SQLite dev DB，尚未接入真实 MySQL 集成测试。
 - OpenAPI JSON 路径为 `/api-docs/openapi.json`，不是早期提示词里的 `/openapi.json`。
 - Worker Tunnel 当前只有注册/心跳 skeleton，尚未实现真实任务分发、取消、drain、证书轮换。
-- Worker Tunnel 当前 smoke 只验证 9091 监听与单元测试，尚未加入真实 gRPC client 集成测试。
+- Worker Tunnel 当前 smoke 只验证 9998 监听与单元测试，尚未加入真实 gRPC client 集成测试。
 - Axum 0.8 不允许同一路径段内同时使用参数和字面量后缀；`/api/v1/jobs/{job}:trigger` 对外契约由内部 `/jobs/{job_action}` 路由承接并在 handler 中解析 `:trigger` 后缀。
 - CRON / Fixed Rate tick loop 尚未实现；当前基础调度只覆盖 API 手动触发实例入库。
 

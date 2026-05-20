@@ -119,8 +119,8 @@ Constraint:
 ## 2026-05-19 — Worker Tunnel 最小监听端口
 
 Decision:
-- 当前阶段使用独立 gRPC Worker Tunnel 监听地址，默认 `127.0.0.1:9091`。
-- HTTP 管理 API 继续使用 `127.0.0.1:9090`。
+- 当前阶段使用独立 gRPC Worker Tunnel 监听地址，默认 `0.0.0.0:9998`。
+- HTTP 管理 API 继续使用 `0.0.0.0:9090`。
 
 Rationale:
 - 先用最小可验证切片落地 Worker 主动连接协议和 server skeleton；后续可再评估单端口 h2/multiplex。

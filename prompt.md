@@ -182,8 +182,8 @@ cargo build --workspace --all-features
 
 ```bash
 cargo run --bin scheduler -- serve --config config/dev.toml
-curl -fsS http://127.0.0.1:9090/healthz
-curl -fsS http://127.0.0.1:9090/api-docs/openapi.json
+curl -fsS http://0.0.0.0:9090/healthz
+curl -fsS http://0.0.0.0:9090/api-docs/openapi.json
 ```
 
 若服务暂未实现，应运行当前阶段等价冒烟命令，并在 memory 中说明替代验证。
@@ -221,7 +221,7 @@ Verification:
 - cargo clippy --workspace --all-targets --all-features -- -D warnings ✅
 - cargo test --workspace --all-features ✅
 - cargo build --workspace --all-features ✅
-- curl http://127.0.0.1:9090/healthz ✅
+- curl http://0.0.0.0:9090/healthz ✅
 
 Memory:
 - Updated .memory/progress.md

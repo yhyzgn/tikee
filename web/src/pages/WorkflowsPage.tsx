@@ -175,9 +175,9 @@ const EDGE_CONDITION_OPTIONS: Record<string, EdgeConditionOption[]> = {
 };
 
 const DEFAULT_EDGE_CONDITIONS: EdgeConditionOption[] = [
+  { label: '始终 always', value: 'always', color: '#8b5cf6' },
   { label: '成功时 on_success', value: 'on_success', color: '#2563eb' },
   { label: '失败时 on_failure', value: 'on_failure', color: '#ef4444' },
-  { label: '始终 always', value: 'always', color: '#8b5cf6' },
 ];
 
 function edgeConditionOptionsFor(node?: WorkflowNodeSpec | null): EdgeConditionOption[] {
@@ -185,11 +185,11 @@ function edgeConditionOptionsFor(node?: WorkflowNodeSpec | null): EdgeConditionO
 }
 
 function defaultEdgeConditionFor(node?: WorkflowNodeSpec | null): WorkflowEdgeSpec['condition'] {
-  return (edgeConditionOptionsFor(node)[0]?.value ?? 'on_success') as WorkflowEdgeSpec['condition'];
+  return (edgeConditionOptionsFor(node)[0]?.value ?? 'always') as WorkflowEdgeSpec['condition'];
 }
 
 function edgeConditionMeta(condition: string | null | undefined, fromNode?: WorkflowNodeSpec | null): EdgeConditionOption {
-  const value = condition ?? defaultEdgeConditionFor(fromNode) ?? 'on_success';
+  const value = condition ?? defaultEdgeConditionFor(fromNode) ?? 'always';
   return edgeConditionOptionsFor(fromNode).find((option) => option.value === value)
     ?? DEFAULT_EDGE_CONDITIONS.find((option) => option.value === value)
     ?? { label: value, value, color: '#2563eb' };

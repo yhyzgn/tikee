@@ -33,7 +33,7 @@
 - [x] Java SDK 规划补充：优先支持 Spring Boot Starter 模式
 - [x] 003-worker-tunnel：新增 `scheduler-proto` crate 与 Worker Tunnel protobuf
 - [x] 003-worker-tunnel：实现 server 侧 Worker Tunnel gRPC skeleton 与内存 registry
-- [x] 003-worker-tunnel：server 同时启动 HTTP 9090 与 Worker Tunnel gRPC 9091
+- [x] 003-worker-tunnel：server 同时启动 HTTP 9090 与 Worker Tunnel gRPC 9998
 - [x] 设计路线图标记：gRPC 协议定义与代码生成
 - [x] 004-storage-and-scheduler：SeaORM 存储层、SQLite dev DB、MySQL migration feature、Jobs API 持久化
 - [x] 005-basic-scheduler：调度领域模型、API 手动触发实例链路、实例列表查询
@@ -109,3 +109,8 @@
 - 修复点击线条后只能编辑条件、无法拖动两端的交互回归。
 - 选中边时除 SVG ghost handle 外，额外渲染高 z-index HTML 端点按钮，确保不被节点卡片、SVG 层级或条件浮层遮挡。
 - 端点按钮继续复用原重连逻辑：拖起点改 from，拖终点改 to。
+
+## 2026-05-20 032：监听地址与普通边默认关系调整
+- 普通节点新建边默认关系改为 `always`；特定节点仍使用各自语义默认值（如 condition true/on_success、approval approved/on_success、parallel always）。
+- 项目默认监听地址统一从 `127.0.0.1` 改为 `0.0.0.0`，覆盖配置、脚本、Vite proxy、README、prompt 和记忆库命令。
+- Worker Tunnel 端口统一从 `9091` 改为 `9998`，覆盖 Rust 默认配置、dev/container/k8s/docker-compose/Dockerfile、Rust/Java SDK 默认 endpoint 与文档。
