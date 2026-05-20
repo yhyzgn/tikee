@@ -16,6 +16,8 @@ use serde::Deserialize;
 use tokio_stream::Stream;
 use tokio_stream::iter;
 
+use super::common::audit;
+
 use crate::http::{
     AppState, auth,
     dto::{
@@ -59,10 +61,20 @@ pub async fn create_workflow(
         .create_workflow(CreateWorkflow {
             name: request.name,
             definition: request.definition,
-            created_by: principal.username,
+            created_by: principal.username.clone(),
         })
         .await
         .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    audit(
+        &state,
+        &principal.username,
+        "create",
+        "workflow",
+        &created.id,
+        Some(format!("name={}", created.name)),
+        &headers,
+    )
+    .await;
     Ok(Json(ApiResponse::success(created)))
 }
 
@@ -73,7 +85,7 @@ pub async fn update_workflow(
     Path(id): Path<String>,
     Json(request): Json<UpdateWorkflowRequest>,
 ) -> Result<Json<WorkflowApiResponse>, ApiError> {
-    auth::require_permission(&headers, &state, "workflows", "manage").await?;
+    let principal = auth::require_permission(&headers, &state, "workflows", "manage").await?;
     if request.name.trim().is_empty() {
         return Err(ApiError::bad_request("workflow name cannot be empty"));
     }
@@ -89,6 +101,16 @@ pub async fn update_workflow(
         .await
         .map_err(|error| ApiError::bad_request(error.to_string()))?
         .ok_or_else(|| ApiError::not_found(format!("workflow not found: {id}")))?;
+    audit(
+        &state,
+        &principal.username,
+        "update",
+        "workflow",
+        &updated.id,
+        Some(format!("name={}", updated.name)),
+        &headers,
+    )
+    .await;
     Ok(Json(ApiResponse::success(updated)))
 }
 
@@ -112,7 +134,7 @@ pub async fn dry_run_workflow(
     headers: HeaderMap,
     Json(definition): Json<WorkflowDefinition>,
 ) -> Result<Json<WorkflowDryRunApiResponse>, ApiError> {
-    auth::require_permission(&headers, &state, "workflows", "read").await?;
+    let principal = auth::require_permission(&headers, &state, "workflows", "read").await?;
     let target_nodes: std::collections::HashSet<&str> = definition
         .edges
         .iter()
@@ -124,12 +146,26 @@ pub async fn dry_run_workflow(
         .filter(|node| !target_nodes.contains(node.key.as_str()))
         .map(|node| node.key.clone())
         .collect();
-    Ok(Json(ApiResponse::success(WorkflowDryRunResponse {
+    let response = WorkflowDryRunResponse {
         validation: validate_workflow_definition(&definition),
         start_nodes,
         node_count: definition.nodes.len(),
         edge_count: definition.edges.len(),
-    })))
+    };
+    audit(
+        &state,
+        &principal.username,
+        "dry-run",
+        "workflow",
+        "definition",
+        Some(format!(
+            "nodes={} edges={} valid={}",
+            response.node_count, response.edge_count, response.validation.valid
+        )),
+        &headers,
+    )
+    .await;
+    Ok(Json(ApiResponse::success(response)))
 }
 
 #[utoipa::path(get, path = "/api/v1/workflows/{id}", tag = "workflows")]
@@ -154,16 +190,29 @@ pub async fn validate_workflow(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<WorkflowValidationApiResponse>, ApiError> {
-    auth::require_permission(&headers, &state, "workflows", "read").await?;
+    let principal = auth::require_permission(&headers, &state, "workflows", "read").await?;
     let item = state
         .workflows
         .get_workflow(&id)
         .await
         .map_err(|error| ApiError::storage(&error))?
         .ok_or_else(|| ApiError::not_found(format!("workflow not found: {id}")))?;
-    Ok(Json(ApiResponse::success(validate_workflow_definition(
-        &item.definition,
-    ))))
+    let validation = validate_workflow_definition(&item.definition);
+    audit(
+        &state,
+        &principal.username,
+        "validate",
+        "workflow",
+        &item.id,
+        Some(format!(
+            "valid={} errors={}",
+            validation.valid,
+            validation.errors.len()
+        )),
+        &headers,
+    )
+    .await;
+    Ok(Json(ApiResponse::success(validation)))
 }
 
 #[utoipa::path(post, path = "/api/v1/workflows/{id}/run", tag = "workflows", request_body = WorkflowRunRequest)]
@@ -173,7 +222,7 @@ pub async fn run_workflow(
     Path(id): Path<String>,
     Json(request): Json<WorkflowRunRequest>,
 ) -> Result<Json<WorkflowInstanceApiResponse>, ApiError> {
-    auth::require_permission(&headers, &state, "workflows", "execute").await?;
+    let principal = auth::require_permission(&headers, &state, "workflows", "execute").await?;
     let trigger_type = request.trigger_type.unwrap_or_else(|| "api".to_owned());
     let item = state
         .workflows
@@ -181,6 +230,16 @@ pub async fn run_workflow(
         .await
         .map_err(|error| ApiError::storage(&error))?
         .ok_or_else(|| ApiError::not_found(format!("workflow not found: {id}")))?;
+    audit(
+        &state,
+        &principal.username,
+        "run",
+        "workflow",
+        &id,
+        Some(format!("instance={} trigger_type={trigger_type}", item.id)),
+        &headers,
+    )
+    .await;
     Ok(Json(ApiResponse::success(item)))
 }
 
@@ -207,7 +266,7 @@ pub async fn advance_workflow_instance(
     Path(id): Path<String>,
     Json(request): Json<AdvanceWorkflowInput>,
 ) -> Result<Json<WorkflowAdvanceApiResponse>, ApiError> {
-    auth::require_permission(&headers, &state, "workflows", "execute").await?;
+    let principal = auth::require_permission(&headers, &state, "workflows", "execute").await?;
     let allowed_statuses = ["queued", "running", "succeeded", "failed", "skipped"];
     if !allowed_statuses.contains(&request.status.as_str()) {
         return Err(ApiError::bad_request(format!(
@@ -215,12 +274,27 @@ pub async fn advance_workflow_instance(
             request.status
         )));
     }
+    let node_key = request.node_key.clone();
+    let status = request.status.clone();
     let item = state
         .workflows
         .advance_workflow(&id, request)
         .await
         .map_err(|error| ApiError::storage(&error))?
         .ok_or_else(|| ApiError::not_found(format!("workflow instance not found: {id}")))?;
+    audit(
+        &state,
+        &principal.username,
+        "advance",
+        "workflow_instance",
+        &id,
+        Some(format!(
+            "node={node_key} status={status} queued={}",
+            item.queued_nodes.join(",")
+        )),
+        &headers,
+    )
+    .await;
     Ok(Json(ApiResponse::success(item)))
 }
 
@@ -233,13 +307,28 @@ pub async fn materialize_next_workflow_node(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<WorkflowMaterializeApiResponse>, ApiError> {
-    auth::require_permission(&headers, &state, "workflows", "execute").await?;
+    let principal = auth::require_permission(&headers, &state, "workflows", "execute").await?;
     let item = state
         .workflows
         .materialize_next_queued_node()
         .await
         .map_err(|error| ApiError::storage(&error))?
         .ok_or_else(|| ApiError::not_found("no queued workflow node found"))?;
+    audit(
+        &state,
+        &principal.username,
+        "materialize",
+        "workflow_node_instance",
+        &item.node.id,
+        Some(format!(
+            "workflow_instance={} node={} shards={}",
+            item.instance.id,
+            item.node.node_key,
+            item.shards.len()
+        )),
+        &headers,
+    )
+    .await;
     Ok(Json(ApiResponse::success(item)))
 }
 
@@ -250,13 +339,28 @@ pub async fn recover_workflow_node(
     Path(id): Path<String>,
     Json(request): Json<RecoverWorkflowNodeInput>,
 ) -> Result<Json<WorkflowRecoverApiResponse>, ApiError> {
-    auth::require_permission(&headers, &state, "workflows", "execute").await?;
+    let principal = auth::require_permission(&headers, &state, "workflows", "execute").await?;
+    let node_key = request.node_key.clone();
+    let action = request.action.clone();
     let item = state
         .workflows
         .recover_workflow_node(&id, request)
         .await
         .map_err(|error| ApiError::storage(&error))?
         .ok_or_else(|| ApiError::not_found(format!("workflow instance not found: {id}")))?;
+    audit(
+        &state,
+        &principal.username,
+        "recover",
+        "workflow_instance",
+        &id,
+        Some(format!(
+            "node={node_key} action={action} queued={}",
+            item.queued_nodes.join(",")
+        )),
+        &headers,
+    )
+    .await;
     Ok(Json(ApiResponse::success(item)))
 }
 

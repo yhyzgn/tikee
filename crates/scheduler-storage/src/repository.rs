@@ -37,8 +37,9 @@ pub use workflow::{
     AdvanceWorkflowInput, AdvanceWorkflowResult, CreateWorkflow, DispatchQueueSummary,
     InstanceEventSummary, MaterializeWorkflowNodeResult, QueueOverview, RecoverWorkflowNodeInput,
     RecoverWorkflowNodeResult, UpdateWorkflow, WorkflowDefinition, WorkflowEdgeSpec,
-    WorkflowInstanceSummary, WorkflowNodeInstanceSummary, WorkflowNodeSpec, WorkflowRepository,
-    WorkflowShardSummary, WorkflowSummary, WorkflowValidationResult, validate_workflow_definition,
+    WorkflowInstanceSummary, WorkflowJobResultOutcome, WorkflowNodeInstanceSummary,
+    WorkflowNodeSpec, WorkflowRepository, WorkflowShardSummary, WorkflowSummary,
+    WorkflowValidationResult, validate_workflow_definition,
 };
 
 #[cfg(test)]
@@ -328,5 +329,102 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("should list users: {error}"));
         assert_eq!(listed_again.len(), 1); // just admin
+    }
+    #[tokio::test]
+    async fn workflow_job_result_auto_advances_next_node() {
+        let db = crate::connect_and_migrate("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("sqlite memory db should connect: {error}"));
+        let jobs = JobRepository::new(db.clone());
+        let workflows = super::WorkflowRepository::new(db.clone());
+        let first_job = jobs
+            .create_job(CreateJob {
+                namespace: "default".to_owned(),
+                app: "billing".to_owned(),
+                name: "first".to_owned(),
+                schedule_type: "api".to_owned(),
+                schedule_expr: None,
+                enabled: true,
+            })
+            .await
+            .unwrap_or_else(|error| panic!("first job should be created: {error}"));
+        let second_job = jobs
+            .create_job(CreateJob {
+                namespace: "default".to_owned(),
+                app: "billing".to_owned(),
+                name: "second".to_owned(),
+                schedule_type: "api".to_owned(),
+                schedule_expr: None,
+                enabled: true,
+            })
+            .await
+            .unwrap_or_else(|error| panic!("second job should be created: {error}"));
+        let workflow = workflows
+            .create_workflow(super::CreateWorkflow {
+                name: "auto-advance".to_owned(),
+                created_by: "test".to_owned(),
+                definition: super::WorkflowDefinition {
+                    nodes: vec![
+                        super::WorkflowNodeSpec {
+                            key: "first".to_owned(),
+                            name: None,
+                            kind: Some("job".to_owned()),
+                            job_id: Some(first_job.id),
+                            child_workflow_id: None,
+                            map_items: None,
+                            config: None,
+                        },
+                        super::WorkflowNodeSpec {
+                            key: "second".to_owned(),
+                            name: None,
+                            kind: Some("job".to_owned()),
+                            job_id: Some(second_job.id),
+                            child_workflow_id: None,
+                            map_items: None,
+                            config: None,
+                        },
+                    ],
+                    edges: vec![super::WorkflowEdgeSpec {
+                        from: "first".to_owned(),
+                        to: "second".to_owned(),
+                        condition: Some("on_success".to_owned()),
+                    }],
+                },
+            })
+            .await
+            .unwrap_or_else(|error| panic!("workflow should be created: {error}"));
+        let instance = workflows
+            .run_workflow(&workflow.id, "api")
+            .await
+            .unwrap_or_else(|error| panic!("workflow should run: {error}"))
+            .unwrap_or_else(|| panic!("workflow should exist"));
+        let materialized = workflows
+            .materialize_next_queued_node()
+            .await
+            .unwrap_or_else(|error| panic!("node should materialize: {error}"))
+            .unwrap_or_else(|| panic!("queued node should exist"));
+        let job_instance_id = materialized
+            .node
+            .job_instance_id
+            .clone()
+            .unwrap_or_else(|| panic!("job node should create job instance"));
+
+        let outcome = workflows
+            .complete_job_node_from_result(&job_instance_id, InstanceStatus::Succeeded, None)
+            .await
+            .unwrap_or_else(|error| panic!("workflow should advance from job result: {error}"))
+            .unwrap_or_else(|| panic!("job should be linked to workflow node"));
+
+        assert_eq!(outcome.node_key, "first");
+        assert_eq!(outcome.status, "succeeded");
+        assert_eq!(outcome.queued_nodes, vec!["second".to_owned()]);
+        let refreshed = workflows
+            .get_workflow_instance(&instance.id)
+            .await
+            .unwrap_or_else(|error| panic!("workflow instance should load: {error}"))
+            .unwrap_or_else(|| panic!("workflow instance should exist"));
+        assert_eq!(refreshed.status, "running");
+        assert_eq!(refreshed.nodes[0].status, "succeeded");
+        assert_eq!(refreshed.nodes[1].status, "queued");
     }
 }

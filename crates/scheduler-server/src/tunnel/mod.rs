@@ -13,6 +13,7 @@ use anyhow::{Context, Result};
 use scheduler_proto::worker::v1::worker_tunnel_service_server::WorkerTunnelServiceServer;
 use scheduler_storage::{
     JobInstanceAttemptRepository, JobInstanceLogRepository, JobInstanceRepository,
+    WorkflowRepository,
 };
 use tonic::transport::Server;
 use tracing::info;
@@ -28,12 +29,13 @@ pub async fn serve(
     instances: JobInstanceRepository,
     logs: JobInstanceLogRepository,
     attempts: JobInstanceAttemptRepository,
+    workflows: WorkflowRepository,
 ) -> Result<()> {
     info!(addr = %listen_addr, "scheduler Worker Tunnel listening");
 
     Server::builder()
         .add_service(WorkerTunnelServiceServer::new(WorkerTunnel::new(
-            registry, instances, logs, attempts,
+            registry, instances, logs, attempts, workflows,
         )))
         .serve(listen_addr)
         .await

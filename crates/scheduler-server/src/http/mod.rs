@@ -902,6 +902,45 @@ mod tests {
         let json: Value = serde_json::from_slice(&body)
             .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
         assert!(json["data"]["items"].as_array().is_some());
+
+        assert_workflow_audit_actions(app.clone()).await;
+    }
+
+    async fn assert_workflow_audit_actions(app: axum::Router) {
+        let audit = app
+            .clone()
+            .oneshot(admin_request_builder(app.clone(), "GET", "/api/v1/audit-logs").await)
+            .await
+            .unwrap_or_else(|error| panic!("audit logs request should succeed: {error}"));
+        let body = axum::body::to_bytes(audit.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("audit body should collect: {error}"));
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("audit body should be JSON: {error}"));
+        let actions: Vec<_> = json["data"]["items"]
+            .as_array()
+            .unwrap_or_else(|| panic!("audit items should exist"))
+            .iter()
+            .filter(|item| {
+                item["resource_type"] == "workflow"
+                    || item["resource_type"] == "workflow_instance"
+                    || item["resource_type"] == "workflow_node_instance"
+            })
+            .map(|item| item["action"].as_str().unwrap_or_default().to_owned())
+            .collect();
+        for expected in [
+            "create",
+            "validate",
+            "dry-run",
+            "run",
+            "advance",
+            "materialize",
+        ] {
+            assert!(
+                actions.iter().any(|action| action == expected),
+                "missing workflow audit action {expected}; got {actions:?}"
+            );
+        }
     }
 
     #[tokio::test]

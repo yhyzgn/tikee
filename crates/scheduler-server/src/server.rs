@@ -61,7 +61,8 @@ pub async fn serve(config: SchedulerConfig) -> Result<()> {
             registry.clone(),
             tunnel_instances,
             logs,
-            tunnel_attempts
+            tunnel_attempts,
+            workflows.clone()
         ),
         async {
             scheduler::run_tick_loop(jobs, scheduler_instances).await;

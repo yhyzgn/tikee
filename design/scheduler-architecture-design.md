@@ -2043,15 +2043,19 @@ scheduler/
 - [x] 子工作流嵌套（节点引用 child_workflow_id + 子实例软关联）
 - [ ] PostgreSQL + CockroachDB 存储支持
 - [ ] Server 集群 (Raft 共识)
-- [x] 任务队列基础（dispatch_queue 持久化模型、priority/run_after/status 字段；workflow queued node 自动 materialize）
+- [x] 任务队列基础（dispatch_queue 持久化模型、priority/run_after/status/lease_owner/lease_until 字段；workflow queued node 自动 materialize）
 - [x] 持久化延迟队列基础（dispatch_queue.run_after）
 - [ ] 实时日志流 (gRPC Server Stream)
 - [x] 工作流可视化编辑器（基础 DAG 预览 + 节点状态着色）
 - [x] Web UI 工作流 JSON 定义入口、YAML 预览、dry-run、validate/run、SSE、shards 和恢复入口基础
-
-023 补充：workflow executor 已具备最小推进能力：`POST /api/v1/workflow-instances/{id}/advance` 按节点状态与边条件（always/on_success/on_failure）推进后继 waiting 节点到 queued，并写入 dispatch_queue 与 instance_events；Map/MapReduce 节点要求 `map_items`，子工作流节点要求 `child_workflow_id`。
-
-024 补充：`materialize-next` 可把 workflow queued node 物化为 job_instance、workflow_shards 或 child workflow instance；新增 `recover` 支持 retry/skip/fail/succeed 基础恢复语义；新增 Worker/dispatch queue API 和 Web Worker 集群页面。
+- [x] Workflow executor 最小推进能力（`advance` 按节点状态与边条件推进后继 waiting 节点到 queued，并写入 dispatch_queue 与 instance_events）
+- [x] Workflow 定义约束补齐（Map/MapReduce 节点要求 `map_items`，子工作流节点要求 `child_workflow_id`）
+- [x] Workflow queued node 物化执行（`materialize-next` 将 queued 节点物化为 job_instance、workflow_shards 或 child workflow instance）
+- [x] Workflow 节点恢复 API（`recover` 支持 retry/skip/fail/succeed 基础恢复语义）
+- [x] Worker / dispatch queue 管理 API 与 Web Worker 集群页面
+- [x] Worker TaskResult 自动推进 Workflow（按 job_instance_id 软关联回写 workflow_node_instance，并按边条件入队后继节点）
+- [x] Workflow 操作审计日志（create/update/validate/dry-run/run/advance/materialize/recover 管理与执行动作写入 audit_logs）
+- [x] Dispatch queue 最小租约字段（lease_owner / lease_until + SQLite 兼容迁移；后续继续实现原子 claim / visibility-timeout）
 - [x] SSE 实时实例事件骨架（instance_events + /events/instances/:id/stream；WebSocket 后续）
 - [ ] Go SDK + Python SDK
 

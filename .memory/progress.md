@@ -138,3 +138,12 @@
 ## 2026-05-20 037：运行视图只读化
 - Workflows 列表内联展开的运行视图明确进入只读模式：不渲染节点端口、不允许拖拽节点、不允许点击/编辑/删除/重连线条。
 - WorkflowEditorPage 仍通过 `editable` 模式保留完整节点、端口、边条件与重连编辑能力。
+
+## 2026-05-20 038：Worker 结果自动推进工作流
+- 025 阶段启动：Worker Tunnel 收到 `TaskResult` 后，除更新 job_instance / broadcast attempt 外，会按 job_instance_id 软关联查找 workflow_node_instance。
+- job 节点结果自动映射为 workflow node `succeeded` / `failed`，并调用 workflow advance 按边条件入队后继节点，减少列表运行视图中的手动推进依赖。
+- dispatch_queue 新增 `lease_owner` / `lease_until` 字段与 SQLite 兼容迁移，API queue summary 也返回这两个字段，为后续原子 claim / visibility-timeout 打基础。
+
+## 2026-05-20 039：工作流操作审计补齐
+- 工作流 HTTP 管理动作补齐 audit log：create/update/validate/dry-run/run/advance/materialize/recover。
+- 工作流集成测试增加审计断言，确认 workflow / workflow_instance / workflow_node_instance 相关动作写入审计日志。

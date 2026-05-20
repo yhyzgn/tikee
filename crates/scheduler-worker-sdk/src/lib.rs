@@ -456,12 +456,14 @@ mod tests {
         let jobs = JobRepository::new(db.clone());
         let instances = JobInstanceRepository::new(db.clone());
         let logs = JobInstanceLogRepository::new(db.clone());
-        let attempts = JobInstanceAttemptRepository::new(db);
+        let attempts = JobInstanceAttemptRepository::new(db.clone());
+        let workflows = scheduler_storage::WorkflowRepository::new(db);
         let service = WorkerTunnelServiceServer::new(WorkerTunnel::new(
             registry.clone(),
             instances.clone(),
             logs.clone(),
             attempts,
+            workflows,
         ));
         let server = tokio::spawn(async move {
             Server::builder()

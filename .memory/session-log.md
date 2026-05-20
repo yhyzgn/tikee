@@ -723,3 +723,14 @@ Git:
 - 用户指出列表页面展开的运行视图应该禁止编辑节点和线条。
 - 已让 DagPreview 在非 editable 模式下不渲染端口、不渲染 edge hit path、不显示线条配置弹窗和重连 handle，节点点击也不会进入选中编辑态。
 - 编辑页继续传入 `editable`，不影响工作流创建/编辑画布。
+
+### 2026-05-20 038 Worker TaskResult 自动推进 Workflow
+- 用户要求继续下一阶段开发；按 `.prompt/025-phase2-workflow-worker-results-and-streaming.md` 先实现最关键的 worker result -> workflow node -> DAG advance 链路。
+- `WorkflowRepository::complete_job_node_from_result` 通过 job_instance_id 软关联查找 workflow_node_instance，更新节点终态并自动 advance 后继节点，同时把对应 job dispatch_queue 标记 done/failed。
+- Worker Tunnel 注入 WorkflowRepository，TaskResult 单实例分支会调用自动推进；broadcast parent 刷新路径保持原逻辑。
+- dispatch_queue 增加 lease_owner/lease_until 最小 schema，后续 030 继续做原子 claim、shard dispatch 与 child workflow 回写。
+
+### 2026-05-20 039 工作流审计日志补漏
+- 用户指出工作流模块的操作没有记录到审计日志。
+- 已在 workflow routes 中接入 common::audit，覆盖 create/update/validate/dry-run/run/advance/materialize/recover。
+- 读操作 list/get/shards/events 暂不记录，避免高频读取刷屏；管理和执行类动作全部记录。

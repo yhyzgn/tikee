@@ -2,6 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use scheduler_core::InstanceStatus;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter,
     QueryOrder, QuerySelect, Set, TransactionTrait,
@@ -129,6 +130,8 @@ pub struct DispatchQueueSummary {
     pub run_after: String,
     pub status: String,
     pub attempt: i32,
+    pub lease_owner: Option<String>,
+    pub lease_until: Option<String>,
     pub worker_selector: Option<String>,
     pub created_at: String,
     pub updated_at: String,
@@ -155,6 +158,15 @@ pub struct MaterializeWorkflowNodeResult {
     pub instance: WorkflowInstanceSummary,
     pub node: WorkflowNodeInstanceSummary,
     pub shards: Vec<WorkflowShardSummary>,
+}
+
+#[derive(Debug, Clone)]
+pub struct WorkflowJobResultOutcome {
+    pub workflow_instance_id: String,
+    pub node_key: String,
+    pub status: String,
+    pub queued_nodes: Vec<String>,
+    pub completed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
@@ -375,6 +387,8 @@ impl WorkflowRepository {
                     run_after: Set(now.clone()),
                     status: Set("pending".to_owned()),
                     attempt: Set(0),
+                    lease_owner: Set(None),
+                    lease_until: Set(None),
                     worker_selector: Set(None),
                     created_at: Set(now.clone()),
                     updated_at: Set(now.clone()),
@@ -475,6 +489,8 @@ impl WorkflowRepository {
                         run_after: Set(now.clone()),
                         status: Set("pending".to_owned()),
                         attempt: Set(0),
+                        lease_owner: Set(None),
+                        lease_until: Set(None),
                         worker_selector: Set(None),
                         created_at: Set(now.clone()),
                         updated_at: Set(now.clone()),
@@ -609,6 +625,8 @@ impl WorkflowRepository {
                     run_after: Set(now.clone()),
                     status: Set("pending".to_owned()),
                     attempt: Set(0),
+                    lease_owner: Set(None),
+                    lease_until: Set(None),
                     worker_selector: Set(None),
                     created_at: Set(now.clone()),
                     updated_at: Set(now.clone()),
@@ -693,6 +711,89 @@ impl WorkflowRepository {
         }))
     }
 
+    pub async fn get_node_by_job_instance(
+        &self,
+        job_instance_id: &str,
+    ) -> Result<Option<WorkflowNodeInstanceSummary>, sea_orm::DbErr> {
+        workflow_node_instance::Entity::find()
+            .filter(workflow_node_instance::Column::JobInstanceId.eq(job_instance_id.to_owned()))
+            .one(&self.db)
+            .await
+            .map(|model| model.map(WorkflowNodeInstanceSummary::from))
+    }
+
+    pub async fn complete_job_node_from_result(
+        &self,
+        job_instance_id: &str,
+        status: InstanceStatus,
+        message: Option<String>,
+    ) -> Result<Option<WorkflowJobResultOutcome>, sea_orm::DbErr> {
+        let Some(node) = workflow_node_instance::Entity::find()
+            .filter(workflow_node_instance::Column::JobInstanceId.eq(job_instance_id.to_owned()))
+            .one(&self.db)
+            .await?
+        else {
+            return Ok(None);
+        };
+        let terminal_status = if status == InstanceStatus::Succeeded {
+            "succeeded"
+        } else {
+            "failed"
+        }
+        .to_owned();
+        let node_key = node.node_key.clone();
+        let workflow_instance_id = node.workflow_instance_id.clone();
+        let advance = self
+            .advance_workflow(
+                &workflow_instance_id,
+                AdvanceWorkflowInput {
+                    node_key: node_key.clone(),
+                    status: terminal_status.clone(),
+                    message: message.or_else(|| {
+                        Some(format!(
+                            "job instance {job_instance_id} completed as {terminal_status}"
+                        ))
+                    }),
+                },
+            )
+            .await?
+            .ok_or_else(|| sea_orm::DbErr::RecordNotFound(workflow_instance_id.clone()))?;
+        self.mark_job_queue_done(job_instance_id, terminal_status.as_str())
+            .await?;
+        Ok(Some(WorkflowJobResultOutcome {
+            workflow_instance_id,
+            node_key,
+            status: terminal_status,
+            queued_nodes: advance.queued_nodes,
+            completed: advance.completed,
+        }))
+    }
+
+    async fn mark_job_queue_done(
+        &self,
+        job_instance_id: &str,
+        node_status: &str,
+    ) -> Result<(), sea_orm::DbErr> {
+        let Some(queue_row) = dispatch_queue::Entity::find()
+            .filter(dispatch_queue::Column::JobInstanceId.eq(job_instance_id.to_owned()))
+            .one(&self.db)
+            .await?
+        else {
+            return Ok(());
+        };
+        let mut active: dispatch_queue::ActiveModel = queue_row.into();
+        active.status = Set(if node_status == "succeeded" {
+            "done".to_owned()
+        } else {
+            "failed".to_owned()
+        });
+        active.lease_owner = Set(None);
+        active.lease_until = Set(None);
+        active.updated_at = Set(now_rfc3339());
+        active.update(&self.db).await?;
+        Ok(())
+    }
+
     pub async fn list_workflow_shards(
         &self,
         instance_id: &str,
@@ -772,6 +873,8 @@ impl WorkflowRepository {
                 run_after: Set(now.clone()),
                 status: Set("pending".to_owned()),
                 attempt: Set(0),
+                lease_owner: Set(None),
+                lease_until: Set(None),
                 worker_selector: Set(None),
                 created_at: Set(now.clone()),
                 updated_at: Set(now.clone()),
@@ -977,6 +1080,8 @@ impl From<dispatch_queue::Model> for DispatchQueueSummary {
             run_after: model.run_after,
             status: model.status,
             attempt: model.attempt,
+            lease_owner: model.lease_owner,
+            lease_until: model.lease_until,
             worker_selector: model.worker_selector,
             created_at: model.created_at,
             updated_at: model.updated_at,

@@ -16,6 +16,8 @@ pub struct Model {
     pub run_after: String,
     pub status: String,
     pub attempt: i32,
+    pub lease_owner: Option<String>,
+    pub lease_until: Option<String>,
     pub worker_selector: Option<String>,
     pub created_at: String,
     pub updated_at: String,
