@@ -160,6 +160,13 @@ function DagPreview({ definition, instance, jobs = [], editable = false, onChang
   const positions = new Map(definition.nodes.map((node, index) => [node.key, nodePosition(node, index)]));
 
   const selectedNode = definition.nodes.find((node) => node.key === selectedNodeKey) ?? null;
+  const selectedEdge = selectedEdgeIndex === null ? null : definition.edges[selectedEdgeIndex] ?? null;
+  const selectedEdgeOverlay = selectedEdge ? (() => {
+    const from = positions.get(selectedEdge.from);
+    const to = positions.get(selectedEdge.to);
+    if (!from || !to) return null;
+    return { x: Math.max(16, (from.x + 218 + to.x) / 2 - 110), y: Math.max(16, (from.y + to.y) / 2 + 22) };
+  })() : null;
   const jobOptions = jobs.map((job) => ({ label: `${job.name} · ${job.namespace}/${job.app}`, value: job.id }));
 
   const update = (next: WorkflowDefinition) => onChange?.(next);
@@ -201,7 +208,10 @@ function DagPreview({ definition, instance, jobs = [], editable = false, onChang
     update({ nodes: definition.nodes.filter((node) => node.key !== key), edges: definition.edges.filter((edge) => edge.from !== key && edge.to !== key) });
     if (selectedNodeKey === key) setSelectedNodeKey(definition.nodes.find((node) => node.key !== key)?.key ?? null);
   };
-  const removeEdge = (edge: WorkflowEdgeSpec) => update({ ...definition, edges: definition.edges.filter((item) => !(item.from === edge.from && item.to === edge.to && item.condition === edge.condition)) });
+  const removeEdgeAt = (index: number) => {
+    update({ ...definition, edges: definition.edges.filter((_, edgeIndex) => edgeIndex !== index) });
+    setSelectedEdgeIndex(null);
+  };
   const addNode = (kind: string) => {
     const node = makeNode(kind, definition.nodes.length + 1);
     update({ ...definition, nodes: [...definition.nodes, node] });
@@ -357,6 +367,22 @@ function DagPreview({ definition, instance, jobs = [], editable = false, onChang
               return <path className="workflow-node-canvas__temp-edge" d={`M ${x1} ${y1} C ${x1 + mid} ${y1}, ${x2 - mid} ${y2}, ${x2} ${y2}`} stroke="#0ea5e9" strokeWidth="2.5" fill="none" markerEnd="url(#workflow-arrow)" />;
             })() : null}
           </svg>
+          {selectedEdge && selectedEdgeOverlay ? (
+            <Card size="small" className="workflow-edge-popover" style={{ left: selectedEdgeOverlay.x, top: selectedEdgeOverlay.y }}>
+              <Space direction="vertical" size={8}>
+                <Typography.Text strong>{selectedEdge.from} → {selectedEdge.to}</Typography.Text>
+                <Select size="small" value={selectedEdge.condition ?? 'on_success'} style={{ width: 180 }} options={[
+                  { label: '成功时 on_success', value: 'on_success' },
+                  { label: '失败时 on_failure', value: 'on_failure' },
+                  { label: '始终 always', value: 'always' },
+                ]} onChange={(value) => changeEdge(selectedEdgeIndex ?? 0, { condition: value as WorkflowEdgeSpec['condition'] })} />
+                <Space>
+                  <Button size="small" danger onClick={() => selectedEdgeIndex !== null && removeEdgeAt(selectedEdgeIndex)}>删除连线</Button>
+                  <Typography.Text type="secondary">拖动两端圆点可重连</Typography.Text>
+                </Space>
+              </Space>
+            </Card>
+          ) : null}
           {definition.nodes.map((node, index) => {
             const position = positions.get(node.key) ?? { x: 0, y: 0 };
             const status = statuses.get(node.key) ?? 'design';
@@ -494,22 +520,6 @@ function DagPreview({ definition, instance, jobs = [], editable = false, onChang
             {nodeKind(selectedNode) === 'sub_workflow' ? (
               <Input addonBefore="子工作流 ID" value={selectedNode.child_workflow_id ?? ''} onChange={(event) => updateNode(selectedNode.key, { child_workflow_id: event.target.value })} />
             ) : null}
-          </Space>
-        </Card>
-      ) : null}
-
-      {editable && definition.edges.length > 0 ? (
-        <Card size="small" title="边关系" className="workflow-edge-editor">
-          <Space direction="vertical" style={{ width: '100%' }}>
-            {definition.edges.map((edge, index) => (
-              <Space wrap key={`${edge.from}-${edge.to}-${index}`}>
-                <Select value={edge.from} style={{ width: 140 }} options={definition.nodes.map((node) => ({ label: node.key, value: node.key }))} onChange={(value) => changeEdge(index, { from: value })} />
-                <Typography.Text>→</Typography.Text>
-                <Select value={edge.to} style={{ width: 140 }} options={definition.nodes.map((node) => ({ label: node.key, value: node.key }))} onChange={(value) => changeEdge(index, { to: value })} />
-                <Select value={edge.condition ?? 'on_success'} style={{ width: 140 }} options={['on_success', 'on_failure', 'always'].map((value) => ({ label: value, value }))} onChange={(value) => changeEdge(index, { condition: value as WorkflowEdgeSpec['condition'] })} />
-                <Button size="small" danger onClick={() => removeEdge(edge)}>删除边</Button>
-              </Space>
-            ))}
           </Space>
         </Card>
       ) : null}

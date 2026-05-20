@@ -627,3 +627,18 @@ body {
 .workflow-edge__handle:active {
   cursor: grabbing;
 }
+
+.workflow-edge-popover.ant-card {
+  position: absolute;
+  z-index: 4;
+  width: 230px;
+  border: 1px solid #bae6fd;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.96) !important;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.14) !important;
+  backdrop-filter: blur(10px);
+}
+
+.workflow-edge-popover .ant-card-body {
+  padding: 10px 12px;
+}
