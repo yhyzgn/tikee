@@ -25,14 +25,18 @@ impl MigrationTrait for CreateMetadataTables {
         create_job_instance_attempts(manager).await?;
         create_job_instance_logs(manager).await?;
         create_users(manager).await?;
+        create_auth_sessions(manager).await?;
         create_indexes(manager).await?;
-        
+
         // Seed default admin
         seed_admin_user(manager).await?;
         Ok(())
     }
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(Table::drop().table(AuthSessions::Table).to_owned())
+            .await?;
         manager
             .drop_table(Table::drop().table(Users::Table).to_owned())
             .await?;
@@ -123,6 +127,32 @@ async fn create_users(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
         .await
 }
 
+async fn create_auth_sessions(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    manager
+        .create_table(
+            Table::create()
+                .table(AuthSessions::Table)
+                .if_not_exists()
+                .col(string_pk(AuthSessions::Id))
+                .col(string_col(AuthSessions::UserId))
+                .col(string_col(AuthSessions::TokenHash))
+                .col(string_null(AuthSessions::DeviceId))
+                .col(string_null(AuthSessions::DeviceName))
+                .col(string_col(AuthSessions::ExpiresAt))
+                .col(string_col(AuthSessions::CreatedAt))
+                .col(string_col(AuthSessions::UpdatedAt))
+                .foreign_key(
+                    ForeignKey::create()
+                        .name("fk_auth_sessions_user")
+                        .from(AuthSessions::Table, AuthSessions::UserId)
+                        .to(Users::Table, Users::Id)
+                        .on_delete(ForeignKeyAction::Cascade),
+                )
+                .to_owned(),
+        )
+        .await
+}
+
 async fn seed_admin_user(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
     // Seed initial admin user using credentials documented in README: scheduler_init / Scheduler@2026!
     let insert = sea_query::Query::insert()
@@ -139,11 +169,21 @@ async fn seed_admin_user(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
             "scheduler_init".into(),
             "$2b$10$/rflKev/thG2Je1e.2/7leHSg8Z/LYdSTqdpwsPKTyJMO5ajpysLW".into(), // hash for "Scheduler@2026!"
             "admin".into(),
-            time::OffsetDateTime::now_utc().format(&time::format_description::well_known::Rfc3339).unwrap().into(),
+            now_rfc3339().into(),
         ])
         .to_owned();
-    
-    manager.exec_stmt(insert).await
+
+    match manager.exec_stmt(insert).await {
+        Ok(()) => Ok(()),
+        Err(DbErr::Exec(error)) if error.to_string().contains("UNIQUE") => Ok(()),
+        Err(error) => Err(error),
+    }
+}
+
+fn now_rfc3339() -> String {
+    time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
 }
 
 async fn create_namespaces(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
@@ -316,7 +356,39 @@ async fn create_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
             .unique()
             .to_owned(),
     )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_auth_sessions_token_hash")
+            .table(AuthSessions::Table)
+            .col(AuthSessions::TokenHash)
+            .unique()
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_auth_sessions_user")
+            .table(AuthSessions::Table)
+            .col(AuthSessions::UserId)
+            .to_owned(),
+    )
     .await
+}
+
+#[derive(DeriveIden)]
+enum AuthSessions {
+    Table,
+    Id,
+    UserId,
+    TokenHash,
+    DeviceId,
+    DeviceName,
+    ExpiresAt,
+    CreatedAt,
+    UpdatedAt,
 }
 
 #[derive(DeriveIden)]

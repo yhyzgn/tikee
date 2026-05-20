@@ -57,14 +57,16 @@ async fn dispatch_single_instances(
             payload: Vec::new(),
         };
 
-        let eligible_workers = registry.find_eligible_workers(&job.namespace, &job.app).await;
-        if let Some(worker_id) = eligible_workers.first() {
-            if let Some(worker_id) = registry.dispatch_to_worker(worker_id, task).await {
-                instances
-                    .update_status(&instance.id, InstanceStatus::Running)
-                    .await?;
-                debug!(%worker_id, instance_id = %instance.id, "dispatched instance to worker");
-            }
+        let eligible_workers = registry
+            .find_eligible_workers(&job.namespace, &job.app)
+            .await;
+        if let Some(worker_id) = eligible_workers.first()
+            && let Some(worker_id) = registry.dispatch_to_worker(worker_id, task).await
+        {
+            instances
+                .update_status(&instance.id, InstanceStatus::Running)
+                .await?;
+            debug!(%worker_id, instance_id = %instance.id, "dispatched instance to worker");
         }
     }
 

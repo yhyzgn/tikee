@@ -64,3 +64,10 @@
 - SQLite compatibility pass fixes current dev DB drift, but long-term production migrations should be split into explicit versioned migrations with downgrade/roll-forward policy.
 - Web UI is visually modernized, but full UX depth for Worker, Security, Audit, Workflow, and Settings is still pending backend capability implementation.
 - Vite build still reports a large bundle warning due to Ant Design; future routing/code-splitting should address this.
+
+
+## 2026-05-20 — session abstraction follow-up
+
+- 当前 `authenticate` 仍保留开发期 `scheduler-init-token` backdoor 以兼容既有受保护 API 测试；登录接口已返回 `atk_` DB session token，生产安全阶段应移除静态 bearer backdoor。
+- 当前 session TTL 固定在代码中，后续应进入配置文件并支持 Redis 分布式实现。
+- moka 本地缓存不是权威状态；多节点部署前必须实现 Redis 或事件驱动的跨节点撤销同步。

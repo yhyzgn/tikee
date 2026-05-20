@@ -9,7 +9,9 @@ use serde::{Deserialize, Serialize};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use uuid::Uuid;
 
-use crate::entities::{app, job, job_instance, job_instance_attempt, job_instance_log, namespace};
+use crate::entities::{
+    app, auth_session, job, job_instance, job_instance_attempt, job_instance_log, namespace, user,
+};
 
 /// Minimal job creation input.
 #[derive(Debug, Clone)]
@@ -137,12 +139,185 @@ pub struct JobInstanceLogSummary {
     pub created_at: String,
 }
 
+/// Persisted session creation input.
+#[derive(Debug, Clone)]
+pub struct CreateAuthSession {
+    /// Related user id.
+    pub user_id: String,
+    /// SHA-256 hash of the opaque access token.
+    pub token_hash: String,
+    /// Optional device identifier.
+    pub device_id: Option<String>,
+    /// Optional device display name.
+    pub device_name: Option<String>,
+    /// RFC3339 expiration timestamp.
+    pub expires_at: String,
+}
+
+/// Persisted auth session plus principal snapshot.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuthSessionSummary {
+    /// Session id.
+    pub id: String,
+    /// User id.
+    pub user_id: String,
+    /// Username.
+    pub username: String,
+    /// Role.
+    pub role: String,
+    /// Token hash.
+    pub token_hash: String,
+    /// Optional device id.
+    pub device_id: Option<String>,
+    /// Optional device name.
+    pub device_name: Option<String>,
+    /// Expiration timestamp.
+    pub expires_at: String,
+    /// Creation timestamp.
+    pub created_at: String,
+}
+
+/// Auth session repository backed by the metadata database.
+#[derive(Debug, Clone)]
+pub struct AuthSessionRepository {
+    db: DatabaseConnection,
+}
+
+impl AuthSessionRepository {
+    /// Create a repository using the provided database connection.
+    #[must_use]
+    pub const fn new(db: DatabaseConnection) -> Self {
+        Self { db }
+    }
+
+    /// Persist a new auth session.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when database access fails.
+    pub async fn create_session(
+        &self,
+        input: CreateAuthSession,
+    ) -> Result<AuthSessionSummary, sea_orm::DbErr> {
+        let now = now_rfc3339();
+        let model = auth_session::ActiveModel {
+            id: Set(new_id("sess")),
+            user_id: Set(input.user_id),
+            token_hash: Set(input.token_hash),
+            device_id: Set(input.device_id),
+            device_name: Set(input.device_name),
+            expires_at: Set(input.expires_at),
+            created_at: Set(now.clone()),
+            updated_at: Set(now),
+        }
+        .insert(&self.db)
+        .await?;
+
+        self.get_by_token_hash(&model.token_hash)
+            .await?
+            .ok_or_else(|| sea_orm::DbErr::RecordNotFound(model.id))
+    }
+
+    /// Lookup a valid session by token hash. Expired sessions are removed lazily.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when database access fails.
+    pub async fn get_by_token_hash(
+        &self,
+        token_hash: &str,
+    ) -> Result<Option<AuthSessionSummary>, sea_orm::DbErr> {
+        let Some((session, user)) = auth_session::Entity::find()
+            .filter(auth_session::Column::TokenHash.eq(token_hash))
+            .find_also_related(user::Entity)
+            .one(&self.db)
+            .await?
+        else {
+            return Ok(None);
+        };
+
+        if is_expired_rfc3339(&session.expires_at) {
+            let _ = self.delete_by_token_hash(token_hash).await?;
+            return Ok(None);
+        }
+
+        let Some(user) = user else {
+            return Ok(None);
+        };
+
+        Ok(Some(AuthSessionSummary::from_models(session, user)))
+    }
+
+    /// Delete one session by token hash.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when database access fails.
+    pub async fn delete_by_token_hash(&self, token_hash: &str) -> Result<bool, sea_orm::DbErr> {
+        let result = auth_session::Entity::delete_many()
+            .filter(auth_session::Column::TokenHash.eq(token_hash))
+            .exec(&self.db)
+            .await?;
+        Ok(result.rows_affected > 0)
+    }
+
+    /// Delete all sessions belonging to a user.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when database access fails.
+    pub async fn delete_by_user_id(&self, user_id: &str) -> Result<u64, sea_orm::DbErr> {
+        let result = auth_session::Entity::delete_many()
+            .filter(auth_session::Column::UserId.eq(user_id))
+            .exec(&self.db)
+            .await?;
+        Ok(result.rows_affected)
+    }
+
+    /// Delete all sessions belonging to a username.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when database access fails.
+    pub async fn delete_by_username(&self, username: &str) -> Result<u64, sea_orm::DbErr> {
+        let Some(user) = user::Entity::find()
+            .filter(user::Column::Username.eq(username))
+            .one(&self.db)
+            .await?
+        else {
+            return Ok(0);
+        };
+        self.delete_by_user_id(&user.id).await
+    }
+}
+
+impl AuthSessionSummary {
+    fn from_models(session: auth_session::Model, user: user::Model) -> Self {
+        Self {
+            id: session.id,
+            user_id: user.id,
+            username: user.username,
+            role: user.role,
+            token_hash: session.token_hash,
+            device_id: session.device_id,
+            device_name: session.device_name,
+            expires_at: session.expires_at,
+            created_at: session.created_at,
+        }
+    }
+}
+
+fn is_expired_rfc3339(value: &str) -> bool {
+    OffsetDateTime::parse(value, &Rfc3339)
+        .map_or(true, |expires_at| expires_at <= OffsetDateTime::now_utc())
+}
+
 /// DTO for creating a new user.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateUser {
     /// Unique username.
     pub username: String,
-    /// BCrypt password hash.
+    /// `BCrypt` password hash.
     pub password_hash: String,
     /// System role (e.g. "admin", "operator", "viewer").
     pub role: String,
@@ -183,6 +358,12 @@ impl UserRepository {
         Self { db }
     }
 
+    /// Clone the underlying database connection for sibling repositories.
+    #[must_use]
+    pub fn db(&self) -> DatabaseConnection {
+        self.db.clone()
+    }
+
     /// Create a new user.
     ///
     /// # Errors
@@ -192,13 +373,11 @@ impl UserRepository {
         use crate::entities::user;
 
         let active = user::ActiveModel {
-            id: Set(format!("usr-{}", Uuid::now_v7().to_string())),
+            id: Set(format!("usr-{}", Uuid::now_v7())),
             username: Set(params.username),
             password_hash: Set(params.password_hash),
             role: Set(params.role),
-            created_at: Set(OffsetDateTime::now_utc()
-                .format(&time::format_description::well_known::Rfc3339)
-                .unwrap()),
+            created_at: Set(now_rfc3339()),
         };
 
         let inserted = active.insert(&self.db).await?;
@@ -235,7 +414,10 @@ impl UserRepository {
     /// # Errors
     ///
     /// Returns an error when database access fails.
-    pub async fn get_by_username(&self, username: &str) -> Result<Option<crate::entities::user::Model>, sea_orm::DbErr> {
+    pub async fn get_by_username(
+        &self,
+        username: &str,
+    ) -> Result<Option<crate::entities::user::Model>, sea_orm::DbErr> {
         use crate::entities::user;
 
         user::Entity::find()
@@ -252,7 +434,9 @@ impl UserRepository {
     pub async fn delete_user(&self, id: &str) -> Result<bool, sea_orm::DbErr> {
         use crate::entities::user;
 
-        let res = user::Entity::delete_by_id(id.to_owned()).exec(&self.db).await?;
+        let res = user::Entity::delete_by_id(id.to_owned())
+            .exec(&self.db)
+            .await?;
         Ok(res.rows_affected > 0)
     }
 
@@ -261,7 +445,10 @@ impl UserRepository {
     /// # Errors
     ///
     /// Returns an error when database access fails.
-    pub async fn get_user(&self, id: &str) -> Result<Option<crate::entities::user::Model>, sea_orm::DbErr> {
+    pub async fn get_user(
+        &self,
+        id: &str,
+    ) -> Result<Option<crate::entities::user::Model>, sea_orm::DbErr> {
         use crate::entities::user;
 
         user::Entity::find_by_id(id.to_owned()).one(&self.db).await
@@ -272,10 +459,17 @@ impl UserRepository {
     /// # Errors
     ///
     /// Returns an error when database access fails.
-    pub async fn update_user(&self, id: &str, params: UpdateUser) -> Result<Option<UserSummary>, sea_orm::DbErr> {
+    pub async fn update_user(
+        &self,
+        id: &str,
+        params: UpdateUser,
+    ) -> Result<Option<UserSummary>, sea_orm::DbErr> {
         use crate::entities::user;
 
-        let Some(existing) = user::Entity::find_by_id(id.to_owned()).one(&self.db).await? else {
+        let Some(existing) = user::Entity::find_by_id(id.to_owned())
+            .one(&self.db)
+            .await?
+        else {
             return Ok(None);
         };
 
@@ -690,7 +884,7 @@ impl JobRepository {
             .find_also_related(app::Entity)
             .all(&self.db)
             .await?;
-        
+
         let summaries = self.hydrate_job_summaries(rows).await?;
         Ok(summaries.into_iter().next())
     }
@@ -1025,7 +1219,7 @@ mod tests {
         Migrator::up(&db, None)
             .await
             .unwrap_or_else(|error| panic!("migration should run: {error}"));
-        
+
         let users = super::UserRepository::new(db);
 
         // Seeding checked
@@ -1033,8 +1227,8 @@ mod tests {
             .get_by_username("scheduler_init")
             .await
             .unwrap_or_else(|error| panic!("should load admin user: {error}"));
-        assert!(admin.is_some());
-        assert_eq!(admin.unwrap().role, "admin");
+        let admin = admin.unwrap_or_else(|| panic!("seeded admin should exist"));
+        assert_eq!(admin.role, "admin");
 
         // Create user
         let user = users

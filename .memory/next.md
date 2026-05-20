@@ -2,16 +2,17 @@
 
 ## 当前建议阶段
 
-执行 `.prompt/015-user-management-and-rbac.md`。
+执行 `.prompt/016-dynamic-script-sandbox.md`。
 
 ## 目标
 
-实现完整的账号体系和基础用户管理模块。包括 Users 存储实体、登录认证流、HTTP 接口的 RBAC 鉴权以及 Web UI 上的真实登录与用户管理界面。
+进入多语言动态脚本与安全沙箱最小切片。脚本定义由 Server 管理，实际执行必须在 Worker 侧受控沙箱中完成，并为多语言 runtime 预留扩展接口。
 
 ## 开始前检查
 
 - 先确认 014-worker-capability-routing 已提交并推送。
 - 确认设计文档中提及的安全边界与权限分离约束。
 - 接口需要严格遵循 `{code,message,data}` 规范。
-- 完善真实登录与路由守卫体系。
-- 完成后更新 `.memory/*`、`design/scheduler-architecture-design.md`、新增 `.prompt/016-*.md`。
+- 阅读 `design/auth-session-design.md`，保持 SessionStore 抽象不被后续安全模块破坏。
+- Server 不得执行用户脚本；Worker 侧执行必须受 SandboxPolicy 约束。
+- 完成后更新 `.memory/*`、`design/scheduler-architecture-design.md`、新增 `.prompt/017-*.md`。

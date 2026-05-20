@@ -92,7 +92,11 @@ impl WorkerRegistry {
 }
 
 fn is_match(worker_val: &str, job_val: &str) -> bool {
-    worker_val == job_val || worker_val == "*" || worker_val.is_empty() || job_val == "*" || job_val.is_empty()
+    worker_val == job_val
+        || worker_val == "*"
+        || worker_val.is_empty()
+        || job_val == "*"
+        || job_val.is_empty()
 }
 
 /// Registered worker metadata.

@@ -462,3 +462,31 @@ Verification:
 - `bun run --cwd web build` ✅
 - `cargo run --bin scheduler -- serve --config config/dev.toml` + healthz/jobs/reported instances endpoint smoke ✅
 - `./scripts/dev.sh` backend + Web startup smoke ✅
+
+## 2026-05-20 — 接手用户管理并抽象 SessionStore
+
+Agent:
+- Codex
+
+Work:
+- 接手他人已开发的用户管理/RBAC 模块。
+- 新增 `crates/scheduler-server/src/http/session.rs`，定义 `SessionStore` trait、`SessionManager` 和当前 `DbMokaSessionStore`。
+- 将 HTTP auth/login/logout 与用户角色/密码变更 session 失效逻辑从内存 HashMap 改为 SessionStore。
+- 新增/接入 `auth_sessions` 存储实体、repository 与 SQLite 兼容补表逻辑。
+- 更新 `design/auth-session-design.md`，明确 DB+moka 当前方案与 Redis 分布式扩展方案。
+- 更新开发路线图，标记用户管理/RBAC 与 SessionStore 抽象已完成。
+
+Verification:
+- `cargo fmt --all` ✅
+- `cargo check --workspace --all-features` ✅
+- `cargo fmt --all -- --check` ✅
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings` ✅
+- `cargo test --workspace --all-features` ✅
+- `cargo build --workspace --all-features` ✅
+- `mvn -f java/pom.xml -q test` ✅
+- `bun run --cwd web lint` ✅
+- `bun run --cwd web typecheck` ✅
+- `bun test --cwd web` ✅
+- `bun run --cwd web build` ✅（保留 Vite 大 chunk warning）
+- `docker compose config` ✅
+- `cargo run --bin scheduler -- serve --config config/dev.toml` + `/healthz` + `/auth/login` 冒烟 ✅，登录返回 `atk_` opaque token。

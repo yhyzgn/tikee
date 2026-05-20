@@ -61,7 +61,13 @@ pub async fn serve(config: SchedulerConfig) -> Result<()> {
             Ok::<(), anyhow::Error>(())
         },
         async {
-            tunnel::dispatcher::run(dispatcher_jobs, dispatcher_instances, dispatcher_attempts, registry).await;
+            tunnel::dispatcher::run(
+                dispatcher_jobs,
+                dispatcher_instances,
+                dispatcher_attempts,
+                registry,
+            )
+            .await;
             #[allow(unreachable_code)]
             Ok::<(), anyhow::Error>(())
         },

@@ -398,11 +398,14 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("worker should register: {error}"));
         registry
-            .dispatch_to_worker("worker-sdk-2", DispatchTask {
-                instance_id: instance.id.clone(),
-                job_id: job.id,
-                payload: b"hello".to_vec(),
-            })
+            .dispatch_to_worker(
+                "worker-sdk-2",
+                DispatchTask {
+                    instance_id: instance.id.clone(),
+                    job_id: job.id,
+                    payload: b"hello".to_vec(),
+                },
+            )
             .await
             .unwrap_or_else(|| panic!("worker should be available"));
         session

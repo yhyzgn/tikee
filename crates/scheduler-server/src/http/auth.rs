@@ -1,21 +1,24 @@
 //! Authentication and Role-Based Access Control (RBAC) verification.
 
-use std::sync::Arc;
-use axum::{Json, http::HeaderMap, extract::State};
+use axum::{Json, extract::State, http::HeaderMap};
 use bcrypt::verify;
-use uuid::Uuid;
+use std::sync::Arc;
 
 use super::{
     AppState,
     dto::{ApiResponse, AuthSession, LoginRequest, MeResponse},
     error::ApiError,
+    session::SessionCreate,
 };
 
 const DEFAULT_ADMIN_USERNAME: &str = "scheduler_init";
-const DEFAULT_ADMIN_PASSWORD: &str = "Scheduler@2026!";
 const DEFAULT_ADMIN_TOKEN: &str = "scheduler-init-token";
 
 /// Resolve authentication bearer token from headers.
+///
+/// # Errors
+///
+/// Returns unauthorized for missing/invalid bearer tokens or storage errors from the session store.
 pub async fn authenticate(headers: &HeaderMap, state: &AppState) -> Result<MeResponse, ApiError> {
     let Some(value) = headers.get(axum::http::header::AUTHORIZATION) else {
         return Err(ApiError::unauthorized("missing bearer token"));
@@ -37,37 +40,50 @@ pub async fn authenticate(headers: &HeaderMap, state: &AppState) -> Result<MeRes
         });
     }
 
-    let session = state.sessions.read().await.get(token).cloned();
-    if let Some(user_session) = session {
-        Ok(user_session)
-    } else {
-        Err(ApiError::unauthorized("invalid bearer token"))
-    }
+    state
+        .sessions
+        .get_principal(token)
+        .await?
+        .ok_or_else(|| ApiError::unauthorized("invalid bearer token"))
 }
 
 /// Require the requester to have one of the required roles.
+///
+/// # Errors
+///
+/// Returns unauthorized when authentication fails or forbidden when the role is not allowed.
 pub async fn require_role(
     headers: &HeaderMap,
     state: &AppState,
     allowed_roles: &[&str],
 ) -> Result<MeResponse, ApiError> {
     let principal = authenticate(headers, state).await?;
-    if allowed_roles.iter().any(|role| principal.roles.contains(&role.to_string())) {
+    if allowed_roles
+        .iter()
+        .any(|role| principal.roles.contains(&role.to_string()))
+    {
         Ok(principal)
     } else {
         Err(ApiError::forbidden(format!(
-            "requires roles: {:?}",
-            allowed_roles
+            "requires roles: {allowed_roles:?}"
         )))
     }
 }
 
 /// Helper requiring admin role.
+///
+/// # Errors
+///
+/// Returns unauthorized or forbidden when the requester is not an admin.
 pub async fn require_admin(headers: &HeaderMap, state: &AppState) -> Result<MeResponse, ApiError> {
     require_role(headers, state, &["admin"]).await
 }
 
-/// Login with secure DB credentials and create an in-memory session.
+/// Login with secure DB credentials and create a persisted session.
+///
+/// # Errors
+///
+/// Returns unauthorized for invalid credentials or storage errors when session creation fails.
 #[utoipa::path(
     post,
     path = "/api/v1/auth/login",
@@ -82,15 +98,6 @@ pub async fn login(
     State(state): State<Arc<AppState>>,
     Json(request): Json<LoginRequest>,
 ) -> Result<Json<ApiResponse<AuthSession>>, ApiError> {
-    // Development backdoor for tests
-    if request.username == DEFAULT_ADMIN_USERNAME && request.password == DEFAULT_ADMIN_PASSWORD {
-        return Ok(Json(ApiResponse::success(AuthSession {
-            token: DEFAULT_ADMIN_TOKEN.to_owned(),
-            username: DEFAULT_ADMIN_USERNAME.to_owned(),
-            roles: vec!["admin".to_owned()],
-        })));
-    }
-
     let user = state
         .users
         .get_by_username(&request.username)
@@ -106,22 +113,25 @@ pub async fn login(
         return Err(ApiError::unauthorized("invalid username or password"));
     }
 
-    let token = format!("tok-{}", Uuid::new_v4());
-    let session = MeResponse {
-        username: user.username.clone(),
-        roles: vec![user.role.clone()],
-    };
+    let session = state
+        .sessions
+        .create_session(SessionCreate {
+            user_id: user.id,
+            username: user.username,
+            role: user.role,
+            device_id: None,
+            device_name: None,
+        })
+        .await?;
 
-    state.sessions.write().await.insert(token.clone(), session);
-
-    Ok(Json(ApiResponse::success(AuthSession {
-        token,
-        username: user.username,
-        roles: vec![user.role],
-    })))
+    Ok(Json(ApiResponse::success(session)))
 }
 
 /// Return the current authenticated principal.
+///
+/// # Errors
+///
+/// Returns unauthorized for missing or invalid bearer tokens.
 #[utoipa::path(
     get,
     path = "/api/v1/auth/me",
@@ -139,7 +149,11 @@ pub async fn me(
     Ok(Json(ApiResponse::success(principal)))
 }
 
-/// Logout endpoint by destroying the in-memory session.
+/// Logout endpoint by revoking the current session.
+///
+/// # Errors
+///
+/// Returns a storage error envelope if session revocation fails.
 #[utoipa::path(
     post,
     path = "/api/v1/auth/logout",
@@ -160,6 +174,6 @@ pub async fn logout(
         return Ok(Json(ApiResponse::success(super::dto::EmptyData {})));
     };
 
-    state.sessions.write().await.remove(token);
+    state.sessions.revoke_token(token).await?;
     Ok(Json(ApiResponse::success(super::dto::EmptyData {})))
 }

@@ -5,23 +5,27 @@ pub mod dto;
 pub mod error;
 pub mod openapi;
 pub mod routes;
+pub mod session;
 
-use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::SystemTime};
+use std::{net::SocketAddr, sync::Arc, time::SystemTime};
 
 use anyhow::{Context, Result};
 use axum::{Json, Router, extract::State, http::StatusCode, response::IntoResponse, routing::get};
 use scheduler_core::HealthState;
 use scheduler_storage::{
-    JobInstanceAttemptRepository, JobInstanceLogRepository, JobInstanceRepository, JobRepository,
-    UserRepository, connect_and_migrate,
+    AuthSessionRepository, JobInstanceAttemptRepository, JobInstanceLogRepository,
+    JobInstanceRepository, JobRepository, UserRepository, connect_and_migrate,
 };
 use serde::Serialize;
 
-use tokio::{net::TcpListener, signal, sync::RwLock};
+use tokio::{net::TcpListener, signal};
 use tracing::info;
 use utoipa::OpenApi;
 
-use self::openapi::ApiDoc;
+use self::{
+    openapi::ApiDoc,
+    session::{DbMokaSessionStore, SessionManager},
+};
 
 /// Shared HTTP application state.
 #[derive(Debug, Clone)]
@@ -32,7 +36,7 @@ pub struct AppState {
     logs: JobInstanceLogRepository,
     attempts: JobInstanceAttemptRepository,
     users: UserRepository,
-    sessions: Arc<RwLock<HashMap<String, dto::MeResponse>>>,
+    sessions: SessionManager,
     registry: crate::tunnel::WorkerRegistry,
 }
 
@@ -47,6 +51,9 @@ impl AppState {
         users: UserRepository,
         registry: crate::tunnel::WorkerRegistry,
     ) -> Self {
+        let sessions = SessionManager::new(DbMokaSessionStore::new(AuthSessionRepository::new(
+            users.db(),
+        )));
         Self {
             started_at: SystemTime::now(),
             jobs,
@@ -54,7 +61,7 @@ impl AppState {
             logs,
             attempts,
             users,
-            sessions: Arc::new(RwLock::new(HashMap::new())),
+            sessions,
             registry,
         }
     }
@@ -95,8 +102,14 @@ fn api_router() -> Router<Arc<AppState>> {
         .route("/auth/login", axum::routing::post(auth::login))
         .route("/auth/me", get(auth::me))
         .route("/auth/logout", axum::routing::post(auth::logout))
-        .route("/users", axum::routing::get(routes::list_users).post(routes::create_user))
-        .route("/users/{id}", axum::routing::patch(routes::update_user).delete(routes::delete_user))
+        .route(
+            "/users",
+            axum::routing::get(routes::list_users).post(routes::create_user),
+        )
+        .route(
+            "/users/{id}",
+            axum::routing::patch(routes::update_user).delete(routes::delete_user),
+        )
         .route("/jobs", get(routes::list_jobs).post(routes::create_job))
         .route(
             "/jobs/{job_action}",
@@ -240,14 +253,18 @@ mod tests {
         .await;
 
         assert_eq!(login["code"], 0);
-        assert_eq!(login["data"]["token"], "scheduler-init-token");
+        let token = login["data"]["token"]
+            .as_str()
+            .unwrap_or_else(|| panic!("login should return token"))
+            .to_owned();
+        assert!(token.starts_with("atk_"));
         assert_eq!(login["data"]["roles"][0], "admin");
 
         let response = app
             .oneshot(
                 Request::builder()
                     .uri("/api/v1/auth/me")
-                    .header("authorization", "Bearer scheduler-init-token")
+                    .header("authorization", format!("Bearer {token}"))
                     .body(Body::empty())
                     .unwrap_or_else(|error| panic!("request should build: {error}")),
             )
@@ -608,6 +625,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn user_management_and_rbac_integration() {
         let db = connect_and_migrate("sqlite::memory:")
             .await
@@ -622,16 +640,23 @@ mod tests {
         ));
 
         // 1. Get users list (should only contain seeded admin)
-        let response = app.clone().oneshot(
-            Request::builder()
-                .uri("/api/v1/users")
-                .header("authorization", "Bearer scheduler-init-token")
-                .body(Body::empty())
-                .unwrap()
-        ).await.unwrap();
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/users")
+                    .header("authorization", "Bearer scheduler-init-token")
+                    .body(Body::empty())
+                    .unwrap_or_else(|error| panic!("test operation should succeed: {error}")),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("test operation should succeed: {error}"));
         assert_eq!(response.status(), axum::http::StatusCode::OK);
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        let json: Value = serde_json::from_slice(&body).unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("test operation should succeed: {error}"));
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("test operation should succeed: {error}"));
         assert_eq!(json["data"].as_array().map(Vec::len), Some(1));
         assert_eq!(json["data"][0]["username"], "scheduler_init");
 
@@ -643,42 +668,60 @@ mod tests {
                 .header("authorization", "Bearer scheduler-init-token")
                 .header("content-type", "application/json")
                 .body(Body::from(r#"{"username":"test_operator","password":"Password@123","role":"operator"}"#))
-                .unwrap()
-        ).await.unwrap();
+                .unwrap_or_else(|error| panic!("test operation should succeed: {error}"))
+        ).await.unwrap_or_else(|error| panic!("test operation should succeed: {error}"));
         assert_eq!(response.status(), axum::http::StatusCode::OK);
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        let json: Value = serde_json::from_slice(&body).unwrap();
-        let user_id = json["data"]["id"].as_str().unwrap().to_owned();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("test operation should succeed: {error}"));
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("test operation should succeed: {error}"));
+        let user_id = json["data"]["id"]
+            .as_str()
+            .unwrap_or_else(|| panic!("expected JSON string"))
+            .to_owned();
 
         // 3. Authenticate with newly created user
         let login = post_json_without_auth(
             app.clone(),
             "/api/v1/auth/login",
             r#"{"username":"test_operator","password":"Password@123"}"#,
-        ).await;
+        )
+        .await;
         assert_eq!(login["code"], 0);
-        let operator_token = login["data"]["token"].as_str().unwrap().to_owned();
+        let operator_token = login["data"]["token"]
+            .as_str()
+            .unwrap_or_else(|| panic!("expected JSON string"))
+            .to_owned();
 
         // 4. Verification: Operator is not allowed to create users (Admin only) -> Should return 403 Forbidden
-        let response = app.clone().oneshot(
-            Request::builder()
-                .uri("/api/v1/users")
-                .header("authorization", format!("Bearer {operator_token}"))
-                .body(Body::empty())
-                .unwrap()
-        ).await.unwrap();
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/users")
+                    .header("authorization", format!("Bearer {operator_token}"))
+                    .body(Body::empty())
+                    .unwrap_or_else(|error| panic!("test operation should succeed: {error}")),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("test operation should succeed: {error}"));
         assert_eq!(response.status(), axum::http::StatusCode::FORBIDDEN);
 
         // 5. Update user role to admin
-        let response = app.clone().oneshot(
-            Request::builder()
-                .method("PATCH")
-                .uri(format!("/api/v1/users/{user_id}"))
-                .header("authorization", "Bearer scheduler-init-token")
-                .header("content-type", "application/json")
-                .body(Body::from(r#"{"role":"admin"}"#))
-                .unwrap()
-        ).await.unwrap();
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PATCH")
+                    .uri(format!("/api/v1/users/{user_id}"))
+                    .header("authorization", "Bearer scheduler-init-token")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"role":"admin"}"#))
+                    .unwrap_or_else(|error| panic!("test operation should succeed: {error}")),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("test operation should succeed: {error}"));
         assert_eq!(response.status(), axum::http::StatusCode::OK);
 
         // 6. Perform a fresh login to fetch new token (the old token was invalidated on role change)
@@ -686,29 +729,41 @@ mod tests {
             app.clone(),
             "/api/v1/auth/login",
             r#"{"username":"test_operator","password":"Password@123"}"#,
-        ).await;
+        )
+        .await;
         assert_eq!(login_again["code"], 0);
-        let new_operator_token = login_again["data"]["token"].as_str().unwrap().to_owned();
+        let new_operator_token = login_again["data"]["token"]
+            .as_str()
+            .unwrap_or_else(|| panic!("expected JSON string"))
+            .to_owned();
 
         // Verify that updated user now HAS access to user list (returns 200 OK)
-        let response = app.clone().oneshot(
-            Request::builder()
-                .uri("/api/v1/users")
-                .header("authorization", format!("Bearer {new_operator_token}"))
-                .body(Body::empty())
-                .unwrap()
-        ).await.unwrap();
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/users")
+                    .header("authorization", format!("Bearer {new_operator_token}"))
+                    .body(Body::empty())
+                    .unwrap_or_else(|error| panic!("test operation should succeed: {error}")),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("test operation should succeed: {error}"));
         assert_eq!(response.status(), axum::http::StatusCode::OK);
 
         // 7. Delete user
-        let response = app.clone().oneshot(
-            Request::builder()
-                .method("DELETE")
-                .uri(format!("/api/v1/users/{user_id}"))
-                .header("authorization", "Bearer scheduler-init-token")
-                .body(Body::empty())
-                .unwrap()
-        ).await.unwrap();
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!("/api/v1/users/{user_id}"))
+                    .header("authorization", "Bearer scheduler-init-token")
+                    .body(Body::empty())
+                    .unwrap_or_else(|error| panic!("test operation should succeed: {error}")),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("test operation should succeed: {error}"));
         assert_eq!(response.status(), axum::http::StatusCode::OK);
     }
 

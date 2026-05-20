@@ -14,10 +14,11 @@ use std::time::Duration;
 use thiserror::Error;
 
 pub use repository::{
-    AppendJobInstanceLog, CreateJob, CreateJobInstance, CreateJobInstanceAttempt, CreateUser,
-    JobInstanceAttemptRepository, JobInstanceAttemptSummary, JobInstanceLogRepository,
-    JobInstanceLogSummary, JobInstanceRepository, JobInstanceSummary, JobRepository, JobSummary,
-    UpdateUser, UserRepository, UserSummary,
+    AppendJobInstanceLog, AuthSessionRepository, AuthSessionSummary, CreateAuthSession, CreateJob,
+    CreateJobInstance, CreateJobInstanceAttempt, CreateUser, JobInstanceAttemptRepository,
+    JobInstanceAttemptSummary, JobInstanceLogRepository, JobInstanceLogSummary,
+    JobInstanceRepository, JobInstanceSummary, JobRepository, JobSummary, UpdateUser,
+    UserRepository, UserSummary,
 };
 pub use sea_orm::DbErr;
 
@@ -44,8 +45,13 @@ pub async fn connect_and_migrate(database_url: &str) -> Result<DatabaseConnectio
 
     let db = Database::connect(options).await?;
     migration::Migrator::up(&db, None).await?;
-    ensure_broadcast_schema_compatibility(&db).await?;
+    ensure_sqlite_schema_compatibility(&db).await?;
     Ok(db)
+}
+
+async fn ensure_sqlite_schema_compatibility(db: &DatabaseConnection) -> Result<(), sea_orm::DbErr> {
+    ensure_broadcast_schema_compatibility(db).await?;
+    ensure_auth_schema_compatibility(db).await
 }
 
 async fn ensure_broadcast_schema_compatibility(
@@ -84,6 +90,66 @@ async fn ensure_broadcast_schema_compatibility(
     db.execute(Statement::from_string(
         DatabaseBackend::Sqlite,
         "CREATE INDEX IF NOT EXISTS idx_job_instance_attempts_status ON job_instance_attempts (status)",
+    ))
+    .await?;
+
+    Ok(())
+}
+
+async fn ensure_auth_schema_compatibility(db: &DatabaseConnection) -> Result<(), sea_orm::DbErr> {
+    if db.get_database_backend() != DatabaseBackend::Sqlite {
+        return Ok(());
+    }
+
+    db.execute(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        r"CREATE TABLE IF NOT EXISTS users (
+            id varchar NOT NULL PRIMARY KEY,
+            username varchar NOT NULL,
+            password_hash varchar NOT NULL,
+            role varchar NOT NULL,
+            created_at varchar NOT NULL
+        )",
+    ))
+    .await?;
+    db.execute(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users (username)",
+    ))
+    .await?;
+    db.execute(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        r"CREATE TABLE IF NOT EXISTS auth_sessions (
+            id varchar NOT NULL PRIMARY KEY,
+            user_id varchar NOT NULL,
+            token_hash varchar NOT NULL,
+            device_id varchar,
+            device_name varchar,
+            expires_at varchar NOT NULL,
+            created_at varchar NOT NULL,
+            updated_at varchar NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        )",
+    ))
+    .await?;
+    db.execute(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_auth_sessions_token_hash ON auth_sessions (token_hash)",
+    ))
+    .await?;
+    db.execute(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        "CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions (user_id)",
+    ))
+    .await?;
+    db.execute(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        format!(
+            "INSERT OR IGNORE INTO users (id, username, password_hash, role, created_at) VALUES ('usr-admin', 'scheduler_init', '$2b$10$/rflKev/thG2Je1e.2/7leHSg8Z/LYdSTqdpwsPKTyJMO5ajpysLW', 'admin', '{}')",
+            time::OffsetDateTime::now_utc()
+                .format(&time::format_description::well_known::Rfc3339)
+                .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
+        ),
     ))
     .await?;
 

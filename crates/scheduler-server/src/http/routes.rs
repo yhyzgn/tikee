@@ -9,13 +9,12 @@ use scheduler_storage::{CreateJob, CreateJobInstance};
 use super::{
     AppState, auth,
     dto::{
-        ApiResponse, ClusterApiResponse, ClusterResponse, CreateJobRequest, ErrorResponse,
-        JobApiResponse, JobInstanceApiResponse, JobInstanceAttemptPage,
+        ApiResponse, ClusterApiResponse, ClusterResponse, CreateJobRequest, CreateUserRequest,
+        ErrorResponse, JobApiResponse, JobInstanceApiResponse, JobInstanceAttemptPage,
         JobInstanceAttemptPageApiResponse, JobInstanceAttemptSummary, JobInstanceLogPage,
         JobInstanceLogPageApiResponse, JobInstanceLogSummary, JobInstancePage,
         JobInstancePageApiResponse, JobInstanceSummary, JobPageApiResponse, JobSummary, Page,
-        PageQuery, SystemInfoApiResponse, SystemInfoResponse, TriggerJobRequest,
-        CreateUserRequest, UpdateUserRequest,
+        PageQuery, SystemInfoApiResponse, SystemInfoResponse, TriggerJobRequest, UpdateUserRequest,
     },
     error::ApiError,
 };
@@ -149,7 +148,7 @@ pub async fn trigger_job(
 ) -> Result<Json<JobInstanceApiResponse>, ApiError> {
     auth::require_admin(&headers, &state).await?;
     let job = parse_trigger_path(&job_action)?;
-    
+
     let job_summary = state
         .jobs
         .get(&job)
@@ -161,7 +160,10 @@ pub async fn trigger_job(
     let execution_mode =
         parse_execution_mode(request.execution_mode.as_deref().unwrap_or("single"))?;
     let broadcast_worker_ids = if execution_mode == ExecutionMode::Broadcast {
-        let worker_ids = state.registry.find_eligible_workers(&job_summary.namespace, &job_summary.app).await;
+        let worker_ids = state
+            .registry
+            .find_eligible_workers(&job_summary.namespace, &job_summary.app)
+            .await;
         if worker_ids.is_empty() {
             return Err(ApiError::bad_request(
                 "broadcast execution requires at least one eligible online worker",
@@ -424,6 +426,10 @@ fn parse_trigger_path(value: &str) -> Result<String, ApiError> {
 }
 
 /// List all platform users (Admin only).
+///
+/// # Errors
+///
+/// Returns unauthorized/forbidden for invalid roles or storage errors when listing users fails.
 #[utoipa::path(
     get,
     path = "/api/v1/users",
@@ -444,11 +450,15 @@ pub async fn list_users(
         .list_users()
         .await
         .map_err(|error| ApiError::storage(&error))?;
-    
+
     Ok(Json(ApiResponse::success(items)))
 }
 
 /// Create a new platform user (Admin only).
+///
+/// # Errors
+///
+/// Returns validation, authorization, or storage errors when the user cannot be created.
 #[utoipa::path(
     post,
     path = "/api/v1/users",
@@ -467,9 +477,11 @@ pub async fn create_user(
     Json(request): Json<super::dto::CreateUserRequest>,
 ) -> Result<Json<super::dto::UserApiResponse>, ApiError> {
     auth::require_admin(&headers, &state).await?;
-    
+
     if request.username.trim().is_empty() || request.password.trim().is_empty() {
-        return Err(ApiError::bad_request("username and password cannot be empty"));
+        return Err(ApiError::bad_request(
+            "username and password cannot be empty",
+        ));
     }
 
     // Hash password with BCrypt
@@ -490,6 +502,10 @@ pub async fn create_user(
 }
 
 /// Update user details (Admin only).
+///
+/// # Errors
+///
+/// Returns validation, authorization, not-found, or storage errors when the user cannot be updated.
 #[utoipa::path(
     patch,
     path = "/api/v1/users/{id}",
@@ -518,6 +534,8 @@ pub async fn update_user(
         .map_err(|error| ApiError::storage(&error))?
         .ok_or_else(|| ApiError::not_found(format!("user not found: {id}")))?;
 
+    let password_changed = request.password.is_some();
+    let role_changed = request.role.is_some();
     let password_hash = if let Some(plain) = request.password {
         if plain.trim().is_empty() {
             return Err(ApiError::bad_request("password cannot be empty"));
@@ -542,16 +560,22 @@ pub async fn update_user(
         .map_err(|error| ApiError::storage(&error))?
         .ok_or_else(|| ApiError::not_found(format!("user not found: {id}")))?;
 
-    // If role was updated, invalidate active in-memory sessions
-    if request.role.is_some() {
-        let mut sessions = state.sessions.write().await;
-        sessions.retain(|_, v| v.username != existing.username);
+    // Role/password updates invalidate active sessions so principals are refreshed on next login.
+    if role_changed || password_changed {
+        state
+            .sessions
+            .revoke_user_sessions(&existing.username)
+            .await?;
     }
 
     Ok(Json(ApiResponse::success(updated)))
 }
 
 /// Delete a platform user (Admin only).
+///
+/// # Errors
+///
+/// Returns authorization, not-found, or storage errors when the user cannot be deleted.
 #[utoipa::path(
     delete,
     path = "/api/v1/users/{id}",
@@ -584,8 +608,7 @@ pub async fn delete_user(
 
     if success {
         if let Some(user) = existing {
-            let mut sessions = state.sessions.write().await;
-            sessions.retain(|_, v| v.username != user.username);
+            state.sessions.revoke_user_sessions(&user.username).await?;
         }
         Ok(Json(ApiResponse::success(super::dto::EmptyData {})))
     } else {

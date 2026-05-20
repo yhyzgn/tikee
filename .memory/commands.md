@@ -381,3 +381,25 @@ curl -fsS http://127.0.0.1:9090/api/v1/jobs
 curl -fsS http://127.0.0.1:9090/api/v1/jobs/job_019e3ec775b177b0bd1f804874c84f3c/instances
 ./scripts/dev.sh
 ```
+
+## 已验证命令（015-user-management-and-rbac + SessionStore）
+
+```bash
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test --workspace --all-features
+cargo build --workspace --all-features
+mvn -f java/pom.xml -q test
+bun run --cwd web lint
+bun run --cwd web typecheck
+bun test --cwd web
+bun run --cwd web build
+docker compose config
+cargo run --bin scheduler -- serve --config config/dev.toml
+curl -fsS http://127.0.0.1:9090/healthz
+curl -fsS http://127.0.0.1:9090/api/v1/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"username":"scheduler_init","password":"Scheduler@2026!"}'
+```
+
+说明：登录冒烟验证返回 `atk_` opaque token；Vite build 仍提示 Ant Design 相关大 chunk 警告，不影响构建通过。

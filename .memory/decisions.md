@@ -299,3 +299,17 @@ Constraint:
 
 - Web UI direction is light modern SaaS control plane: clean cards, generous spacing, blue accents, clear hierarchy, and disabled future entries for modules not implemented yet.
 - Do not expose clickable menu pages for backend capabilities that do not exist yet; show them as planned/disabled to avoid misleading operators.
+
+## 2026-05-20 — SessionStore 抽象与 DB+moka 当前实现
+
+Decision:
+- HTTP 认证层只依赖 `SessionStore` trait 和 `SessionManager`，不直接操作 HashMap、moka、DB 或未来 Redis。
+- 当前实现为 `DbMokaSessionStore`：DB `auth_sessions` 是权威状态，moka 是短生命周期本地读缓存。
+- Token 明文仅在登录响应中返回一次；持久化和缓存索引均使用 `SHA-256(token)`。
+
+Rationale:
+- scheduler server 后续可能多节点部署，需要能够替换为 Redis 分布式 session 存储而不重写 auth/RBAC handler。
+- 用户角色、密码或账号删除后必须能主动撤销已有 session。
+
+Constraint:
+- 后续新增 Redis session 时必须实现同一 `SessionStore` trait；不能让 HTTP handler 直接依赖 Redis client。
