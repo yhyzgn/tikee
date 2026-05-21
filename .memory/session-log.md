@@ -762,3 +762,8 @@ Git:
 - 继续 032 阶段：补齐 shard job_instance 软关联、shard complete API、shard 聚合推进、worker TaskResult -> shard 回写，以及 child workflow terminal -> parent node 回写。
 - SQLite 兼容迁移会为既有 workflow_shards 增加 `job_instance_id` 列；全库仍无外键。
 - 后续建议继续做 shard retry 策略、reduce 节点输入汇总以及 UI 上的 shard 完成/输出查看交互。
+
+### 2026-05-21 045 SDK/examples 规范规划
+- 用户要求 `sdks` 下按语言子目录存放 SDK，Java 改用 Gradle 且支持 JDK21+，并新增与 SDK 语言结构对齐的 `examples` demo 项目目录。
+- 用户进一步要求后续开发过程中由 AI 在适当时候自行创建 demo 调试；已写入 design 与 memory 决策。
+- 当前仅规划，不迁移代码；下一阶段应执行目录迁移、Java Gradle 化、examples 骨架创建和验证命令替换。

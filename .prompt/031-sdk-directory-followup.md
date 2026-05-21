@@ -1,14 +1,28 @@
-# 031 — SDK directory follow-up
+# 031 — SDK directory follow-up (superseded by 034)
 
-## Context
-- All SDK packages now live under `./sdks`.
-- Rust Worker SDK path: `sdks/scheduler-worker-sdk`.
-- Java Spring Boot Starter SDK path: `sdks/java`.
-- Root Cargo workspace includes `sdks/scheduler-worker-sdk` explicitly.
-- Maven validation command is `mvn -f sdks/java/pom.xml -q test`.
+## Updated rule
+The previous rule “all SDK packages live directly under `./sdks`” has been refined:
 
-## Rules
-- Do not add future SDKs under `crates/` or repository root language folders.
-- Put future Go/Python/Node SDKs under `sdks/go`, `sdks/python`, `sdks/node` respectively.
-- Keep server/backend reusable Rust crates under `crates/`; only SDK-facing packages belong in `sdks/`.
-- Update Dockerfile, README, design, memory, and prompts whenever SDK package paths change.
+```text
+sdks/
+├── rust/
+├── java/
+├── go/
+├── python/
+└── nodejs/
+
+examples/
+├── rust/
+├── java/
+├── go/
+├── python/
+└── nodejs/
+```
+
+## Current known mismatch
+- Rust SDK currently still lives at `sdks/scheduler-worker-sdk`; migrate it to `sdks/rust`.
+- Java SDK currently still uses Maven `pom.xml`; migrate it to Gradle multi-project with JDK 21+ support.
+- `examples/` demo directories do not yet exist; create them when executing 034.
+
+## Forward path
+Use `.prompt/034-sdk-layout-gradle-examples.md` as the active execution plan for SDK layout normalization.

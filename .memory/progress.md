@@ -174,3 +174,8 @@
 - 新增 `CompleteWorkflowShardInput/Result` 与 `POST /api/v1/workflow-shards/{id}/complete`：写入 shard status/output/event，全部 shard 成功后自动 advance 当前 map 节点，任一 shard failed 时按失败边推进。
 - Worker TaskResult 回写扩展到 shard job_instance：若 job_instance 关联 shard，则先完成 shard，再由 shard 聚合决定是否推进 workflow node。
 - sub_workflow materialize 会初始化子工作流节点与起始 dispatch_queue；子工作流完成后自动回写父 sub_workflow 节点终态并推进父后继。
+
+## 2026-05-21 045：SDK/examples 目录规范重规划
+- 规划 `sdks/{rust,java,go,python,nodejs}` 语言子目录结构，Rust SDK 后续从 `sdks/scheduler-worker-sdk` 迁移到 `sdks/rust`。
+- Java SDK 规划改为 Gradle 多模块 + JDK 21+，替换当前 Maven 骨架和 `mvn -f sdks/java/pom.xml -q test` 验证命令。
+- 新增 `examples/{rust,java,go,python,nodejs}` demo 目录规范；后续开发过程中由 AI 自主判断何时创建 demo 来调试 SDK/Worker/工作流集成链路。

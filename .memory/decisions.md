@@ -366,3 +366,16 @@ Constraint:
 - 数据库新增 roles、permissions、role_permissions，但不创建任何外键；角色名仍保留在 users.role 以兼容现有用户模型。
 - admin 角色保留全权限短路和全量默认权限绑定，operator/viewer 通过 seed 权限控制能力边界。
 - HTTP 层统一走 `require_permission`，Web 使用同一权限模型隐藏菜单和显示 403。
+
+## 2026-05-21 — SDK/examples 语言目录规范与 demo 自主创建
+
+Decision:
+- `sdks/` 是 SDK 总目录，其下必须按语言子目录组织：`sdks/rust`、`sdks/java`、`sdks/go`、`sdks/python`、`sdks/nodejs`。
+- Java SDK 必须使用 Gradle（优先 Kotlin DSL）而不是 Maven，且 Java toolchain / source / target 必须支持 JDK 21+。
+- `examples/` 是 demo 总目录，必须按 `sdks/` 的语言结构一一对应：`examples/rust`、`examples/java`、`examples/go`、`examples/python`、`examples/nodejs`。
+- `examples/` 不再用于存放运行配置；运行配置仍属于 `config/`。
+- 后续开发者/AI agent 在实现或验证 SDK、Worker、任务执行、工作流或跨语言集成时，需要自行判断并主动创建/更新相应 demo 项目用于调试，不必等待用户显式要求。
+
+Constraint:
+- Rust SDK 当前路径 `sdks/scheduler-worker-sdk` 需要迁移为 `sdks/rust`，Cargo workspace / Dockerfile / README / prompts 同步更新。
+- Java Maven `pom.xml` 骨架需要迁移为 Gradle 多模块，并把验证命令从 `mvn -f sdks/java/pom.xml -q test` 改为 Gradle 命令。
