@@ -798,3 +798,19 @@ Git:
 - Replaced SDK integration tests with an in-crate mock Worker Tunnel server.
 - `cargo clippy --manifest-path sdks/rust/scheduler-worker-sdk/Cargo.toml --all-targets --all-features -- -D warnings` ✅
 - `cargo package --manifest-path sdks/rust/scheduler-worker-sdk/Cargo.toml --allow-dirty` ✅ proves Rust SDK package has no repo-local path dependencies.
+
+### 2026-05-21 Worker identity assignment cleanup
+- Changed Worker Tunnel RegisterWorker payload from client-supplied `worker_id` to optional `client_instance_id`.
+- Server registry now generates authoritative `wrk-*` worker ids and returns them in `WorkerRegistered`.
+- Rust SDK stores server-assigned worker id after connect and uses it for heartbeat/log/result messages.
+
+### 2026-05-21 verification — worker identity assignment cleanup
+- `cargo test --workspace --all-features` ✅
+- `cargo fmt --all -- --check` ✅
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings` ✅
+- `cargo test --manifest-path sdks/rust/scheduler-worker-sdk/Cargo.toml --all-features` ✅
+- `cargo clippy --manifest-path sdks/rust/scheduler-worker-sdk/Cargo.toml --all-targets --all-features -- -D warnings` ✅
+- `cargo package --manifest-path sdks/rust/scheduler-worker-sdk/Cargo.toml --allow-dirty` ✅
+- `./sdks/java/gradlew -p sdks/java test` attempted first but Gradle distribution download hit `curl: (56) OpenSSL SSL_read ... unexpected eof while reading`.
+- `~/.gradle/wrapper/dists/gradle-8.14-bin/.../bin/gradle -p sdks/java test` ✅ using cached Gradle.
+- `~/.gradle/wrapper/dists/gradle-8.14-bin/.../bin/gradle -p examples/java/spring-worker-demo test` ✅ using cached Gradle.

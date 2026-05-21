@@ -39,8 +39,10 @@ use tonic::{Status, Streaming};
 pub struct WorkerConfig {
     /// Scheduler Worker Tunnel endpoint, for example `http://0.0.0.0:9998`.
     pub endpoint: String,
-    /// Stable worker identity.
-    pub worker_id: String,
+    /// Optional client-side stable instance hint for observability/reconnect correlation.
+    ///
+    /// The scheduler assigns the authoritative `worker_id` during registration.
+    pub client_instance_id: String,
     /// Application name.
     pub app: String,
     /// Namespace name.
@@ -58,10 +60,10 @@ pub struct WorkerConfig {
 impl WorkerConfig {
     /// Build a minimal local-development worker configuration.
     #[must_use]
-    pub fn local(endpoint: impl Into<String>, worker_id: impl Into<String>) -> Self {
+    pub fn local(endpoint: impl Into<String>, client_instance_id: impl Into<String>) -> Self {
         Self {
             endpoint: endpoint.into(),
-            worker_id: worker_id.into(),
+            client_instance_id: client_instance_id.into(),
             app: "default".to_owned(),
             namespace: "default".to_owned(),
             cluster: "local".to_owned(),
@@ -74,7 +76,7 @@ impl WorkerConfig {
     fn register_message(&self) -> WorkerMessage {
         WorkerMessage {
             kind: Some(worker_message::Kind::Register(RegisterWorker {
-                worker_id: self.worker_id.clone(),
+                client_instance_id: self.client_instance_id.clone(),
                 app: self.app.clone(),
                 namespace: self.namespace.clone(),
                 cluster: self.cluster.clone(),
@@ -377,7 +379,7 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("heartbeat should ping: {error}"));
 
-        assert_eq!(session.worker_id(), "worker-sdk-1");
+        assert_eq!(session.worker_id(), "mock-worker-sdk-1");
         assert_eq!(session.lease_seconds(), 30);
         assert_eq!(ping.sequence, 1);
 
@@ -483,7 +485,7 @@ mod tests {
                                 .send(Ok(ServerMessage {
                                     kind: Some(server_message::Kind::Registered(
                                         WorkerRegistered {
-                                            worker_id: register.worker_id,
+                                            worker_id: format!("mock-{}", register.client_instance_id),
                                             lease_seconds: 30,
                                         },
                                     )),

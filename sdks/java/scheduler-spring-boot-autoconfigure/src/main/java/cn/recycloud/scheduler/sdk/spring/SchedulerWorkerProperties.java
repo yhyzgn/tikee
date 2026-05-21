@@ -14,8 +14,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class SchedulerWorkerProperties {
     /** Scheduler Worker Tunnel endpoint. */
     private String endpoint = "http://0.0.0.0:9998";
-    /** Stable worker id. */
-    private String workerId = "spring-worker";
+    /** Stable client-side instance hint; scheduler assigns the authoritative worker id. */
+    private String clientInstanceId = "spring-worker";
     /** Namespace reported during registration. */
     private String namespace = "default";
     /** App reported during registration. */
@@ -31,8 +31,8 @@ public class SchedulerWorkerProperties {
 
     public String getEndpoint() { return endpoint; }
     public void setEndpoint(String endpoint) { this.endpoint = endpoint; }
-    public String getWorkerId() { return workerId; }
-    public void setWorkerId(String workerId) { this.workerId = workerId; }
+    public String getClientInstanceId() { return clientInstanceId; }
+    public void setClientInstanceId(String clientInstanceId) { this.clientInstanceId = clientInstanceId; }
     public String getNamespace() { return namespace; }
     public void setNamespace(String namespace) { this.namespace = namespace; }
     public String getApp() { return app; }

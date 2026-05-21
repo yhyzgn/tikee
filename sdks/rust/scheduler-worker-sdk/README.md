@@ -9,3 +9,5 @@ cargo test --manifest-path sdks/rust/scheduler-worker-sdk/Cargo.toml --all-featu
 ```
 
 This crate is self-contained for publishing: it vendors its Worker Tunnel protobuf definition under `proto/` and does not depend on server workspace crates.
+
+Registration model: the client may provide `client_instance_id` only as a stable hint; authoritative `worker_id` is assigned by the scheduler in `WorkerRegistered`.

@@ -396,3 +396,8 @@ Constraint:
 ### SDK independent publishing rule (2026-05-21)
 - Every language SDK must be independently publishable through its native package ecosystem.
 - Rust SDK crates must not depend on repo-local `crates/*` path dependencies; protocol definitions must be bundled/generated locally or provided by a published crate.
+
+### Worker identity assignment rule (2026-05-21)
+- Authoritative `worker_id` is server-assigned during Worker Tunnel registration and returned in `WorkerRegistered`.
+- Clients may only send optional `client_instance_id` hints plus metadata; heartbeats/logs/results must use the assigned worker id.
+- Java SDK/starter configuration must expose `clientInstanceId` / `scheduler.worker.client-instance-id`, not `workerId`, until the server returns the authoritative id during tunnel registration.

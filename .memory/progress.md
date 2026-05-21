@@ -195,3 +195,9 @@
 - Removed `sdks/rust/scheduler-worker-sdk` from root Cargo workspace and removed Dockerfile rewrite workaround.
 - Made Rust SDK self-contained by bundling `proto/worker.proto`, local `build.rs`, and removing all `../../../crates/*` path dependencies.
 - Replaced SDK integration tests with an in-crate mock Worker Tunnel server.
+
+### 2026-05-21 Worker identity assignment cleanup
+- Changed Worker Tunnel RegisterWorker payload from client-supplied `worker_id` to optional `client_instance_id`.
+- Server registry now generates authoritative `wrk-*` worker ids and returns them in `WorkerRegistered`.
+- Rust SDK stores server-assigned worker id after connect and uses it for heartbeat/log/result messages.
+- Worker identity cleanup verification completed for Rust workspace, standalone Rust SDK, Java SDK, and Java demo. Java wrapper download hit network EOF once, then verification passed with cached Gradle 8.14 binary.

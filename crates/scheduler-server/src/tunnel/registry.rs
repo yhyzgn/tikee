@@ -5,6 +5,7 @@ use std::{collections::HashMap, sync::Arc, time::SystemTime};
 use scheduler_proto::worker::v1::{DispatchTask, RegisterWorker, ServerMessage, server_message};
 use tokio::sync::{RwLock, mpsc};
 use tonic::Status;
+use uuid::Uuid;
 
 /// Shared worker registry handle.
 #[derive(Debug, Clone, Default)]
@@ -20,7 +21,8 @@ impl WorkerRegistry {
         outbound: mpsc::Sender<Result<ServerMessage, Status>>,
     ) -> RegisteredWorker {
         let record = RegisteredWorker {
-            worker_id: worker.worker_id.clone(),
+            worker_id: format!("wrk-{}", Uuid::now_v7()),
+            client_instance_id: empty_to_none(worker.client_instance_id),
             app: worker.app,
             namespace: worker.namespace,
             cluster: worker.cluster,
@@ -105,6 +107,14 @@ impl WorkerRegistry {
     }
 }
 
+fn empty_to_none(value: String) -> Option<String> {
+    if value.trim().is_empty() {
+        None
+    } else {
+        Some(value)
+    }
+}
+
 fn is_match(worker_val: &str, job_val: &str) -> bool {
     worker_val == job_val
         || worker_val == "*"
@@ -118,6 +128,8 @@ fn is_match(worker_val: &str, job_val: &str) -> bool {
 pub struct RegisteredWorker {
     /// Worker identity.
     pub worker_id: String,
+    /// Optional client-side stable instance hint.
+    pub client_instance_id: Option<String>,
     /// Application name.
     pub app: String,
     /// Namespace.
@@ -153,7 +165,7 @@ mod tests {
         registry
             .register(
                 RegisterWorker {
-                    worker_id: "worker-1".to_owned(),
+                    client_instance_id: "pod-1".to_owned(),
                     app: "billing".to_owned(),
                     namespace: "finance".to_owned(),
                     cluster: "prod".to_owned(),
@@ -165,12 +177,19 @@ mod tests {
             )
             .await;
 
+        let worker_id = registry
+            .worker_ids()
+            .await
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| panic!("worker id should exist"));
         let updated = registry
-            .heartbeat("worker-1", 7)
+            .heartbeat(&worker_id, 7)
             .await
             .unwrap_or_else(|| panic!("registered worker should exist"));
 
-        assert_eq!(updated.worker_id, "worker-1");
+        assert!(updated.worker_id.starts_with("wrk-"));
+        assert_eq!(updated.client_instance_id.as_deref(), Some("pod-1"));
         assert_eq!(updated.last_sequence, 7);
     }
 }

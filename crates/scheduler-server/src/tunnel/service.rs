@@ -310,7 +310,7 @@ mod tests {
             &context,
             WorkerMessage {
                 kind: Some(worker_message::Kind::Register(RegisterWorker {
-                    worker_id: "worker-1".to_owned(),
+                    client_instance_id: "worker-1".to_owned(),
                     app: "billing".to_owned(),
                     namespace: "finance".to_owned(),
                     cluster: "prod".to_owned(),
@@ -331,12 +331,18 @@ mod tests {
 
         match ack.kind {
             Some(server_message::Kind::Registered(registered)) => {
-                assert_eq!(registered.worker_id, "worker-1");
+                assert!(registered.worker_id.starts_with("wrk-"));
             }
             other => panic!("unexpected ack: {other:?}"),
         }
 
-        assert!(registry.get("worker-1").await.is_some());
+        let registered_id = registry
+            .worker_ids()
+            .await
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| panic!("registered worker id should exist"));
+        assert!(registry.get(&registered_id).await.is_some());
     }
 
     async fn instances() -> JobInstanceRepository {

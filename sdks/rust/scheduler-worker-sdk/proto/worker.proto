@@ -24,7 +24,8 @@ message ServerMessage {
 }
 
 message RegisterWorker {
-  string worker_id = 1;
+  // Optional client-side stable instance hint. The scheduler still assigns the authoritative worker_id.
+  string client_instance_id = 1;
   string app = 2;
   string namespace = 3;
   string cluster = 4;

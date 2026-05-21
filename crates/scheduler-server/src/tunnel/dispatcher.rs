@@ -203,7 +203,7 @@ mod tests {
         registry
             .register(
                 RegisterWorker {
-                    worker_id: "worker-1".to_owned(),
+                    client_instance_id: "worker-1".to_owned(),
                     app: "billing".to_owned(),
                     namespace: "default".to_owned(),
                     cluster: "local".to_owned(),
@@ -276,7 +276,7 @@ mod tests {
         registry
             .register(
                 RegisterWorker {
-                    worker_id: "worker-1".to_owned(),
+                    client_instance_id: "worker-1".to_owned(),
                     app: "billing".to_owned(),
                     namespace: "default".to_owned(),
                     cluster: "local".to_owned(),
@@ -292,7 +292,7 @@ mod tests {
         registry
             .register(
                 RegisterWorker {
-                    worker_id: "worker-2".to_owned(),
+                    client_instance_id: "worker-2".to_owned(),
                     app: "analytics".to_owned(), // Different app
                     namespace: "default".to_owned(),
                     cluster: "local".to_owned(),

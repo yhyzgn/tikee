@@ -736,9 +736,9 @@ mod tests {
             .unwrap_or_else(|error| panic!("request should build: {error}"))
     }
 
-    fn worker(worker_id: &str, app: &str) -> RegisterWorker {
+    fn worker(client_instance_id: &str, app: &str) -> RegisterWorker {
         RegisterWorker {
-            worker_id: worker_id.to_owned(),
+            client_instance_id: client_instance_id.to_owned(),
             app: app.to_owned(),
             namespace: "default".to_owned(),
             cluster: "local".to_owned(),
@@ -756,7 +756,7 @@ mod tests {
         let registry = crate::tunnel::WorkerRegistry::default();
         let (tx1, _rx1) = tokio::sync::mpsc::channel(1);
         let (tx2, _rx2) = tokio::sync::mpsc::channel(1);
-        registry.register(worker("worker-a", "billing"), tx1).await;
+        let worker_a = registry.register(worker("worker-a", "billing"), tx1).await;
         registry
             .register(worker("worker-b", "analytics"), tx2)
             .await;
@@ -801,7 +801,7 @@ mod tests {
         let json: Value = serde_json::from_slice(&body)
             .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
         assert_eq!(json["data"]["items"].as_array().map(Vec::len), Some(1));
-        assert_eq!(json["data"]["items"][0]["worker_id"], "worker-a");
+        assert_eq!(json["data"]["items"][0]["worker_id"], worker_a.worker_id);
     }
 
     #[tokio::test]

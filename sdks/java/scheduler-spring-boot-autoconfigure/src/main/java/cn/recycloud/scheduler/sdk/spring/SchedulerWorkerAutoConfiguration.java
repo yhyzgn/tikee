@@ -18,7 +18,7 @@ public class SchedulerWorkerAutoConfiguration {
     @ConditionalOnMissingBean
     SchedulerWorkerClient schedulerWorkerClient(SchedulerWorkerProperties properties) {
         var registration = new WorkerRegistration(
-                properties.getWorkerId(),
+                properties.getClientInstanceId(),
                 properties.getNamespace(),
                 properties.getApp(),
                 properties.getCluster(),

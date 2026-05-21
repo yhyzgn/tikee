@@ -454,6 +454,7 @@ examples/
 - Rust SDK 已按规范迁移到 `sdks/rust/scheduler-worker-sdk`，Cargo workspace 已同步调整。
 - 根 `Dockerfile` 只构建 scheduler 服务端镜像，不复制、不缓存、不构建 `sdks/` 与 `examples/`；SDK 与 Demo 必须作为独立构建产物验证。
 - 独立发布约束：每个 SDK 必须可按语言生态独立发布；Rust SDK 不能依赖服务端 `crates/*` path dependency，必须内聚协议定义或依赖已发布协议包。
+- Worker 注册约束：`worker_id` 必须由服务端生成并在 `WorkerRegistered` 下发；客户端只能上报可选 `client_instance_id` 作为实例提示，不能自行声明权威 ID。
 - Node 目录统一命名为 `nodejs`，避免和通用 node/graph 概念混淆。
 
 **集成体验对比**：
