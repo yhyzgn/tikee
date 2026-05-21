@@ -83,6 +83,7 @@ pub async fn cluster_diagnostics(
         })
         .collect();
     let scheduling_gated = !status.can_schedule;
+    let raft_runtime_enabled = status.mode == crate::cluster::ClusterMode::Raft;
     Ok(Json(ApiResponse::success(ClusterDiagnosticsResponse {
         status: cluster_response(status),
         scheduling_gated,
@@ -90,11 +91,15 @@ pub async fn cluster_diagnostics(
         members,
         transport: RaftTransportDiagnostic {
             append_entries_path: "/api/v1/raft/append-entries",
-            mutating: false,
-            status: "reserved_non_mutating",
+            mutating: raft_runtime_enabled,
+            status: if raft_runtime_enabled {
+                "runtime_inbox_enabled"
+            } else {
+                "standalone_unavailable"
+            },
         },
         runtime_boundary:
-            "tikv/raft-rs bootstrap is validated; event loop, Ready persistence, transport, and leader fencing are still gated".to_owned(),
+            "tikv/raft-rs runtime can tick and accept inbound messages; outbound transport, state-machine apply, and leader fencing are still gated".to_owned(),
     })))
 }
 

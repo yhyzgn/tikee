@@ -15,10 +15,11 @@ use crate::http::{
 
 use super::common::client_ip;
 
-/// Receive a Raft `AppendEntries` transport message placeholder.
+/// Receive a Raft `AppendEntries` transport message.
 ///
-/// This endpoint is intentionally non-mutating until a real consensus runtime is wired.
-/// It documents the LB/K8s-safe HTTP transport shape without granting leadership.
+/// This endpoint validates the LB/K8s-safe HTTP transport shape and enqueues messages
+/// into a running raft-rs runtime inbox when available. Enqueueing does not grant
+/// scheduler leadership; scheduling remains fenced until a persisted leader token exists.
 ///
 /// # Errors
 ///
@@ -29,7 +30,7 @@ use super::common::client_ip;
     tag = "raft",
     request_body = RaftAppendEntriesRequest,
     responses(
-        (status = 200, description = "Raft message accepted as not implemented", body = RaftAppendEntriesApiResponse),
+        (status = 200, description = "Raft message validation/submission result", body = RaftAppendEntriesApiResponse),
         (status = 400, description = "Invalid raft-rs message", body = crate::http::dto::ErrorResponse),
         (status = 401, description = "Unauthorized", body = crate::http::dto::ErrorResponse),
         (status = 403, description = "Forbidden", body = crate::http::dto::ErrorResponse)
@@ -42,16 +43,14 @@ pub async fn append_entries(
 ) -> Result<Json<RaftAppendEntriesApiResponse>, ApiError> {
     auth::require_permission(&headers, &state, "cluster", "read").await?;
     let message = request_to_raft_message(&request)?;
+    let submission = state.cluster.submit_raft_message(message).await;
     let local = state.cluster.status().await;
     Ok(Json(ApiResponse::success(RaftMessageResult {
-        accepted: false,
-        reason: format!(
-            "raft-rs {message_type:?} transport validated but event loop is not started",
-            message_type = message.get_msg_type()
-        ),
+        accepted: submission.accepted,
+        reason: submission.reason,
         local_node_id: local.node_id,
         local_role: local.role.as_str().to_owned(),
-        leader_fencing_token: None,
+        leader_fencing_token: local.leader_fencing_token,
         remote_addr: client_ip(&headers),
         received_term: request.term,
     })))

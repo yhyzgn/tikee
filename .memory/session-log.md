@@ -924,3 +924,8 @@ Git:
 - `coordinator_from_config_with_storage` now starts a `RaftRuntimeCoordinator` for `mode=raft` when bootstrap succeeds. It drives `RawNode::tick()` on a 100ms loop and processes Ready in safe order: HardState metadata, entries, snapshot, then `advance()`.
 - Runtime does not campaign, does not wire outbound transport, and still keeps `can_schedule=false` and `leader_fencing_token=null`; scheduler ownership remains fenced.
 - Next slice: connect validated inbound HTTP messages to the runtime inbox, then implement Ready apply/outbound transport and real leader fencing.
+
+### 2026-05-21 Phase2 raft-rs inbound runtime inbox
+- Added a `ClusterCoordinator::submit_raft_message` boundary and wired `RaftRuntimeCoordinator` to enqueue validated `eraftpb::Message` values through a bounded mpsc inbox.
+- `/api/v1/raft/append-entries` now returns `accepted=true` only when a running raft-rs runtime inbox accepts the message; standalone or stopped runtimes return `accepted=false` with a clear reason. This still does not grant scheduling ownership or a leader fencing token.
+- Next slice: implement outbound peer HTTP transport and Ready apply/state-machine bookkeeping before enabling any leader fencing token.

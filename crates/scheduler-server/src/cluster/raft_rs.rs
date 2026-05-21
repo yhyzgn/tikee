@@ -22,7 +22,9 @@ use sha2::{Digest, Sha256};
 use tokio::sync::{Mutex, RwLock, mpsc};
 use tracing::{debug, warn};
 
-use super::{ClusterMode, ClusterRole, ClusterStatus, SharedClusterCoordinator};
+use super::{
+    ClusterMode, ClusterRole, ClusterStatus, RaftMessageSubmission, SharedClusterCoordinator,
+};
 
 /// Crate-level runtime library label exposed in diagnostics and design docs.
 pub const RAFT_RS_LIBRARY: &str = "tikv/raft-rs crate raft 0.7.0";
@@ -50,7 +52,7 @@ pub struct RaftRsBootstrapStatus {
 #[derive(Debug)]
 pub struct RaftRuntimeCoordinator {
     status: Arc<RwLock<ClusterStatus>>,
-    _inbox: mpsc::Sender<Message>,
+    inbox: mpsc::Sender<Message>,
 }
 
 impl RaftRuntimeCoordinator {
@@ -98,7 +100,7 @@ impl RaftRuntimeCoordinator {
             persist_role_metadata(&repository, &config.node_id, role).await?;
             spawn_runtime_loop(config.node_id.clone(), status.clone(), repository, node, rx);
         }
-        Ok(Arc::new(Self { status, _inbox: tx }))
+        Ok(Arc::new(Self { status, inbox: tx }))
     }
 }
 
@@ -106,6 +108,19 @@ impl RaftRuntimeCoordinator {
 impl super::ClusterCoordinator for RaftRuntimeCoordinator {
     async fn status(&self) -> ClusterStatus {
         self.status.read().await.clone()
+    }
+
+    async fn submit_raft_message(&self, message: Message) -> RaftMessageSubmission {
+        let message_type = message.get_msg_type();
+        match self.inbox.try_send(message) {
+            Ok(()) => RaftMessageSubmission::accepted(message_type),
+            Err(mpsc::error::TrySendError::Full(_)) => RaftMessageSubmission::unavailable(
+                "raft-rs runtime inbox is full; retry after the local node drains messages",
+            ),
+            Err(mpsc::error::TrySendError::Closed(_)) => RaftMessageSubmission::unavailable(
+                "raft-rs runtime inbox is closed because bootstrap failed or runtime stopped",
+            ),
+        }
     }
 }
 
@@ -431,6 +446,31 @@ mod tests {
         assert!(!status.can_schedule);
         assert_eq!(status.leader_fencing_token, None);
         assert!(status.detail.contains("runtime ticker"));
+    }
+
+    #[tokio::test]
+    async fn raft_runtime_accepts_inbound_messages_into_inbox_only() {
+        let db = connect_and_migrate("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("sqlite memory db should initialize: {error}"));
+        let repository = RaftRepository::new(db);
+        let coordinator = RaftRuntimeCoordinator::start(&test_raft_config(), repository)
+            .await
+            .unwrap_or_else(|error| panic!("raft runtime should start: {error}"));
+
+        let mut message = raft::eraftpb::Message::new();
+        message.set_msg_type(raft::eraftpb::MessageType::MsgHeartbeat);
+        message.from = raft_numeric_id("scheduler-1");
+        message.to = raft_numeric_id("scheduler-0");
+        message.term = 1;
+        let submission = coordinator.submit_raft_message(message).await;
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        let status = coordinator.status().await;
+
+        assert!(submission.accepted);
+        assert!(submission.reason.contains("enqueued"));
+        assert!(!status.can_schedule);
+        assert_eq!(status.leader_fencing_token, None);
     }
 
     fn test_raft_config() -> ClusterConfig {

@@ -235,7 +235,7 @@ pub struct RaftMemberDiagnostic {
 pub struct RaftTransportDiagnostic {
     /// Reserved `AppendEntries` endpoint path.
     pub append_entries_path: &'static str,
-    /// Whether the transport mutates consensus state. Currently false.
+    /// Whether the transport can submit messages to a local consensus runtime.
     pub mutating: bool,
     /// Human-readable transport status.
     pub status: &'static str,
@@ -394,10 +394,10 @@ pub struct RaftWireEntry {
     pub context: Option<String>,
 }
 
-/// Placeholder response for reserved Raft transport messages.
+/// Response for inbound Raft transport message submission.
 #[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct RaftMessageResult {
-    /// Whether the message changed local consensus state. Currently always false.
+    /// Whether the message was accepted by the local raft-rs runtime inbox.
     pub accepted: bool,
     /// Human-readable reason.
     pub reason: String,

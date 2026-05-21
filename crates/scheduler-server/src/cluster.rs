@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 mod raft_rs;
 
+use raft::eraftpb::Message;
 use scheduler_config::{ClusterConfig, ClusterModeConfig};
 use scheduler_storage::{RaftRepository, UpsertRaftMember, UpsertRaftMetadata};
 
@@ -76,6 +77,35 @@ pub struct ClusterStatus {
     pub leader_fencing_token: Option<String>,
     /// Human-readable implementation note.
     pub detail: String,
+}
+
+/// Result of submitting an inbound raft-rs transport message to the local runtime.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RaftMessageSubmission {
+    /// Whether the message was accepted by the local runtime inbox.
+    pub accepted: bool,
+    /// Human-readable submission result.
+    pub reason: String,
+}
+
+impl RaftMessageSubmission {
+    /// Accepted by a running runtime inbox.
+    #[must_use]
+    pub fn accepted(message_type: impl std::fmt::Debug) -> Self {
+        Self {
+            accepted: true,
+            reason: format!("raft-rs {message_type:?} message enqueued for runtime processing"),
+        }
+    }
+
+    /// Rejected because the current coordinator cannot consume raft-rs messages.
+    #[must_use]
+    pub fn unavailable(reason: impl Into<String>) -> Self {
+        Self {
+            accepted: false,
+            reason: reason.into(),
+        }
+    }
 }
 
 /// Build a cluster coordinator from process configuration without storage bootstrap.
@@ -163,6 +193,14 @@ fn raft_runtime_detail(config: &ClusterConfig) -> String {
 pub trait ClusterCoordinator: Send + Sync + std::fmt::Debug {
     /// Return current cluster status.
     async fn status(&self) -> ClusterStatus;
+
+    /// Submit an inbound raft-rs transport message to the local runtime.
+    async fn submit_raft_message(&self, message: Message) -> RaftMessageSubmission {
+        let _message = message;
+        RaftMessageSubmission::unavailable(
+            "raft-rs runtime inbox is not available for this coordinator",
+        )
+    }
 }
 
 /// Shared cluster coordinator handle.

@@ -1543,11 +1543,11 @@ docker run -d \
 - **Safe config shape first**：`cluster.mode/node_id/peers` 已可配置；`mode=raft` 在真实 consensus runtime 接入前返回 `role=unknown` 且 `can_schedule=false`，避免假 leader。
 - **Raft metadata foundation**：`raft_metadata` 与 `raft_members` 已通过 SeaORM migration 建表，启动时可持久化本节点 term/index 初始元数据和静态 peers；表结构不包含外键，只通过 `node_id` 等字段软关联。
 - **Raft durable records**：`raft_log_entries` 与 `raft_snapshots` 已加入 SeaORM migration/entity/repository，用于后续 raft-rs `Ready` 流水线持久化 log entries 与 snapshot metadata/payload pointer；仍不创建数据库外键，仅按 `cluster_id/node_id/log_index/snapshot_index` 软关联。
-- **Raft transport placeholder**：预留 `/api/v1/raft/append-entries` HTTP transport 形状，适配 Docker bridge / K8s Service / LB/WAF 代理头；请求 DTO 已对齐 raft-rs `eraftpb::Message` 的 from/to/term/message_type/index/log_term/commit/entries/context/reject 字段，并在 route 层完成 message/entry type 校验、非负 index/term 校验和 base64 payload decode；当前仍只返回 `accepted=false`，不投递 event loop、不变更共识状态。
+- **Raft transport inbox**：`/api/v1/raft/append-entries` HTTP transport 形状适配 Docker bridge / K8s Service / LB/WAF 代理头；请求 DTO 已对齐 raft-rs `eraftpb::Message` 的 from/to/term/message_type/index/log_term/commit/entries/context/reject 字段，并在 route 层完成 message/entry type 校验、非负 index/term 校验和 base64 payload decode。当前在 raft runtime 存在时只负责投递到本地 runtime inbox，返回 `accepted=true` 仅表示队列接收成功，不表示 leader 授权或调度所有权；standalone/未启动 runtime 返回 `accepted=false` 和明确 reason。
 - **Fencing token shape**：`ClusterStatus` 与 `raft_metadata.leader_fencing_token` 已预留 leader fencing token 字段；真实 token 只能由后续 consensus runtime 写入，配置态/占位 transport 均返回 `null`。
 - **Runtime implementation choice**：2026-05-21 改为集成 TiKV `raft-rs`（crate `raft` 0.7.0，Apache-2.0）。当前已在 `scheduler-server::cluster::raft_rs` 内完成 `RawNode` bootstrap/config/storage 边界校验：把现有字符串 `node_id` 通过 SHA-256 稳定映射为 raft-rs 需要的非 0 `u64` id，使用配置 peers 生成初始 voters，并构造 `MemStorage + RawNode` 证明依赖/API 可编译可运行。
 - **No fake leadership**：raft-rs bootstrap/runtime ticker 仅证明 runtime 边界可创建与可驱动，暂不 campaign，不生成 leader token，不把配置态 Raft 解释为可调度 leader；`mode=raft` 带 storage 时可暴露 raft-rs 观察到的 follower/leader 角色，但 `can_schedule=false` 直到 leader fencing token 真实落地。
-- **Raft runtime ticker**：`mode=raft` 且带 storage 启动时会创建 `RaftRuntimeCoordinator`，启动 100ms ticker 驱动 raft-rs `RawNode::tick()`，并按 `Ready` 顺序预留持久化 HardState -> log entries -> snapshot -> `advance()`；当前不 campaign、不发送 outbound messages、不生成 leader fencing token，`can_schedule` 仍固定为 `false`。
+- **Raft runtime ticker/inbox**：`mode=raft` 且带 storage 启动时会创建 `RaftRuntimeCoordinator`，启动 100ms ticker 驱动 raft-rs `RawNode::tick()`，同时接收已校验的 HTTP 入站 `eraftpb::Message` 并调用 `RawNode::step()`；`Ready` 按 HardState -> log entries -> snapshot -> `advance()` 顺序持久化。当前不 campaign、不发送 outbound messages、不生成 leader fencing token，`can_schedule` 仍固定为 `false`。
 - **Cluster diagnostics**：`/api/v1/cluster/diagnostics` 暴露当前 coordinator 状态、调度 gate、持久化 term/index/peer、transport 占位状态和 runtime boundary；`ClusterStatus.detail` 会包含 raft-rs bootstrap 校验摘要，便于 operator 判断为什么 Raft 节点尚未参与调度。
 - **Container-first networking**：Raft 节点间通信必须可穿透 Docker bridge / K8s Service / LB，不能依赖 host network。
 
@@ -1967,7 +1967,7 @@ scheduler_grpc_request_duration_seconds{method}           # histogram
 | HTTP 框架 | Axum | 0.8+ | REST API、Web 控制台 |
 | protobuf | Prost | 0.13+ | Protocol Buffers 编解码 |
 | **ORM** | **SeaORM** | **1.1+** | **多数据库异步 ORM，SQLite/MySQL/Pg/CockroachDB** |
-| 共识算法 | TiKV raft-rs (`raft`) | 0.7.x | Server 集群 Raft 共识；当前已接入 bootstrap 校验，event loop/transport/membership 继续推进 |
+| 共识算法 | TiKV raft-rs (`raft`) | 0.7.x | Server 集群 Raft 共识；当前已接入 bootstrap、ticker、Ready 持久化顺序与 inbound inbox，outbound transport/apply/membership 继续推进 |
 | WASM 运行时 | Wasmtime | 25+ | 用户代码沙箱 |
 | CLI 框架 | Clap | 4.x | 命令行解析 |
 | 配置 | config-rs | 0.14+ | TOML/YAML/ENV 配置 |
@@ -2122,7 +2122,7 @@ scheduler/
 - [x] Map / MapReduce 执行模式（workflow_shards + materialize + shard job_instance/dispatch_queue 软关联）
 - [x] 子工作流嵌套（节点引用 child_workflow_id + 子实例软关联 + 子实例终态回写父节点）
 - [x] PostgreSQL + CockroachDB 存储支持（SeaORM/sqlx-postgres feature + `postgres://` 配置模板；CockroachDB 复用 PostgreSQL wire protocol）
-- [ ] Server 集群 (Raft 共识；Phase2 已完成安全基础，已改用 TiKV raft-rs 并完成 bootstrap 校验，真实 event loop/leader fencing 继续推进)
+- [ ] Server 集群 (Raft 共识；Phase2 已完成安全基础，已改用 TiKV raft-rs 并完成 bootstrap/ticker/inbound inbox，outbound transport/apply/leader fencing 继续推进)
   - [x] ClusterCoordinator 抽象与显式 standalone 状态（`/api/v1/cluster` 不再伪装 leader）
   - [x] tick/dispatcher ownership gate（非 `can_schedule` 节点跳过 CRON/fixed-rate tick 与 Worker dispatch loop）
   - [x] Raft 配置形状（mode/node_id/peers）与未启动 Raft 的 unknown/not-schedulable 状态
@@ -2131,9 +2131,10 @@ scheduler/
   - [x] Cluster diagnostics（`/api/v1/cluster/diagnostics` 展示 gate、term/index、peers、transport 占位和 runtime boundary）
   - [x] TiKV raft-rs (`raft` 0.7.0) 依赖接入与 `RawNode` bootstrap 校验（不启动 event loop，不授予 leader）
   - [x] raft-rs durable record 基础（`raft_log_entries` / `raft_snapshots`，无外键，Repository upsert/list 覆盖 Ready 后续持久化入口）
-  - [x] raft-rs message transport DTO + 转换校验基础（`/api/v1/raft/append-entries` 请求对齐 from/to/term/message_type/index/log_term/commit/entries/context/reject，可转换为 `eraftpb::Message`，仍不投递 event loop）
+  - [x] raft-rs message transport DTO + 转换校验基础（`/api/v1/raft/append-entries` 请求对齐 from/to/term/message_type/index/log_term/commit/entries/context/reject，可转换为 `eraftpb::Message`）
   - [x] raft-rs runtime ticker + Ready 持久化顺序骨架（tick -> Ready HardState/log/snapshot 持久化 -> advance；不 campaign，不 outbound transport，不授予 scheduling）
-  - [ ] raft-rs inbound runtime inbox 接入、Ready apply 状态机、outbound message transport、leader/follower fencing token 生成、动态 membership/config change
+  - [x] raft-rs inbound runtime inbox 接入（HTTP 校验后投递 runtime mpsc inbox；`accepted=true` 仅表示本地队列接收成功，不授予 scheduling）
+  - [ ] raft-rs Ready apply 状态机、outbound message transport、leader/follower fencing token 生成、动态 membership/config change
 - [x] 任务队列基础（dispatch_queue 持久化模型、priority/run_after/status/lease_owner/lease_until 字段；workflow queued node 自动 materialize）
 - [x] 持久化延迟队列基础（dispatch_queue.run_after）
 - [x] 实时日志流 (gRPC Server Stream：`SubscribeTaskLogs` 支持历史回放 + Worker Tunnel live fan-out)
@@ -2311,4 +2312,3 @@ scheduler 的核心判断是：**xxl-job 的问题是能力不够，PowerJob 的
 | 可观测 | 本地日志 + 轮询 | 队列批量日志，可能丢 | OTLP/Prometheus/流式日志/trace/回放 |
 
 **结论**：scheduler 不是对 PowerJob 或 xxl-job 的简单替代实现，而是面向企业平台的重新设计。最核心的价值不是“多几个调度类型”，而是把任务调度的通信、状态、安全、观测和多租户治理全部做成可长期演进的基础设施。
-

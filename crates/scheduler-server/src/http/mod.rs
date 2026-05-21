@@ -328,13 +328,14 @@ async fn shutdown_signal() {
 
 #[cfg(test)]
 mod tests {
-    use crate::cluster::StandaloneCoordinator;
+    use crate::cluster::{StandaloneCoordinator, coordinator_from_config_with_storage};
     use axum::{body::Body, http::Request};
+    use scheduler_config::{ClusterConfig, ClusterModeConfig, ClusterPeerConfig};
     use scheduler_proto::worker::v1::RegisterWorker;
     use scheduler_storage::{
         AppendJobInstanceLog, AuditLogRepository, CreateAuditLog, JobInstanceAttemptRepository,
-        JobInstanceLogRepository, JobInstanceRepository, JobRepository, ScriptRepository,
-        UserRepository, WorkflowRepository, connect_and_migrate,
+        JobInstanceLogRepository, JobInstanceRepository, JobRepository, RaftRepository,
+        ScriptRepository, UserRepository, WorkflowRepository, connect_and_migrate,
     };
     use serde_json::Value;
 
@@ -394,8 +395,12 @@ mod tests {
         );
         assert_eq!(json["data"]["transport"]["mutating"], false);
         assert_eq!(
+            json["data"]["transport"]["status"],
+            "standalone_unavailable"
+        );
+        assert_eq!(
             json["data"]["runtime_boundary"],
-            "tikv/raft-rs bootstrap is validated; event loop, Ready persistence, transport, and leader fencing are still gated"
+            "tikv/raft-rs runtime can tick and accept inbound messages; outbound transport, state-machine apply, and leader fencing are still gated"
         );
     }
 
@@ -442,12 +447,120 @@ mod tests {
 
         assert_eq!(json["code"], 0);
         assert_eq!(json["data"]["accepted"], false);
+        assert!(
+            json["data"]["reason"]
+                .as_str()
+                .is_some_and(|value| value.contains("runtime inbox is not available"))
+        );
         assert_eq!(json["data"]["local_role"], "standalone");
         assert_eq!(
             json["data"]["leader_fencing_token"],
             serde_json::Value::Null
         );
         assert_eq!(json["data"]["received_term"], 1);
+    }
+
+    #[tokio::test]
+    async fn raft_append_entries_invalid_message_returns_error_envelope() {
+        let app = router().await;
+        let response = app
+            .clone()
+            .oneshot(
+                admin_json_request_builder(
+                    app,
+                    "POST",
+                    "/api/v1/raft/append-entries",
+                    r#"{"from":1,"to":2,"term":-1,"message_type":"MsgAppend","index":0,"log_term":0,"commit":0,"snapshot_index":null,"snapshot_term":null,"entries":[],"context":null,"reject":false,"reject_hint":null,"leader_fencing_token":null}"#,
+                )
+                .await,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("router should respond: {error}"));
+        assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+
+        assert_ne!(json["code"], 0);
+        assert!(
+            json["message"]
+                .as_str()
+                .is_some_and(|value| value.contains("term cannot be negative"))
+        );
+        assert!(json.get("data").is_some());
+    }
+
+    #[tokio::test]
+    async fn raft_append_entries_enqueues_when_runtime_exists_without_leadership() {
+        let db = connect_and_migrate("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("test storage should initialize: {error}"));
+        let cluster = coordinator_from_config_with_storage(
+            &ClusterConfig {
+                mode: ClusterModeConfig::Raft,
+                node_id: "scheduler-0".to_owned(),
+                peers: vec![
+                    ClusterPeerConfig {
+                        node_id: "scheduler-0".to_owned(),
+                        endpoint: "http://scheduler-0.scheduler-headless:9998".to_owned(),
+                    },
+                    ClusterPeerConfig {
+                        node_id: "scheduler-1".to_owned(),
+                        endpoint: "http://scheduler-1.scheduler-headless:9998".to_owned(),
+                    },
+                ],
+            },
+            &RaftRepository::new(db.clone()),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("raft coordinator should start: {error}"));
+        let app = router_with_state(AppState::new(
+            JobRepository::new(db.clone()),
+            JobInstanceRepository::new(db.clone()),
+            JobInstanceLogRepository::new(db.clone()),
+            JobInstanceAttemptRepository::new(db.clone()),
+            UserRepository::new(db.clone()),
+            ScriptRepository::new(db.clone()),
+            WorkflowRepository::new(db.clone()),
+            AuditLogRepository::new(db),
+            crate::tunnel::WorkerRegistry::default(),
+            cluster,
+        ));
+
+        let response = app
+            .clone()
+            .oneshot(
+                admin_json_request_builder(
+                    app,
+                    "POST",
+                    "/api/v1/raft/append-entries",
+                    r#"{"from":1,"to":2,"term":1,"message_type":"MsgHeartbeat","index":0,"log_term":0,"commit":0,"snapshot_index":null,"snapshot_term":null,"entries":[],"context":null,"reject":false,"reject_hint":null,"leader_fencing_token":null}"#,
+                )
+                .await,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("router should respond: {error}"));
+        assert!(response.status().is_success());
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+
+        assert_eq!(json["code"], 0);
+        assert_eq!(json["data"]["accepted"], true);
+        assert!(
+            json["data"]["reason"]
+                .as_str()
+                .is_some_and(|value| value.contains("enqueued"))
+        );
+        assert_eq!(json["data"]["local_role"], "follower");
+        assert_eq!(
+            json["data"]["leader_fencing_token"],
+            serde_json::Value::Null
+        );
     }
 
     #[tokio::test]
