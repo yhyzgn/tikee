@@ -7,6 +7,7 @@
 use std::sync::Arc;
 
 use scheduler_config::{ClusterConfig, ClusterModeConfig};
+use scheduler_storage::{RaftRepository, UpsertRaftMember, UpsertRaftMetadata};
 
 /// Cluster operating mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -71,20 +72,69 @@ pub struct ClusterStatus {
     pub detail: String,
 }
 
-/// Build a cluster coordinator from process configuration.
+/// Build a cluster coordinator from process configuration without storage bootstrap.
 #[must_use]
 pub fn coordinator_from_config(config: &ClusterConfig) -> SharedClusterCoordinator {
     match config.mode {
         ClusterModeConfig::Standalone => StandaloneCoordinator::shared(config.node_id.clone()),
-        ClusterModeConfig::Raft => StaticCoordinator::shared(ClusterStatus {
-            mode: ClusterMode::Raft,
-            role: ClusterRole::Unknown,
-            node_id: config.node_id.clone(),
-            nodes: u32::try_from(config.peers.len()).unwrap_or(u32::MAX).max(1),
-            can_schedule: false,
-            detail: "raft mode configured but consensus runtime is not started yet".to_owned(),
-        }),
+        ClusterModeConfig::Raft => raft_blocked_coordinator(
+            config,
+            "raft mode configured but consensus runtime is not started yet",
+        ),
     }
+}
+
+/// Build a cluster coordinator and persist safe Raft bootstrap metadata.
+///
+/// This is intentionally not a Raft runtime: it records node/member metadata and keeps
+/// `can_schedule=false` until real consensus establishes leadership.
+///
+/// # Errors
+///
+/// Returns an error when storage persistence fails.
+pub async fn coordinator_from_config_with_storage(
+    config: &ClusterConfig,
+    repository: &RaftRepository,
+) -> Result<SharedClusterCoordinator, scheduler_storage::DbErr> {
+    match config.mode {
+        ClusterModeConfig::Standalone => Ok(StandaloneCoordinator::shared(config.node_id.clone())),
+        ClusterModeConfig::Raft => {
+            repository
+                .upsert_metadata(UpsertRaftMetadata {
+                    cluster_id: "default".to_owned(),
+                    node_id: config.node_id.clone(),
+                    current_term: 0,
+                    voted_for: None,
+                    commit_index: 0,
+                    applied_index: 0,
+                })
+                .await?;
+            for peer in &config.peers {
+                repository
+                    .upsert_member(UpsertRaftMember {
+                        node_id: peer.node_id.clone(),
+                        endpoint: peer.endpoint.clone(),
+                        status: "configured".to_owned(),
+                    })
+                    .await?;
+            }
+            Ok(raft_blocked_coordinator(
+                config,
+                "raft metadata persisted; consensus runtime is not started yet",
+            ))
+        }
+    }
+}
+
+fn raft_blocked_coordinator(config: &ClusterConfig, detail: &str) -> SharedClusterCoordinator {
+    StaticCoordinator::shared(ClusterStatus {
+        mode: ClusterMode::Raft,
+        role: ClusterRole::Unknown,
+        node_id: config.node_id.clone(),
+        nodes: u32::try_from(config.peers.len()).unwrap_or(u32::MAX).max(1),
+        can_schedule: false,
+        detail: detail.to_owned(),
+    })
 }
 
 /// Cluster coordinator boundary used by HTTP and future scheduling gates.
@@ -163,10 +213,11 @@ impl ClusterCoordinator for StandaloneCoordinator {
 #[cfg(test)]
 mod tests {
     use scheduler_config::{ClusterConfig, ClusterModeConfig, ClusterPeerConfig};
+    use scheduler_storage::{RaftRepository, connect_and_migrate};
 
     use super::{
         ClusterCoordinator, ClusterMode, ClusterRole, StandaloneCoordinator,
-        coordinator_from_config,
+        coordinator_from_config, coordinator_from_config_with_storage,
     };
 
     #[tokio::test]
@@ -179,6 +230,43 @@ mod tests {
         assert_eq!(status.node_id, "node-a");
         assert_eq!(status.nodes, 1);
         assert!(status.can_schedule);
+    }
+
+    #[tokio::test]
+    async fn raft_config_persists_bootstrap_metadata_but_remains_unschedulable() {
+        let db = connect_and_migrate("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("sqlite memory db should initialize: {error}"));
+        let repository = RaftRepository::new(db);
+        let config = ClusterConfig {
+            mode: ClusterModeConfig::Raft,
+            node_id: "scheduler-1".to_owned(),
+            peers: vec![ClusterPeerConfig {
+                node_id: "scheduler-1".to_owned(),
+                endpoint: "http://scheduler-1:9999".to_owned(),
+            }],
+        };
+
+        let coordinator = coordinator_from_config_with_storage(&config, &repository)
+            .await
+            .unwrap_or_else(|error| panic!("coordinator should initialize: {error}"));
+        let status = coordinator.status().await;
+        let metadata = repository
+            .get_metadata("scheduler-1")
+            .await
+            .unwrap_or_else(|error| panic!("metadata should load: {error}"))
+            .unwrap_or_else(|| panic!("metadata should exist"));
+        let members = repository
+            .list_members()
+            .await
+            .unwrap_or_else(|error| panic!("members should load: {error}"));
+
+        assert_eq!(status.mode, ClusterMode::Raft);
+        assert_eq!(status.role, ClusterRole::Unknown);
+        assert!(!status.can_schedule);
+        assert_eq!(metadata.current_term, 0);
+        assert_eq!(members.len(), 1);
+        assert_eq!(members[0].node_id, "scheduler-1");
     }
 
     #[tokio::test]

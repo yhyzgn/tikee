@@ -258,3 +258,8 @@
 - Added `[cluster]` config with `mode`, `node_id`, and static `peers` shape.
 - Server now builds ClusterCoordinator from config: standalone can schedule; raft mode reports unknown/not-schedulable until real consensus starts.
 - Added `config/raft.toml` as a safe template; no fake leader behavior introduced.
+
+### 2026-05-21 Phase2 Raft metadata persistence
+- Checked crates.io on 2026-05-21: openraft latest is 0.10.0-alpha.20, still an alpha release line; real runtime adoption remains gated.
+- Added `raft_metadata` and `raft_members` storage tables with no foreign keys; IDs remain soft-linked.
+- Raft startup now persists local metadata and configured peers, but cluster status remains unknown/not-schedulable until real consensus produces leadership.

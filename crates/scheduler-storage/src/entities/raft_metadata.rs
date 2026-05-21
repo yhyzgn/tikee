@@ -1,0 +1,33 @@
+//! Raft metadata entity for future consensus persistence.
+
+use sea_orm::entity::prelude::*;
+use serde::{Deserialize, Serialize};
+
+/// Per-node Raft durable metadata.
+#[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize, Deserialize)]
+#[sea_orm(table_name = "raft_metadata")]
+pub struct Model {
+    /// Metadata row identifier.
+    #[sea_orm(primary_key, auto_increment = false)]
+    pub id: String,
+    /// Logical cluster identifier.
+    pub cluster_id: String,
+    /// Stable local node id.
+    pub node_id: String,
+    /// Last known Raft term.
+    pub current_term: i64,
+    /// Node voted for in the current term, when any.
+    pub voted_for: Option<String>,
+    /// Last committed Raft log index.
+    pub commit_index: i64,
+    /// Last applied Raft log index.
+    pub applied_index: i64,
+    /// Last update timestamp in RFC3339 format.
+    pub updated_at: String,
+}
+
+/// Database-level foreign keys are forbidden; relationships are soft-linked by id fields.
+#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+pub enum Relation {}
+
+impl ActiveModelBehavior for ActiveModel {}

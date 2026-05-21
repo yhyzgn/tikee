@@ -11,6 +11,8 @@ pub mod job_instance_attempt;
 pub mod job_instance_log;
 pub mod namespace;
 pub mod permission;
+pub mod raft_member;
+pub mod raft_metadata;
 pub mod role;
 pub mod role_permission;
 pub mod script;

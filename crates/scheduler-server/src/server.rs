@@ -4,13 +4,13 @@ use anyhow::{Context, Result};
 use scheduler_config::SchedulerConfig;
 use scheduler_storage::{
     AuditLogRepository, JobInstanceAttemptRepository, JobInstanceLogRepository,
-    JobInstanceRepository, JobRepository, ScriptRepository, UserRepository, WorkflowRepository,
-    connect_and_migrate,
+    JobInstanceRepository, JobRepository, RaftRepository, ScriptRepository, UserRepository,
+    WorkflowRepository, connect_and_migrate,
 };
 use tokio::try_join;
 use tracing::info;
 
-use crate::{cluster::coordinator_from_config, http, scheduler, tunnel};
+use crate::{cluster::coordinator_from_config_with_storage, http, scheduler, tunnel};
 
 /// Run all scheduler server listeners.
 ///
@@ -19,14 +19,18 @@ use crate::{cluster::coordinator_from_config, http, scheduler, tunnel};
 /// Returns an error when any listener fails to bind or serve.
 pub async fn serve(config: SchedulerConfig) -> Result<()> {
     let registry = tunnel::WorkerRegistry::default();
-    let cluster = coordinator_from_config(&config.cluster);
     let log_broadcaster = tunnel::TaskLogBroadcaster::default();
     let http_addr = config.server.listen_addr;
     let tunnel_addr = config.server.worker_tunnel_addr;
     let database_url = config.storage.database_url;
+    let cluster_config = config.cluster;
     let db = connect_and_migrate(&database_url)
         .await
         .with_context(|| format!("failed to initialize storage at {database_url}"))?;
+    let raft = RaftRepository::new(db.clone());
+    let cluster = coordinator_from_config_with_storage(&cluster_config, &raft)
+        .await
+        .context("failed to initialize cluster coordinator")?;
     let instances = JobInstanceRepository::new(db.clone());
     let logs = JobInstanceLogRepository::new(db.clone());
     let attempts = JobInstanceAttemptRepository::new(db.clone());

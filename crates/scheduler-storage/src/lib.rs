@@ -21,12 +21,14 @@ pub use repository::{
     CreateWorkflow, DispatchQueueClaim, DispatchQueueSummary, InstanceEventSummary,
     JobInstanceAttemptRepository, JobInstanceAttemptSummary, JobInstanceLogRepository,
     JobInstanceLogSummary, JobInstanceRepository, JobInstanceSummary, JobRepository, JobSummary,
-    MaterializeWorkflowNodeResult, PermissionSummary, QueueOverview, RbacRepository,
-    RecoverWorkflowNodeInput, RecoverWorkflowNodeResult, ScriptRepository, ScriptSummary,
-    ScriptVersionRepository, ScriptVersionSummary, UpdateScript, UpdateUser, UpdateWorkflow,
-    UserRepository, UserSummary, WorkflowDefinition, WorkflowEdgeSpec, WorkflowInstanceSummary,
-    WorkflowJobResultOutcome, WorkflowNodeInstanceSummary, WorkflowNodeSpec, WorkflowRepository,
-    WorkflowShardSummary, WorkflowSummary, WorkflowValidationResult, validate_workflow_definition,
+    MaterializeWorkflowNodeResult, PermissionSummary, QueueOverview, RaftMemberSummary,
+    RaftMetadataSummary, RaftRepository, RbacRepository, RecoverWorkflowNodeInput,
+    RecoverWorkflowNodeResult, ScriptRepository, ScriptSummary, ScriptVersionRepository,
+    ScriptVersionSummary, UpdateScript, UpdateUser, UpdateWorkflow, UpsertRaftMember,
+    UpsertRaftMetadata, UserRepository, UserSummary, WorkflowDefinition, WorkflowEdgeSpec,
+    WorkflowInstanceSummary, WorkflowJobResultOutcome, WorkflowNodeInstanceSummary,
+    WorkflowNodeSpec, WorkflowRepository, WorkflowShardSummary, WorkflowSummary,
+    WorkflowValidationResult, validate_workflow_definition,
 };
 pub use sea_orm::DbErr;
 

@@ -12,6 +12,7 @@ mod instance;
 mod job;
 mod job_repo;
 mod log;
+mod raft;
 mod script;
 mod user;
 mod util;
@@ -28,6 +29,9 @@ pub use instance::{CreateJobInstance, JobInstanceRepository, JobInstanceSummary}
 pub use job::{CreateJob, JobSummary};
 pub use job_repo::JobRepository;
 pub use log::{AppendJobInstanceLog, JobInstanceLogRepository, JobInstanceLogSummary};
+pub use raft::{
+    RaftMemberSummary, RaftMetadataSummary, RaftRepository, UpsertRaftMember, UpsertRaftMetadata,
+};
 pub use script::{
     CreateScript, ScriptRepository, ScriptSummary, ScriptVersionRepository, ScriptVersionSummary,
     UpdateScript,
@@ -53,7 +57,10 @@ mod tests {
     use crate::{
         entities::auth_session,
         migration::Migrator,
-        repository::{AppendJobInstanceLog, CreateJob, CreateJobInstance},
+        repository::{
+            AppendJobInstanceLog, CreateJob, CreateJobInstance, RaftRepository, UpsertRaftMember,
+            UpsertRaftMetadata,
+        },
     };
 
     use super::JobRepository;
@@ -76,6 +83,63 @@ mod tests {
             .unwrap_or_else(|error| panic!("sqlite_master query should run: {error}"));
 
         assert!(result.is_some());
+    }
+
+    #[tokio::test]
+    async fn raft_repository_upserts_metadata_and_members_without_foreign_keys() {
+        let db = Database::connect("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("sqlite memory db should connect: {error}"));
+        Migrator::up(&db, None)
+            .await
+            .unwrap_or_else(|error| panic!("migration should run: {error}"));
+        let repository = RaftRepository::new(db);
+
+        let metadata = repository
+            .upsert_metadata(UpsertRaftMetadata {
+                cluster_id: "default".to_owned(),
+                node_id: "scheduler-1".to_owned(),
+                current_term: 1,
+                voted_for: Some("scheduler-1".to_owned()),
+                commit_index: 2,
+                applied_index: 1,
+            })
+            .await
+            .unwrap_or_else(|error| panic!("metadata should upsert: {error}"));
+        assert_eq!(metadata.node_id, "scheduler-1");
+        assert_eq!(metadata.current_term, 1);
+
+        let updated = repository
+            .upsert_metadata(UpsertRaftMetadata {
+                cluster_id: "default".to_owned(),
+                node_id: "scheduler-1".to_owned(),
+                current_term: 2,
+                voted_for: None,
+                commit_index: 4,
+                applied_index: 4,
+            })
+            .await
+            .unwrap_or_else(|error| panic!("metadata should update: {error}"));
+        assert_eq!(updated.id, metadata.id);
+        assert_eq!(updated.current_term, 2);
+        assert_eq!(updated.voted_for, None);
+
+        let member = repository
+            .upsert_member(UpsertRaftMember {
+                node_id: "scheduler-1".to_owned(),
+                endpoint: "http://scheduler-1:9999".to_owned(),
+                status: "configured".to_owned(),
+            })
+            .await
+            .unwrap_or_else(|error| panic!("member should upsert: {error}"));
+        assert_eq!(member.node_id, "scheduler-1");
+
+        let members = repository
+            .list_members()
+            .await
+            .unwrap_or_else(|error| panic!("members should list: {error}"));
+        assert_eq!(members.len(), 1);
+        assert_eq!(members[0].endpoint, "http://scheduler-1:9999");
     }
 
     #[tokio::test]

@@ -33,6 +33,7 @@ impl MigrationTrait for CreateMetadataTables {
         create_workflow_shards(manager).await?;
         create_dispatch_queue(manager).await?;
         create_instance_events(manager).await?;
+        create_raft_tables(manager).await?;
         create_audit_logs(manager).await?;
         create_indexes(manager).await?;
 
@@ -45,6 +46,12 @@ impl MigrationTrait for CreateMetadataTables {
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
             .drop_table(Table::drop().table(AuditLogs::Table).to_owned())
+            .await?;
+        manager
+            .drop_table(Table::drop().table(RaftMembers::Table).to_owned())
+            .await?;
+        manager
+            .drop_table(Table::drop().table(RaftMetadata::Table).to_owned())
             .await?;
         manager
             .drop_table(Table::drop().table(InstanceEvents::Table).to_owned())
@@ -423,6 +430,39 @@ async fn create_instance_events(manager: &SchemaManager<'_>) -> Result<(), DbErr
                 .col(string_col(InstanceEvents::Message))
                 .col(string_null(InstanceEvents::Payload))
                 .col(string_col(InstanceEvents::CreatedAt))
+                .to_owned(),
+        )
+        .await
+}
+
+async fn create_raft_tables(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    manager
+        .create_table(
+            Table::create()
+                .table(RaftMetadata::Table)
+                .if_not_exists()
+                .col(string_pk(RaftMetadata::Id))
+                .col(string_col(RaftMetadata::ClusterId))
+                .col(string_col(RaftMetadata::NodeId))
+                .col(big_integer_col(RaftMetadata::CurrentTerm))
+                .col(string_null(RaftMetadata::VotedFor))
+                .col(big_integer_col(RaftMetadata::CommitIndex))
+                .col(big_integer_col(RaftMetadata::AppliedIndex))
+                .col(string_col(RaftMetadata::UpdatedAt))
+                .to_owned(),
+        )
+        .await?;
+    manager
+        .create_table(
+            Table::create()
+                .table(RaftMembers::Table)
+                .if_not_exists()
+                .col(string_pk(RaftMembers::Id))
+                .col(string_col(RaftMembers::NodeId))
+                .col(string_col(RaftMembers::Endpoint))
+                .col(string_col(RaftMembers::Status))
+                .col(string_col(RaftMembers::CreatedAt))
+                .col(string_col(RaftMembers::UpdatedAt))
                 .to_owned(),
         )
         .await
@@ -948,6 +988,39 @@ async fn create_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
             .col(InstanceEvents::CreatedAt)
             .to_owned(),
     )
+    .await?;
+    create_raft_indexes(manager).await
+}
+
+async fn create_raft_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_raft_metadata_node")
+            .table(RaftMetadata::Table)
+            .col(RaftMetadata::NodeId)
+            .unique()
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_raft_members_node")
+            .table(RaftMembers::Table)
+            .col(RaftMembers::NodeId)
+            .unique()
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_raft_members_status")
+            .table(RaftMembers::Table)
+            .col(RaftMembers::Status)
+            .to_owned(),
+    )
     .await
 }
 
@@ -1055,6 +1128,30 @@ enum InstanceEvents {
     Message,
     Payload,
     CreatedAt,
+}
+
+#[derive(DeriveIden)]
+enum RaftMetadata {
+    Table,
+    Id,
+    ClusterId,
+    NodeId,
+    CurrentTerm,
+    VotedFor,
+    CommitIndex,
+    AppliedIndex,
+    UpdatedAt,
+}
+
+#[derive(DeriveIden)]
+enum RaftMembers {
+    Table,
+    Id,
+    NodeId,
+    Endpoint,
+    Status,
+    CreatedAt,
+    UpdatedAt,
 }
 
 #[derive(DeriveIden)]
