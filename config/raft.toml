@@ -7,8 +7,8 @@ worker_tunnel_addr = "0.0.0.0:9998"
 database_url = "postgres://scheduler:scheduler@postgres:5432/scheduler"
 
 [cluster]
-# Safe pre-Raft shape: mode=raft exposes node/peer metadata but does not claim leadership
-# until a real Raft coordinator is implemented behind ClusterCoordinator.
+# Safe raft-rs shape: mode=raft exposes node/peer metadata and validates TiKV raft-rs
+# bootstrap, but does not claim leadership until the real event loop/transport is implemented.
 mode = "raft"
 node_id = "scheduler-0"
 peers = [

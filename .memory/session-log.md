@@ -882,7 +882,7 @@ Git:
 - Added `config/raft.toml` as a safe template; no fake leader behavior introduced.
 
 ### 2026-05-21 Phase2 Raft metadata persistence
-- Checked crates.io on 2026-05-21: openraft latest is 0.10.0-alpha.20, still an alpha release line; real runtime adoption remains gated.
+- Checked crates.io on 2026-05-21: OpenRaft alpha/prerelease conclusion was superseded by user direction to use TiKV raft-rs; real runtime adoption remains gated on event-loop/transport/persistence/fencing work.
 - Added `raft_metadata` and `raft_members` storage tables with no foreign keys; IDs remain soft-linked.
 - Raft startup now persists local metadata and configured peers, but cluster status remains unknown/not-schedulable until real consensus produces leadership.
 
@@ -902,6 +902,11 @@ Git:
 - Dispatcher now derives a fencing token from ClusterCoordinator status (`standalone:<node>:scheduler-dispatcher` today, future `raft:<node>:<leader-token>` when real consensus exists).
 
 ### 2026-05-21 Phase2 closeout / Phase3 audit paging
-- Re-checked openraft: latest remains 0.10.0-alpha.20 with unknown rust-version, so full Raft runtime stays deferred instead of entering core scheduling unsafely.
+- Consensus dependency direction corrected to TiKV raft-rs (`raft` 0.7.0); full Raft scheduling still stays gated until event-loop/transport/persistence/fencing are real.
 - Phase2 distributed safety foundations are documented as complete except real Raft runtime/membership.
 - Started Phase3 audit governance by adding server-side audit filters and pagination plus Web UI filter controls.
+
+### 2026-05-21 Phase2 raft-rs correction
+- User corrected the OpenRaft direction; project now targets TiKV raft-rs (`raft` crate 0.7.0, Apache-2.0) instead of OpenRaft.
+- Added `scheduler-server::cluster::raft_rs` bootstrap validation: deterministic string `node_id` -> non-zero u64 raft id, peer voters, `MemStorage + RawNode` construction. This proves dependency/API integration only; no tick loop, campaign, leader token, or scheduling grant exists yet.
+- `mode=raft` remains `role=unknown`, `can_schedule=false`, `leader_fencing_token=null` until real raft-rs leadership/fencing is implemented.

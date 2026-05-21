@@ -1,7 +1,7 @@
 # 045 — Phase 2 Raft transport and leader fencing design
 
 ## Context
-Raft mode now has safe config and persistence foundations: `[cluster] mode/node_id/peers`, `raft_metadata`, and `raft_members`. Startup persists configured metadata/members, but cluster status intentionally remains `role=unknown` and `can_schedule=false` until a real consensus runtime establishes leadership. `openraft` latest checked on 2026-05-21 is `0.10.0-alpha.20`; it is still alpha, so direct runtime adoption remains gated.
+Raft mode now has safe config and persistence foundations: `[cluster] mode/node_id/peers`, `raft_metadata`, and `raft_members`. Startup persists configured metadata/members, but cluster status intentionally remains `role=unknown` and `can_schedule=false` until a real consensus runtime establishes leadership. Consensus implementation direction is TiKV raft-rs (`raft` crate 0.7.0); bootstrap validation exists, but event loop/transport/fencing remain gated.
 
 ## Goal
 Design and implement the next smallest safe cluster slice without fake leadership.

@@ -7,7 +7,7 @@ Phase2 now has dispatch_queue fencing-token plumbing in addition to ClusterCoord
 Decide whether to close Phase2 as “Raft runtime deferred with safe foundations” or begin a real Raft runtime spike with a bounded proof.
 
 ## Required work
-1. Re-check whether `openraft` alpha status / API shape is acceptable for this project now.
+1. Use TiKV raft-rs (`raft` crate) as the consensus implementation direction; do not revisit the old OpenRaft deferral unless explicitly requested.
 2. If not acceptable, document deferral and move to the next Phase3 item (likely mTLS or audit governance) without pretending Phase2 Raft runtime is complete.
 3. If acceptable, implement only a single-node real consensus smoke that can prove leadership from runtime state, not config.
 4. Update design/.memory/roadmap and create `.prompt/049-*.md`.

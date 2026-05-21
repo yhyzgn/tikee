@@ -7,7 +7,7 @@ Cluster coordinator groundwork and ownership gates are in place. Standalone node
 Evaluate and implement the first safe Raft membership slice, or document why full Raft should remain deferred.
 
 ## Required work
-1. Review current openraft crate compatibility with Rust 1.95 and project architecture.
+1. Review TiKV raft-rs (`raft` crate) compatibility with Rust 1.95 and project architecture.
 2. Decide persistent Raft metadata storage boundary under `crates/` without foreign keys.
 3. Add config shape for cluster mode/node id/peer endpoints if implementation proceeds.
 4. Implement only a minimal safe slice: static config parsing + cluster status role source, or full in-memory Raft smoke if feasible.

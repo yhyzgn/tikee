@@ -94,7 +94,7 @@ pub async fn cluster_diagnostics(
             status: "reserved_non_mutating",
         },
         runtime_boundary:
-            "kept in scheduler-server::cluster until consensus runtime traits stabilize".to_owned(),
+            "tikv/raft-rs bootstrap is validated; event loop, Ready persistence, transport, and leader fencing are still gated".to_owned(),
     })))
 }
 

@@ -6,8 +6,12 @@
 
 use std::sync::Arc;
 
+mod raft_rs;
+
 use scheduler_config::{ClusterConfig, ClusterModeConfig};
 use scheduler_storage::{RaftRepository, UpsertRaftMember, UpsertRaftMetadata};
+
+use self::raft_rs::{RAFT_RS_LIBRARY, validate_raft_rs_bootstrap};
 
 /// Cluster operating mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -130,6 +134,7 @@ pub async fn coordinator_from_config_with_storage(
 }
 
 fn raft_blocked_coordinator(config: &ClusterConfig, detail: &str) -> SharedClusterCoordinator {
+    let runtime_detail = raft_runtime_detail(config);
     StaticCoordinator::shared(ClusterStatus {
         mode: ClusterMode::Raft,
         role: ClusterRole::Unknown,
@@ -137,8 +142,23 @@ fn raft_blocked_coordinator(config: &ClusterConfig, detail: &str) -> SharedClust
         nodes: u32::try_from(config.peers.len()).unwrap_or(u32::MAX).max(1),
         can_schedule: false,
         leader_fencing_token: None,
-        detail: detail.to_owned(),
+        detail: format!("{detail}; {runtime_detail}"),
     })
+}
+
+fn raft_runtime_detail(config: &ClusterConfig) -> String {
+    match validate_raft_rs_bootstrap(config) {
+        Ok(status) => format!(
+            "{RAFT_RS_LIBRARY} bootstrap validated: raft_node_id={}, voters={}, initial_role={}, has_ready={}; consensus event loop is not started yet",
+            status.raft_node_id,
+            status.voter_ids.len(),
+            status.initial_role,
+            status.has_ready
+        ),
+        Err(error) => format!(
+            "{RAFT_RS_LIBRARY} bootstrap validation failed: {error}; consensus event loop is not started yet"
+        ),
+    }
 }
 
 /// Cluster coordinator boundary used by HTTP and future scheduling gates.

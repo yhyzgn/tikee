@@ -395,7 +395,7 @@ mod tests {
         assert_eq!(json["data"]["transport"]["mutating"], false);
         assert_eq!(
             json["data"]["runtime_boundary"],
-            "kept in scheduler-server::cluster until consensus runtime traits stabilize"
+            "tikv/raft-rs bootstrap is validated; event loop, Ready persistence, transport, and leader fencing are still gated"
         );
     }
 

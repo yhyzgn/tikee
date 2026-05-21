@@ -1,7 +1,7 @@
 # 049 — Phase 3 audit trace/failure governance
 
 ## Context
-Phase2 is closed with safe distributed foundations and real Raft runtime explicitly deferred because openraft is still `0.10.0-alpha.20`. Phase3 audit governance has started: audit list now supports server-side actor/action/resource filters, page_size/page_token, and total count; Web UI has filter controls.
+Phase2 distributed foundations are in place and the consensus implementation direction has been corrected from OpenRaft to TiKV raft-rs (`raft` crate 0.7.0). A safe raft-rs bootstrap probe now validates `RawNode` construction without starting the event loop or granting leadership. Phase3 audit governance has started: audit list now supports server-side actor/action/resource filters, page_size/page_token, and total count; Web UI has filter controls.
 
 ## Goal
 Continue audit governance by adding trace/failure visibility without breaking the `{code,message,data}` API envelope.
@@ -17,7 +17,7 @@ Continue audit governance by adding trace/failure visibility without breaking th
 - No database foreign keys.
 - Do not log secrets.
 - Keep API envelope `{code,message,data}`.
-- Raft runtime remains deferred unless a real consensus proof is implemented.
+- Raft mode must remain not-schedulable until the raft-rs event loop proves leadership and persists a fencing token.
 
 ## Validation
 - cargo fmt/clippy/test and web typecheck/build if touched.

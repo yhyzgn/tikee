@@ -7,7 +7,7 @@ Cluster config shape exists: `[cluster] mode/node_id/peers`. `mode=raft` current
 Evaluate and introduce the first real Raft runtime slice, or explicitly defer with evidence if the slice is too broad.
 
 ## Required work
-1. Check openraft compatibility and required storage traits for Rust 1.95 / current dependency graph.
+1. Check TiKV raft-rs (`raft` crate) compatibility and required storage/transport/Ready handling for Rust 1.95 / current dependency graph.
 2. Decide whether to add a new `crates/scheduler-cluster` crate or keep runtime under `scheduler-server::cluster` for now.
 3. Implement the smallest honest runtime slice:
    - in-memory single-node Raft bootstrap that can become leader, OR
