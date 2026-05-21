@@ -68,6 +68,7 @@ async fn ensure_sqlite_schema_compatibility(db: &DatabaseConnection) -> Result<(
     ensure_script_versions_schema_compatibility(db).await?;
     ensure_audit_logs_schema_compatibility(db).await?;
     ensure_workflow_schema_compatibility(db).await?;
+    ensure_raft_schema_compatibility(db).await?;
     remove_sqlite_foreign_keys(db).await
 }
 
@@ -145,6 +146,30 @@ async fn ensure_workflow_schema_compatibility(
         db.execute(Statement::from_string(
             DatabaseBackend::Sqlite,
             "ALTER TABLE dispatch_queue ADD COLUMN lease_until varchar",
+        ))
+        .await?;
+    }
+    Ok(())
+}
+
+async fn ensure_raft_schema_compatibility(db: &DatabaseConnection) -> Result<(), sea_orm::DbErr> {
+    if db.get_database_backend() != DatabaseBackend::Sqlite {
+        return Ok(());
+    }
+    for sql in [
+        r"CREATE TABLE IF NOT EXISTS raft_metadata (id varchar NOT NULL PRIMARY KEY, cluster_id varchar NOT NULL, node_id varchar NOT NULL, current_term bigint NOT NULL, voted_for varchar, commit_index bigint NOT NULL, applied_index bigint NOT NULL, leader_fencing_token varchar, updated_at varchar NOT NULL)",
+        r"CREATE TABLE IF NOT EXISTS raft_members (id varchar NOT NULL PRIMARY KEY, node_id varchar NOT NULL, endpoint varchar NOT NULL, status varchar NOT NULL, created_at varchar NOT NULL, updated_at varchar NOT NULL)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_raft_metadata_node ON raft_metadata (node_id)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_raft_members_node ON raft_members (node_id)",
+        "CREATE INDEX IF NOT EXISTS idx_raft_members_status ON raft_members (status)",
+    ] {
+        db.execute(Statement::from_string(DatabaseBackend::Sqlite, sql))
+            .await?;
+    }
+    if !sqlite_column_exists(db, "raft_metadata", "leader_fencing_token").await? {
+        db.execute(Statement::from_string(
+            DatabaseBackend::Sqlite,
+            "ALTER TABLE raft_metadata ADD COLUMN leader_fencing_token varchar",
         ))
         .await?;
     }

@@ -159,6 +159,10 @@ fn api_router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/system/info", get(routes::system_info))
         .route("/cluster", get(routes::cluster_status))
+        .route(
+            "/raft/append-entries",
+            axum::routing::post(routes::append_entries),
+        )
         .route("/auth/login", axum::routing::post(auth::login))
         .route("/auth/me", get(auth::me))
         .route("/auth/logout", axum::routing::post(auth::logout))
@@ -366,6 +370,10 @@ mod tests {
         assert_eq!(json["data"]["role"], "standalone");
         assert_eq!(json["data"]["nodes"], 1);
         assert_eq!(json["data"]["can_schedule"], true);
+        assert_eq!(
+            json["data"]["leader_fencing_token"],
+            serde_json::Value::Null
+        );
     }
 
     #[tokio::test]
@@ -374,6 +382,7 @@ mod tests {
 
         assert!(json["paths"]["/api/v1/system/info"].is_object());
         assert!(json["paths"]["/api/v1/auth/login"].is_object());
+        assert!(json["paths"]["/api/v1/raft/append-entries"].is_object());
         assert!(json["paths"]["/api/v1/auth/me"].is_object());
         assert!(json["paths"]["/api/v1/auth/logout"].is_object());
         assert!(json["paths"]["/api/v1/jobs"].is_object());
@@ -382,6 +391,39 @@ mod tests {
         assert!(json["paths"]["/api/v1/instances/{instance}"].is_object());
         assert!(json["paths"]["/api/v1/instances/{instance}/logs"].is_object());
         assert!(json["paths"]["/api/v1/instances/{instance}/attempts"].is_object());
+    }
+
+    #[tokio::test]
+    async fn raft_append_entries_placeholder_returns_envelope_without_accepting_leadership() {
+        let app = router().await;
+        let response = app
+            .clone()
+            .oneshot(
+                admin_json_request_builder(
+                    app,
+                    "POST",
+                    "/api/v1/raft/append-entries",
+                    r#"{"leader_id":"scheduler-1","term":1,"prev_log_index":0,"prev_log_term":0,"leader_commit":0,"entries":[],"leader_fencing_token":"candidate"}"#,
+                )
+                .await,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("router should respond: {error}"));
+        assert!(response.status().is_success());
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+
+        assert_eq!(json["code"], 0);
+        assert_eq!(json["data"]["accepted"], false);
+        assert_eq!(json["data"]["local_role"], "standalone");
+        assert_eq!(
+            json["data"]["leader_fencing_token"],
+            serde_json::Value::Null
+        );
+        assert_eq!(json["data"]["received_term"], 1);
     }
 
     #[tokio::test]

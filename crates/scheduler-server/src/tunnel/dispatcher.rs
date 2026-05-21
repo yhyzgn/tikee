@@ -420,6 +420,7 @@ mod tests {
             node_id: "node-b".to_owned(),
             nodes: 3,
             can_schedule: false,
+            leader_fencing_token: None,
             detail: "test follower".to_owned(),
         });
 

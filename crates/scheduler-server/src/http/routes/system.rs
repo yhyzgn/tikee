@@ -38,6 +38,7 @@ pub async fn cluster_status(
         node_id: status.node_id,
         nodes: status.nodes,
         can_schedule: status.can_schedule,
+        leader_fencing_token: status.leader_fencing_token,
         detail: status.detail,
     }))
 }

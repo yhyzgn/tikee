@@ -68,6 +68,8 @@ pub struct ClusterStatus {
     pub nodes: u32,
     /// Whether this node may own scheduler/dispatcher loops.
     pub can_schedule: bool,
+    /// Optional leader fencing token; only real consensus may populate it.
+    pub leader_fencing_token: Option<String>,
     /// Human-readable implementation note.
     pub detail: String,
 }
@@ -107,6 +109,7 @@ pub async fn coordinator_from_config_with_storage(
                     voted_for: None,
                     commit_index: 0,
                     applied_index: 0,
+                    leader_fencing_token: None,
                 })
                 .await?;
             for peer in &config.peers {
@@ -133,6 +136,7 @@ fn raft_blocked_coordinator(config: &ClusterConfig, detail: &str) -> SharedClust
         node_id: config.node_id.clone(),
         nodes: u32::try_from(config.peers.len()).unwrap_or(u32::MAX).max(1),
         can_schedule: false,
+        leader_fencing_token: None,
         detail: detail.to_owned(),
     })
 }
@@ -205,6 +209,7 @@ impl ClusterCoordinator for StandaloneCoordinator {
             node_id: self.node_id.clone(),
             nodes: 1,
             can_schedule: true,
+            leader_fencing_token: None,
             detail: "standalone node; raft consensus is not enabled".to_owned(),
         }
     }

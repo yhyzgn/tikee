@@ -103,11 +103,16 @@ mod tests {
                 voted_for: Some("scheduler-1".to_owned()),
                 commit_index: 2,
                 applied_index: 1,
+                leader_fencing_token: Some("term-1-node-scheduler-1".to_owned()),
             })
             .await
             .unwrap_or_else(|error| panic!("metadata should upsert: {error}"));
         assert_eq!(metadata.node_id, "scheduler-1");
         assert_eq!(metadata.current_term, 1);
+        assert_eq!(
+            metadata.leader_fencing_token.as_deref(),
+            Some("term-1-node-scheduler-1")
+        );
 
         let updated = repository
             .upsert_metadata(UpsertRaftMetadata {
@@ -117,12 +122,14 @@ mod tests {
                 voted_for: None,
                 commit_index: 4,
                 applied_index: 4,
+                leader_fencing_token: None,
             })
             .await
             .unwrap_or_else(|error| panic!("metadata should update: {error}"));
         assert_eq!(updated.id, metadata.id);
         assert_eq!(updated.current_term, 2);
         assert_eq!(updated.voted_for, None);
+        assert_eq!(updated.leader_fencing_token, None);
 
         let member = repository
             .upsert_member(UpsertRaftMember {

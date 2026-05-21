@@ -15,6 +15,7 @@ use super::{auth, dto, routes};
     paths(
         routes::system::system_info,
         routes::system::cluster_status,
+        routes::raft::append_entries,
         auth::login,
         auth::me,
         auth::logout,
@@ -54,6 +55,7 @@ use super::{auth, dto, routes};
     components(schemas(
         dto::ApiResponse<dto::SystemInfoResponse>,
         dto::ApiResponse<dto::ClusterResponse>,
+        dto::ApiResponse<dto::RaftMessageResult>,
         dto::ApiResponse<dto::AuthSession>,
         dto::ApiResponse<dto::MeResponse>,
         dto::ApiResponse<dto::AuditLogPage>,
@@ -79,6 +81,8 @@ use super::{auth, dto, routes};
         dto::Page,
         dto::SystemInfoResponse,
         dto::ClusterResponse,
+        dto::RaftAppendEntriesRequest,
+        dto::RaftMessageResult,
         dto::LoginRequest,
         dto::AuthSession,
         dto::MeResponse,
@@ -121,6 +125,7 @@ use super::{auth, dto, routes};
     )),
     tags(
         (name = "system", description = "System and cluster metadata"),
+        (name = "raft", description = "Reserved node-to-node Raft transport endpoints"),
         (name = "auth", description = "Development authentication endpoints"),
         (name = "scripts", description = "Script management endpoints"),
         (name = "jobs", description = "Job management endpoints"),

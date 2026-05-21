@@ -153,6 +153,8 @@ pub struct ClusterResponse {
     pub nodes: u32,
     /// Whether this node may own scheduler/dispatcher loops.
     pub can_schedule: bool,
+    /// Optional leader fencing token; null until real consensus establishes leadership.
+    pub leader_fencing_token: Option<String>,
     /// Human-readable implementation note.
     pub detail: String,
 }
@@ -216,6 +218,8 @@ pub type DispatchQueueApiResponse = ApiResponse<scheduler_storage::QueueOverview
 pub type DispatchQueueClaimApiResponse = ApiResponse<scheduler_storage::DispatchQueueClaim>;
 /// Worker list API envelope.
 pub type WorkerListApiResponse = ApiResponse<WorkerListResponse>;
+/// Raft `AppendEntries` API envelope.
+pub type RaftAppendEntriesApiResponse = ApiResponse<RaftMessageResult>;
 /// Workflow dry-run API envelope.
 pub type WorkflowDryRunApiResponse = ApiResponse<WorkflowDryRunResponse>;
 
@@ -258,6 +262,44 @@ pub struct WorkerListResponse {
     pub online: usize,
     /// Online workers.
     pub items: Vec<WorkerSummary>,
+}
+
+/// Placeholder request shape for future Raft `AppendEntries` transport.
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+pub struct RaftAppendEntriesRequest {
+    /// Sender node id.
+    pub leader_id: String,
+    /// Sender term.
+    pub term: i64,
+    /// Previous log index.
+    pub prev_log_index: i64,
+    /// Previous log term.
+    pub prev_log_term: i64,
+    /// Leader commit index.
+    pub leader_commit: i64,
+    /// Opaque log entries placeholder. Real runtime will replace this with typed consensus entries.
+    pub entries: Vec<serde_json::Value>,
+    /// Optional fencing token carried by a real leader. Ignored until consensus runtime exists.
+    pub leader_fencing_token: Option<String>,
+}
+
+/// Placeholder response for reserved Raft transport messages.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct RaftMessageResult {
+    /// Whether the message changed local consensus state. Currently always false.
+    pub accepted: bool,
+    /// Human-readable reason.
+    pub reason: String,
+    /// Local node id.
+    pub local_node_id: String,
+    /// Local cluster role.
+    pub local_role: String,
+    /// Local leader fencing token, null until real consensus establishes leadership.
+    pub leader_fencing_token: Option<String>,
+    /// Remote address as reported by proxy headers, when present.
+    pub remote_addr: Option<String>,
+    /// Received sender term.
+    pub received_term: i64,
 }
 
 /// Request to run a workflow.

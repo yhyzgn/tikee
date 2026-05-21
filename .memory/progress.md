@@ -263,3 +263,8 @@
 - Checked crates.io on 2026-05-21: openraft latest is 0.10.0-alpha.20, still an alpha release line; real runtime adoption remains gated.
 - Added `raft_metadata` and `raft_members` storage tables with no foreign keys; IDs remain soft-linked.
 - Raft startup now persists local metadata and configured peers, but cluster status remains unknown/not-schedulable until real consensus produces leadership.
+
+### 2026-05-21 Phase2 Raft transport/fencing shape
+- Added leader fencing token field shape to cluster status and `raft_metadata`; placeholder/config paths keep it null.
+- Added reserved `/api/v1/raft/append-entries` HTTP transport endpoint for Docker/K8s/LB-safe node-to-node wiring; it returns `accepted=false` until real consensus runtime exists.
+- Kept current storage-backed no-op coordinator in `scheduler-server::cluster`; no new `scheduler-cluster` crate yet because runtime boundaries are not stable enough.
