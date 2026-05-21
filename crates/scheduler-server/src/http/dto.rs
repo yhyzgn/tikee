@@ -276,6 +276,8 @@ pub struct JobSummary {
     pub schedule_type: String,
     /// Optional schedule expression.
     pub schedule_expr: Option<String>,
+    /// Optional worker processor binding.
+    pub processor_name: Option<String>,
     /// Job enabled flag.
     pub enabled: bool,
 }
@@ -293,6 +295,8 @@ pub struct CreateJobRequest {
     pub schedule_type: Option<String>,
     /// Optional schedule expression for CRON/fixed-rate modes.
     pub schedule_expr: Option<String>,
+    /// Optional worker processor binding.
+    pub processor_name: Option<String>,
     /// Enabled flag. Defaults to `true` when omitted.
     pub enabled: Option<bool>,
 }

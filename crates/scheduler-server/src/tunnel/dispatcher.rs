@@ -47,7 +47,7 @@ async fn dispatch_once(
         .materialize_next_queued_node_with_lease(DISPATCHER_LEASE_OWNER, DISPATCH_LEASE_SECONDS)
         .await?;
     dispatch_single_instances(jobs, instances, workflows, registry).await?;
-    dispatch_broadcast_attempts(instances, attempts, registry).await
+    dispatch_broadcast_attempts(jobs, instances, attempts, workflows, registry).await
 }
 
 async fn dispatch_single_instances(
@@ -92,7 +92,7 @@ async fn dispatch_single_instances(
             instance_id: instance.id.clone(),
             job_id: instance.job_id.clone(),
             payload: Vec::new(),
-            processor_name: instance.job_id.clone(),
+            processor_name: resolve_processor_name(workflows, &instance.id, &job).await?,
         };
 
         let eligible_workers = registry
@@ -122,8 +122,10 @@ async fn dispatch_single_instances(
 }
 
 async fn dispatch_broadcast_attempts(
+    jobs: &JobRepository,
     instances: &JobInstanceRepository,
     attempts: &JobInstanceAttemptRepository,
+    workflows: &WorkflowRepository,
     registry: &WorkerRegistry,
 ) -> Result<(), scheduler_storage::DbErr> {
     let pending = attempts.list_pending(DISPATCH_BATCH_SIZE).await?;
@@ -132,11 +134,16 @@ async fn dispatch_broadcast_attempts(
         let Some(instance) = instances.get(&attempt.instance_id).await? else {
             continue;
         };
+        let processor_name = if let Some(job) = jobs.get(&instance.job_id).await? {
+            resolve_processor_name(workflows, &instance.id, &job).await?
+        } else {
+            instance.job_id.clone()
+        };
         let task = DispatchTask {
             instance_id: attempt.instance_id.clone(),
             job_id: instance.job_id.clone(),
             payload: Vec::new(),
-            processor_name: instance.job_id.clone(),
+            processor_name,
         };
 
         if let Some(worker_id) = registry.dispatch_to_worker(&attempt.worker_id, task).await {
@@ -155,6 +162,26 @@ async fn dispatch_broadcast_attempts(
     }
 
     Ok(())
+}
+
+async fn resolve_processor_name(
+    workflows: &WorkflowRepository,
+    instance_id: &str,
+    job: &scheduler_storage::JobSummary,
+) -> Result<String, scheduler_storage::DbErr> {
+    if let Some(processor_name) = workflows
+        .processor_name_for_job_instance(instance_id)
+        .await?
+    {
+        return Ok(processor_name);
+    }
+    Ok(job
+        .processor_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(&job.id)
+        .to_owned())
 }
 
 #[cfg(test)]
@@ -187,6 +214,7 @@ mod tests {
                 name: "manual".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                processor_name: Some("billing.manual".to_owned()),
                 enabled: true,
             })
             .await
@@ -229,7 +257,7 @@ mod tests {
         match message.kind {
             Some(server_message::Kind::DispatchTask(task)) => {
                 assert_eq!(task.instance_id, instance.id);
-                assert_eq!(task.processor_name, job.id);
+                assert_eq!(task.processor_name, "billing.manual");
             }
             other => panic!("unexpected server message: {other:?}"),
         }
@@ -258,6 +286,7 @@ mod tests {
                 name: "manual".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                processor_name: None,
                 enabled: true,
             })
             .await
@@ -330,5 +359,89 @@ mod tests {
             .unwrap_or_else(|error| panic!("instance should load: {error}"))
             .unwrap_or_else(|| panic!("instance should exist"));
         assert_eq!(updated.status, InstanceStatus::Running);
+    }
+
+    #[tokio::test]
+    async fn dispatch_once_prefers_workflow_node_processor_name() {
+        let db = connect_and_migrate("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("test storage should initialize: {error}"));
+        let jobs = JobRepository::new(db.clone());
+        let instances = JobInstanceRepository::new(db.clone());
+        let attempts = JobInstanceAttemptRepository::new(db.clone());
+        let workflows = WorkflowRepository::new(db);
+        let job = jobs
+            .create_job(CreateJob {
+                namespace: "default".to_owned(),
+                app: "billing".to_owned(),
+                name: "manual".to_owned(),
+                schedule_type: "api".to_owned(),
+                schedule_expr: None,
+                processor_name: Some("job.default".to_owned()),
+                enabled: true,
+            })
+            .await
+            .unwrap_or_else(|error| panic!("job should be created: {error}"));
+        let workflow = workflows
+            .create_workflow(scheduler_storage::CreateWorkflow {
+                name: "processor override".to_owned(),
+                created_by: "test".to_owned(),
+                definition: scheduler_storage::WorkflowDefinition {
+                    nodes: vec![scheduler_storage::WorkflowNodeSpec {
+                        key: "job-a".to_owned(),
+                        name: Some("Job A".to_owned()),
+                        kind: Some("job".to_owned()),
+                        job_id: Some(job.id.clone()),
+                        processor_name: Some("workflow.override".to_owned()),
+                        child_workflow_id: None,
+                        map_items: None,
+                        config: None,
+                    }],
+                    edges: Vec::new(),
+                },
+            })
+            .await
+            .unwrap_or_else(|error| panic!("workflow should be created: {error}"));
+        workflows
+            .run_workflow(&workflow.id, "api")
+            .await
+            .unwrap_or_else(|error| panic!("workflow should run: {error}"));
+        workflows
+            .materialize_next_queued_node()
+            .await
+            .unwrap_or_else(|error| panic!("workflow node should materialize: {error}"));
+
+        let registry = WorkerRegistry::default();
+        let (tx, mut rx) = mpsc::channel(1);
+        registry
+            .register(
+                RegisterWorker {
+                    client_instance_id: "worker-1".to_owned(),
+                    app: "billing".to_owned(),
+                    namespace: "default".to_owned(),
+                    cluster: "local".to_owned(),
+                    region: "local".to_owned(),
+                    capabilities: Vec::new(),
+                    labels: HashMap::default(),
+                },
+                tx,
+            )
+            .await;
+
+        dispatch_once(&jobs, &instances, &attempts, &workflows, &registry)
+            .await
+            .unwrap_or_else(|error| panic!("dispatch should run: {error}"));
+
+        let message = rx
+            .recv()
+            .await
+            .unwrap_or_else(|| panic!("worker should receive dispatch"))
+            .unwrap_or_else(|error| panic!("dispatch should be ok: {error}"));
+        match message.kind {
+            Some(server_message::Kind::DispatchTask(task)) => {
+                assert_eq!(task.processor_name, "workflow.override");
+            }
+            other => panic!("unexpected server message: {other:?}"),
+        }
     }
 }

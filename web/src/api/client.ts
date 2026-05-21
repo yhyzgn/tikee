@@ -16,6 +16,7 @@ export interface JobSummary {
   name: string;
   schedule_type: string;
   schedule_expr: string | null;
+  processor_name: string | null;
   enabled: boolean;
 }
 
@@ -25,6 +26,7 @@ export interface CreateJobRequest {
   name: string;
   schedule_type?: string;
   schedule_expr?: string | null;
+  processor_name?: string | null;
   enabled?: boolean;
 }
 
@@ -373,6 +375,7 @@ export interface WorkflowNodeSpec {
   name?: string | null;
   kind?: 'job' | 'map' | 'map_reduce' | 'sub_workflow' | string | null;
   job_id?: string | null;
+  processor_name?: string | null;
   child_workflow_id?: string | null;
   map_items?: unknown[] | null;
   config?: unknown;

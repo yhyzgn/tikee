@@ -313,6 +313,7 @@ async fn create_workflow_tables(manager: &SchemaManager<'_>) -> Result<(), DbErr
                 .col(string_col(WorkflowNodes::Name))
                 .col(string_col(WorkflowNodes::Kind))
                 .col(string_null(WorkflowNodes::JobId))
+                .col(string_null(WorkflowNodes::ProcessorName))
                 .col(string_null(WorkflowNodes::Config))
                 .col(string_col(WorkflowNodes::CreatedAt))
                 .to_owned(),
@@ -652,6 +653,7 @@ async fn create_jobs(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
                 .col(string_col(Jobs::Name))
                 .col(string_col(Jobs::ScheduleType))
                 .col(string_null(Jobs::ScheduleExpr))
+                .col(string_null(Jobs::ProcessorName))
                 .col(boolean_col(Jobs::Enabled))
                 .col(string_col(Jobs::CreatedAt))
                 .col(string_col(Jobs::UpdatedAt))
@@ -970,6 +972,7 @@ enum WorkflowNodes {
     Name,
     Kind,
     JobId,
+    ProcessorName,
     Config,
     CreatedAt,
 }
@@ -1212,6 +1215,7 @@ enum Jobs {
     Name,
     ScheduleType,
     ScheduleExpr,
+    ProcessorName,
     Enabled,
     CreatedAt,
     UpdatedAt,

@@ -61,11 +61,26 @@ async fn ensure_sqlite_schema_compatibility(db: &DatabaseConnection) -> Result<(
     ensure_broadcast_schema_compatibility(db).await?;
     ensure_auth_schema_compatibility(db).await?;
     ensure_rbac_schema_compatibility(db).await?;
+    ensure_job_schema_compatibility(db).await?;
     ensure_scripts_schema_compatibility(db).await?;
     ensure_script_versions_schema_compatibility(db).await?;
     ensure_audit_logs_schema_compatibility(db).await?;
     ensure_workflow_schema_compatibility(db).await?;
     remove_sqlite_foreign_keys(db).await
+}
+
+async fn ensure_job_schema_compatibility(db: &DatabaseConnection) -> Result<(), sea_orm::DbErr> {
+    if db.get_database_backend() != DatabaseBackend::Sqlite {
+        return Ok(());
+    }
+    if !sqlite_column_exists(db, "jobs", "processor_name").await? {
+        db.execute(Statement::from_string(
+            DatabaseBackend::Sqlite,
+            "ALTER TABLE jobs ADD COLUMN processor_name varchar",
+        ))
+        .await?;
+    }
+    Ok(())
 }
 
 async fn ensure_workflow_schema_compatibility(
@@ -76,7 +91,7 @@ async fn ensure_workflow_schema_compatibility(
     }
     for sql in [
         r"CREATE TABLE IF NOT EXISTS workflows (id varchar NOT NULL PRIMARY KEY, name varchar NOT NULL, definition varchar NOT NULL, status varchar NOT NULL, created_by varchar NOT NULL, created_at varchar NOT NULL, updated_at varchar NOT NULL)",
-        r"CREATE TABLE IF NOT EXISTS workflow_nodes (id varchar NOT NULL PRIMARY KEY, workflow_id varchar NOT NULL, node_key varchar NOT NULL, name varchar NOT NULL, kind varchar NOT NULL, job_id varchar, config varchar, created_at varchar NOT NULL)",
+        r"CREATE TABLE IF NOT EXISTS workflow_nodes (id varchar NOT NULL PRIMARY KEY, workflow_id varchar NOT NULL, node_key varchar NOT NULL, name varchar NOT NULL, kind varchar NOT NULL, job_id varchar, processor_name varchar, config varchar, created_at varchar NOT NULL)",
         r"CREATE TABLE IF NOT EXISTS workflow_edges (id varchar NOT NULL PRIMARY KEY, workflow_id varchar NOT NULL, from_node_key varchar NOT NULL, to_node_key varchar NOT NULL, condition varchar NOT NULL, created_at varchar NOT NULL)",
         r"CREATE TABLE IF NOT EXISTS workflow_instances (id varchar NOT NULL PRIMARY KEY, workflow_id varchar NOT NULL, status varchar NOT NULL, trigger_type varchar NOT NULL, created_at varchar NOT NULL, updated_at varchar NOT NULL)",
         r"CREATE TABLE IF NOT EXISTS workflow_node_instances (id varchar NOT NULL PRIMARY KEY, workflow_instance_id varchar NOT NULL, node_key varchar NOT NULL, status varchar NOT NULL, job_instance_id varchar, child_workflow_instance_id varchar, created_at varchar NOT NULL, updated_at varchar NOT NULL)",
@@ -96,6 +111,13 @@ async fn ensure_workflow_schema_compatibility(
             .await?;
     }
 
+    if !sqlite_column_exists(db, "workflow_nodes", "processor_name").await? {
+        db.execute(Statement::from_string(
+            DatabaseBackend::Sqlite,
+            "ALTER TABLE workflow_nodes ADD COLUMN processor_name varchar",
+        ))
+        .await?;
+    }
     if !sqlite_column_exists(db, "workflow_shards", "job_instance_id").await? {
         db.execute(Statement::from_string(
             DatabaseBackend::Sqlite,
@@ -551,6 +573,7 @@ async fn remove_sqlite_foreign_keys(db: &DatabaseConnection) -> Result<(), sea_o
             name varchar NOT NULL,
             schedule_type varchar NOT NULL,
             schedule_expr varchar,
+            processor_name varchar,
             enabled boolean NOT NULL,
             created_at varchar NOT NULL,
             updated_at varchar NOT NULL
@@ -562,6 +585,7 @@ async fn remove_sqlite_foreign_keys(db: &DatabaseConnection) -> Result<(), sea_o
             "name",
             "schedule_type",
             "schedule_expr",
+            "processor_name",
             "enabled",
             "created_at",
             "updated_at",

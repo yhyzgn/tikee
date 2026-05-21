@@ -845,3 +845,9 @@ Git:
 - Updated server dispatch task construction and tests to assert processor key population.
 - Updated Rust SDK TaskContext and Java TaskContext to carry processor name.
 - Updated SpringSchedulerTaskProcessor to route by explicit processor name instead of job id fallback-only convention.
+
+### 2026-05-21 Job/Workflow processor binding model
+- Implemented first-class `processor_name` on jobs and workflow node specs.
+- Server dispatch now resolves processor key from workflow node override, then job binding, then legacy job id.
+- Added HTTP test for job processor binding and dispatcher test for workflow node override.
+- Web Jobs page and Workflow DAG inspector can configure processor names.

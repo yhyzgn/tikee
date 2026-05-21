@@ -223,3 +223,9 @@
 - Worker Tunnel `DispatchTask` proto 新增 `processor_name` 字段，并同步到服务端 proto、Rust SDK proto、Java SDK proto。
 - Server dispatcher 分发任务时填充 `processor_name`，当前兼容性默认等于 `job_id`。
 - Rust/Java TaskContext 暴露 processor name；Java Spring adapter 改为优先按 `processorName()` 路由 `@SchedulerProcessor`。
+
+## 2026-05-21 051：Job / Workflow processor 绑定模型
+- Job 定义新增可选 `processor_name`，HTTP create/list/OpenAPI DTO 与 Web Job 表单/列表同步展示。
+- Workflow `WorkflowNodeSpec` 新增可选 `processor_name`，job/map 节点 UI inspector 可配置 SDK processor 绑定。
+- Dispatcher processor 解析顺序固定为：Workflow 节点 processor -> Job processor -> legacy job_id，避免 SDK 路由继续依赖任务 ID。
+- SQLite 兼容迁移补齐 `jobs.processor_name` 与 `workflow_nodes.processor_name`，无外键规则保持不变。

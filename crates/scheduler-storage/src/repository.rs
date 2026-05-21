@@ -95,6 +95,7 @@ mod tests {
                 name: "nightly".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                processor_name: None,
                 enabled: true,
             })
             .await
@@ -134,6 +135,7 @@ mod tests {
                 name: "manual".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                processor_name: None,
                 enabled: true,
             })
             .await
@@ -190,6 +192,7 @@ mod tests {
                 name: "manual".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                processor_name: None,
                 enabled: true,
             })
             .await
@@ -346,6 +349,7 @@ mod tests {
                 name: "first".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                processor_name: None,
                 enabled: true,
             })
             .await
@@ -357,6 +361,7 @@ mod tests {
                 name: "second".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                processor_name: None,
                 enabled: true,
             })
             .await
@@ -372,6 +377,7 @@ mod tests {
                             name: None,
                             kind: Some("job".to_owned()),
                             job_id: Some(first_job.id),
+                            processor_name: None,
                             child_workflow_id: None,
                             map_items: None,
                             config: None,
@@ -381,6 +387,7 @@ mod tests {
                             name: None,
                             kind: Some("job".to_owned()),
                             job_id: Some(second_job.id),
+                            processor_name: None,
                             child_workflow_id: None,
                             map_items: None,
                             config: None,
@@ -458,6 +465,7 @@ mod tests {
                 name: "claimable".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                processor_name: None,
                 enabled: true,
             })
             .await
@@ -472,6 +480,7 @@ mod tests {
                         name: None,
                         kind: Some("job".to_owned()),
                         job_id: Some(job.id),
+                        processor_name: None,
                         child_workflow_id: None,
                         map_items: None,
                         config: None,
@@ -538,6 +547,7 @@ mod tests {
                 name: "reduce".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                processor_name: None,
                 enabled: true,
             })
             .await
@@ -553,6 +563,7 @@ mod tests {
                             name: None,
                             kind: Some("map".to_owned()),
                             job_id: None,
+                            processor_name: None,
                             child_workflow_id: None,
                             map_items: Some(vec![
                                 serde_json::json!({"n": 1}),
@@ -565,6 +576,7 @@ mod tests {
                             name: None,
                             kind: Some("job".to_owned()),
                             job_id: Some(reduce_job.id),
+                            processor_name: None,
                             child_workflow_id: None,
                             map_items: None,
                             config: None,
@@ -658,6 +670,7 @@ mod tests {
                 name: "child-job".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                processor_name: None,
                 enabled: true,
             })
             .await
@@ -672,6 +685,7 @@ mod tests {
                         name: None,
                         kind: Some("job".to_owned()),
                         job_id: Some(child_job.id),
+                        processor_name: None,
                         child_workflow_id: None,
                         map_items: None,
                         config: None,
@@ -691,6 +705,7 @@ mod tests {
                         name: None,
                         kind: Some("sub_workflow".to_owned()),
                         job_id: None,
+                        processor_name: None,
                         child_workflow_id: Some(child.id),
                         map_items: None,
                         config: None,

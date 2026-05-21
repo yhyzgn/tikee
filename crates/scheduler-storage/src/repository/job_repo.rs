@@ -76,6 +76,7 @@ impl JobRepository {
             name: Set(input.name),
             schedule_type: Set(input.schedule_type),
             schedule_expr: Set(input.schedule_expr),
+            processor_name: Set(normalize_processor_name(input.processor_name)),
             enabled: Set(input.enabled),
             created_at: Set(now.clone()),
             updated_at: Set(now),
@@ -90,6 +91,7 @@ impl JobRepository {
             name: model.name,
             schedule_type: model.schedule_type,
             schedule_expr: model.schedule_expr,
+            processor_name: model.processor_name,
             enabled: model.enabled,
         })
     }
@@ -114,6 +116,7 @@ impl JobRepository {
                 name: job.name,
                 schedule_type: job.schedule_type,
                 schedule_expr: job.schedule_expr,
+                processor_name: job.processor_name,
                 enabled: job.enabled,
             });
         }
@@ -169,4 +172,15 @@ impl JobRepository {
         .insert(&self.db)
         .await
     }
+}
+
+fn normalize_processor_name(value: Option<String>) -> Option<String> {
+    value.and_then(|name| {
+        let trimmed = name.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_owned())
+        }
+    })
 }

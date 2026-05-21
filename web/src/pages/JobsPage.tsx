@@ -27,6 +27,7 @@ export function JobsPage() {
     { title: 'Name', dataIndex: 'name' },
     { title: 'Namespace / App', render: (_, job) => <Space direction="vertical" size={0}><strong>{job.namespace}</strong><Typography.Text type="secondary" style={{ fontSize: 12 }}>{job.app}</Typography.Text></Space> },
     { title: 'Schedule', dataIndex: 'schedule_type', render: (value: string) => <Tag color="blue" className="soft-tag">{value}</Tag> },
+    { title: 'Processor', dataIndex: 'processor_name', render: (value: string | null, job) => <Typography.Text code>{value || job.id}</Typography.Text> },
     { title: 'Enabled', dataIndex: 'enabled', render: (value: boolean) => <Switch size="small" checked={value} disabled /> },
     {
       title: 'Actions',
@@ -76,7 +77,7 @@ export function JobsPage() {
             try {
               await createJob(values);
               message.success('任务已创建');
-              form.resetFields(['name', 'schedule_expr']);
+              form.resetFields(['name', 'schedule_expr', 'processor_name']);
               await load();
             } catch (err) {
               message.error(err instanceof Error ? err.message : '创建失败');
@@ -86,6 +87,7 @@ export function JobsPage() {
           <Form.Item name="namespace" rules={[{ required: true }]}><Input placeholder="namespace" style={{ width: 120 }} /></Form.Item>
           <Form.Item name="app" rules={[{ required: true }]}><Input placeholder="app" style={{ width: 120 }} /></Form.Item>
           <Form.Item name="name" rules={[{ required: true }]}><Input placeholder="job name" style={{ width: 160 }} /></Form.Item>
+          <Form.Item name="processor_name"><Input placeholder="processor name" style={{ width: 180 }} /></Form.Item>
           <Form.Item name="schedule_type">
             <Select style={{ width: 110 }} options={[{ value: 'api' }, { value: 'cron' }, { value: 'fixed_rate' }]} />
           </Form.Item>

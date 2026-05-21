@@ -28,6 +28,7 @@ pub struct WorkflowNodeSpec {
     pub name: Option<String>,
     pub kind: Option<String>,
     pub job_id: Option<String>,
+    pub processor_name: Option<String>,
     pub child_workflow_id: Option<String>,
     pub map_items: Option<Vec<serde_json::Value>>,
     pub config: Option<serde_json::Value>,
@@ -253,6 +254,7 @@ impl WorkflowRepository {
                 name: Set(node.name.clone().unwrap_or_else(|| node.key.clone())),
                 kind: Set(node.kind.clone().unwrap_or_else(|| "job".to_owned())),
                 job_id: Set(node.job_id.clone()),
+                processor_name: Set(normalize_processor_name(node.processor_name.clone())),
                 config: Set(node
                     .config
                     .as_ref()
@@ -321,6 +323,7 @@ impl WorkflowRepository {
                 name: Set(node.name.clone().unwrap_or_else(|| node.key.clone())),
                 kind: Set(node.kind.clone().unwrap_or_else(|| "job".to_owned())),
                 job_id: Set(node.job_id.clone()),
+                processor_name: Set(normalize_processor_name(node.processor_name.clone())),
                 config: Set(node
                     .config
                     .as_ref()
@@ -838,6 +841,55 @@ impl WorkflowRepository {
             shards,
             queue_item: DispatchQueueSummary::from(updated_queue),
         }))
+    }
+
+    pub async fn processor_name_for_job_instance(
+        &self,
+        job_instance_id: &str,
+    ) -> Result<Option<String>, sea_orm::DbErr> {
+        if crate::entities::job_instance::Entity::find_by_id(job_instance_id.to_owned())
+            .one(&self.db)
+            .await?
+            .is_none()
+        {
+            return Ok(None);
+        }
+
+        if let Some(node_instance) = workflow_node_instance::Entity::find()
+            .filter(workflow_node_instance::Column::JobInstanceId.eq(job_instance_id.to_owned()))
+            .one(&self.db)
+            .await?
+            && let Some(workflow_instance) =
+                workflow_instance::Entity::find_by_id(node_instance.workflow_instance_id.clone())
+                    .one(&self.db)
+                    .await?
+            && let Some(workflow) = self.get_workflow(&workflow_instance.workflow_id).await?
+            && let Some(node) = workflow
+                .definition
+                .nodes
+                .iter()
+                .find(|node| node.key == node_instance.node_key)
+            && let Some(processor_name) = normalize_processor_name(node.processor_name.clone())
+        {
+            return Ok(Some(processor_name));
+        }
+
+        if let Some(shard) = workflow_shard::Entity::find()
+            .filter(workflow_shard::Column::JobInstanceId.eq(job_instance_id.to_owned()))
+            .one(&self.db)
+            .await?
+            && let Some(workflow) = self.get_workflow(&shard.workflow_instance_id).await?
+            && let Some(node) = workflow
+                .definition
+                .nodes
+                .iter()
+                .find(|node| node.key == shard.node_key)
+            && let Some(processor_name) = normalize_processor_name(node.processor_name.clone())
+        {
+            return Ok(Some(processor_name));
+        }
+
+        Ok(None)
     }
 
     pub async fn get_node_by_job_instance(
@@ -1540,6 +1592,7 @@ where
         name: Set(format!("workflow node {job_id}")),
         schedule_type: Set("api".to_owned()),
         schedule_expr: Set(None),
+        processor_name: Set(Some(job_id.to_owned())),
         enabled: Set(true),
         created_at: Set(now.to_owned()),
         updated_at: Set(now.to_owned()),
@@ -1602,6 +1655,17 @@ enum DispatchQueueClaimKind {
     Any,
     WorkflowNode,
     JobInstance,
+}
+
+fn normalize_processor_name(value: Option<String>) -> Option<String> {
+    value.and_then(|name| {
+        let trimmed = name.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_owned())
+        }
+    })
 }
 
 fn node_kind(node: &WorkflowNodeSpec) -> &str {

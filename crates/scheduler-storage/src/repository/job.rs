@@ -11,6 +11,8 @@ pub struct CreateJob {
     pub schedule_type: String,
     /// Optional schedule expression.
     pub schedule_expr: Option<String>,
+    /// Optional worker processor binding. When absent, dispatch falls back to job id.
+    pub processor_name: Option<String>,
     /// Whether the job is enabled.
     pub enabled: bool,
 }
@@ -30,6 +32,8 @@ pub struct JobSummary {
     pub schedule_type: String,
     /// Optional schedule expression.
     pub schedule_expr: Option<String>,
+    /// Optional worker processor binding.
+    pub processor_name: Option<String>,
     /// Enabled flag.
     pub enabled: bool,
 }

@@ -632,6 +632,20 @@ mod tests {
         assert_eq!(json["data"]["items"][0]["message"], "hello");
     }
 
+    #[tokio::test]
+    async fn create_job_accepts_processor_binding() {
+        let app = router().await;
+        let json = post_json(
+            app,
+            "/api/v1/jobs",
+            r#"{"namespace":"default","app":"billing","name":"invoice-sync","schedule_type":"api","processor_name":"billing.invoice-sync"}"#,
+        )
+        .await;
+
+        assert_eq!(json["code"], 0);
+        assert_eq!(json["data"]["processor_name"], "billing.invoice-sync");
+    }
+
     async fn post_json(app: axum::Router, uri: &str, body: &str) -> Value {
         post_json_with_auth(app, uri, body, true).await
     }

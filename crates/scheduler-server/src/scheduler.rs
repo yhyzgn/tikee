@@ -146,6 +146,7 @@ mod tests {
                 name: "fixed".to_owned(),
                 schedule_type: "fixed_rate".to_owned(),
                 schedule_expr: Some("1s".to_owned()),
+                processor_name: None,
                 enabled: true,
             })
             .await
@@ -182,6 +183,7 @@ mod tests {
                 name: "cron".to_owned(),
                 schedule_type: "cron".to_owned(),
                 schedule_expr: Some("0/1 * * * * * *".to_owned()),
+                processor_name: None,
                 enabled: true,
             })
             .await
@@ -214,6 +216,7 @@ mod tests {
                 name: "disabled".to_owned(),
                 schedule_type: "fixed_rate".to_owned(),
                 schedule_expr: Some("1s".to_owned()),
+                processor_name: None,
                 enabled: false,
             })
             .await

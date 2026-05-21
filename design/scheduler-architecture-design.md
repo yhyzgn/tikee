@@ -455,7 +455,7 @@ examples/
 - 根 `Dockerfile` 只构建 scheduler 服务端镜像，不复制、不缓存、不构建 `sdks/` 与 `examples/`；SDK 与 Demo 必须作为独立构建产物验证。
 - 独立发布约束：每个 SDK 必须可按语言生态独立发布；Rust SDK 不能依赖服务端 `crates/*` path dependency，必须内聚协议定义或依赖已发布协议包。
 - Worker 注册约束：`worker_id` 必须由服务端生成并在 `WorkerRegistered` 下发；客户端只能上报可选 `client_instance_id` 作为实例提示，不能自行声明权威 ID。
-- Worker 分发约束：`DispatchTask.processor_name` 是 SDK 侧处理器路由的显式字段；当前服务端默认用 `job_id` 填充以兼容已有 Job 定义，SDK 可在空值时回退到 `job_id`。
+- Worker 分发约束：`DispatchTask.processor_name` 是 SDK 侧处理器路由的显式字段；Job 定义与 Workflow job/map 节点均支持显式 `processor_name` 绑定，dispatcher 优先使用节点绑定，其次使用 Job 绑定，最后仅为历史数据回退到 `job_id`。
 - Node 目录统一命名为 `nodejs`，避免和通用 node/graph 概念混淆。
 
 **集成体验对比**：
@@ -2154,9 +2154,10 @@ scheduler/
 - [ ] Java Spring Boot Starter SDK（优先）
   - [x] Gradle 多模块骨架：java-core / spring-boot-autoconfigure / spring-boot-starter（JDK 21+；已替换 Maven 骨架）
   - [x] `@SchedulerProcessor` 注解扫描与 auto-configuration 骨架
-  - [ ] Java gRPC Worker Tunnel 真实连接与心跳
+  - [x] Java gRPC Worker Tunnel 真实连接与心跳
 - [ ] Node.js SDK
 - [x] Java Core SDK
+- [x] Worker processor binding model（Job 定义与 Workflow job/map 节点支持 `processor_name`，Worker dispatch 按 processor name 路由，legacy 数据回退 `job_id`）
 - [x] SDK 目录规范迁移：Rust SDK -> `sdks/rust/scheduler-worker-sdk`，Java SDK -> Gradle/JDK21+，新增 `examples/<language>/<demo-name>` demo 骨架，并补齐 Rust / Java 可独立运行 demo 基础
 - [ ] K8s Helm Chart
 - [ ] PowerJob 迁移工具

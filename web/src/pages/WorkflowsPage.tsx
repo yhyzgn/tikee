@@ -113,13 +113,13 @@ function makeNode(kind: string, index: number): WorkflowNodeSpec {
   const key = `${kind.replace('_', '-')}-${index}`;
   const ui = { x: 90 + index * 44, y: 100 + index * 34 };
   if (kind === 'map' || kind === 'map_reduce') {
-    return { key, name: key, kind, map_items: [{ shard: 1 }, { shard: 2 }], config: { ui, mode: kind === 'map' ? 'fan-out' : 'fan-out-reduce' } };
+    return { key, name: key, kind, processor_name: key, map_items: [{ shard: 1 }, { shard: 2 }], config: { ui, mode: kind === 'map' ? 'fan-out' : 'fan-out-reduce' } };
   }
   if (kind === 'sub_workflow') {
     return { key, name: key, kind, child_workflow_id: 'wf_child', config: { ui } };
   }
   if (kind === 'job') {
-    return { key, name: key, kind, job_id: '', config: { ui } };
+    return { key, name: key, kind, job_id: '', processor_name: key, config: { ui } };
   }
   const configByKind: Record<string, Record<string, unknown>> = {
     script: { language: 'rhai', sandbox: 'isolated', source: '' },
@@ -480,6 +480,7 @@ function DagPreview({ definition, instance, jobs = [], editable = false, onChang
                   <Tag color="cyan">{nodeKind(node)}</Tag>
                   <Typography.Text className="workflow-node-card__key">{node.key}</Typography.Text>
                   {node.job_id ? <Typography.Text type="secondary">job: {jobs.find((job) => job.id === node.job_id)?.name ?? node.job_id}</Typography.Text> : null}
+                  {node.processor_name ? <Typography.Text type="secondary">processor: {node.processor_name}</Typography.Text> : null}
                   {node.child_workflow_id ? <Typography.Text type="secondary">child: {node.child_workflow_id}</Typography.Text> : null}
                   {nodeKind(node) === 'condition' ? <Typography.Text type="secondary">条件分支</Typography.Text> : null}
                   {nodeKind(node) === 'parallel' ? <Typography.Text type="secondary">并行分发</Typography.Text> : null}
@@ -516,7 +517,8 @@ function DagPreview({ definition, instance, jobs = [], editable = false, onChang
                   style={{ width: '100%' }}
                   onChange={(value) => updateNode(selectedNode.key, { job_id: value })}
                 />
-                <Typography.Text type="secondary">Job 节点会在物化时创建对应 job_instance，并进入 dispatch_queue。</Typography.Text>
+                <Input addonBefore="Processor" placeholder="SDK processor name" value={selectedNode.processor_name ?? ''} onChange={(event) => updateNode(selectedNode.key, { processor_name: event.target.value })} />
+                <Typography.Text type="secondary">Job 节点会在物化时创建对应 job_instance，并按 Processor 路由到 SDK 处理器；为空时回退 Job 绑定。</Typography.Text>
               </Space>
             ) : null}
 
@@ -591,6 +593,7 @@ function DagPreview({ definition, instance, jobs = [], editable = false, onChang
             {(nodeKind(selectedNode) === 'map' || nodeKind(selectedNode) === 'map_reduce') ? (
               <Space direction="vertical" style={{ width: '100%' }}>
                 <Typography.Text strong>分片输入 map_items</Typography.Text>
+                <Input addonBefore="Processor" placeholder="SDK processor name" value={selectedNode.processor_name ?? ''} onChange={(event) => updateNode(selectedNode.key, { processor_name: event.target.value })} />
                 <Input.TextArea key={`map-items-${selectedNode.key}`} rows={4} defaultValue={JSON.stringify(selectedNode.map_items ?? [], null, 2)} onBlur={(event) => updateMapItems(selectedNode.key, event.target.value)} />
               </Space>
             ) : null}

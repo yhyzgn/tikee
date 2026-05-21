@@ -15,6 +15,7 @@ pub struct Model {
     pub name: String,
     pub kind: String,
     pub job_id: Option<String>,
+    pub processor_name: Option<String>,
     pub config: Option<String>,
     pub created_at: String,
 }

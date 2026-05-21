@@ -90,6 +90,7 @@ pub async fn create_job(
             name: request.name.clone(),
             schedule_type: schedule_type.to_string(),
             schedule_expr: request.schedule_expr.clone(),
+            processor_name: request.processor_name.clone(),
             enabled: request.enabled.unwrap_or(true),
         })
         .await
@@ -351,6 +352,7 @@ impl From<scheduler_storage::JobSummary> for JobSummary {
             name: value.name,
             schedule_type: value.schedule_type,
             schedule_expr: value.schedule_expr,
+            processor_name: value.processor_name,
             enabled: value.enabled,
         }
     }
