@@ -1124,3 +1124,11 @@ Git:
 - Rust SDK now has explicit runner registry routing for script bindings; Java SDK refuses script bindings until Java runner support is intentionally designed.
 - Updated architecture roadmap and prepared `.prompt/075-script-runner-container-and-execution-governance.md`.
 - Verification passed across Rust workspace, scheduler-proto, dispatcher tests, Rust SDK native+wasm+clippy, Web typecheck/test/build, and Java Gradle tests.
+
+### 2026-05-22 — Phase 075 container script runner foundation
+- Added Rust SDK `ContainerScriptRunner` for Worker-side opt-in non-WASM script execution through a Docker-compatible CLI boundary.
+- Honored the new modularity constraint by splitting `scheduler-worker-sdk/src/lib.rs` into focused Rust modules; future work should follow this pattern across server, web, and all SDK languages.
+- Runner command boundary is default-deny: stdin script content, no container network, read-only rootfs, no host mounts, explicit scheduler metadata env, and whitelisted env only.
+- Added tests for Docker arg construction and dangerous policy rejection before runtime spawn.
+- Prepared `.prompt/076-script-execution-governance-and-live-runner-smoke.md` for result/audit visibility and optional live runtime smoke.
+- Verification passed after the Rust SDK module split: Rust workspace fmt/clippy/test/help, Rust SDK native+wasm+clippy, Web typecheck/test/build, and Java Gradle tests.

@@ -435,3 +435,9 @@ Constraint:
 - Server remains a metadata dispatcher only. It sends released immutable `script_versions` bytes, hash, version metadata, and policy fields, but never runs user code.
 - Rust SDK workers must explicitly register a matching `ScriptRunner`; missing runner support is a task failure, not a fallback to normal task processors.
 - Java SDK intentionally rejects script bindings until Java-side runner abstractions are designed.
+
+## 2026-05-22 — 默认按功能拆分代码文件
+
+- 所有后续开发默认按职责/功能拆分文件和模块，适用于 Rust server/crates、各语言 SDK、Web 前端和示例代码。
+- 禁止让单个文件持续膨胀；当文件体量明显变大时，应在同一阶段内顺手拆分到合理模块。
+- Rust SDK 先以 `scheduler-worker-sdk/src/lib.rs` 为整改对象：`lib.rs` 只保留模块声明和 public re-export，具体能力拆到 config/session/task/error/script/wasm/proto/tests 等模块。

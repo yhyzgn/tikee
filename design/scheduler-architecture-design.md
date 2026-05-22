@@ -457,6 +457,7 @@ examples/
 - Worker 注册约束：`worker_id` 必须由服务端生成并在 `WorkerRegistered` 下发；客户端只能上报可选 `client_instance_id` 作为实例提示，不能自行声明权威 ID。
 - Worker 分发约束：`DispatchTask.processor_name` 是 SDK 侧处理器路由的显式字段；Job 定义与 Workflow job/map 节点均支持显式 `processor_name` 绑定，dispatcher 优先使用节点绑定，其次使用 Job 绑定，最后仅为历史数据回退到 `job_id`。
 - Node 目录统一命名为 `nodejs`，避免和通用 node/graph 概念混淆。
+- 代码组织约束：所有 Rust server/crates、Web、SDK 和 demo 默认按职责拆分模块；禁止让单个源文件持续膨胀，新增功能若使文件明显变大，必须同步拆到按功能命名的模块文件中。
 
 **集成体验对比**：
 
@@ -2204,6 +2205,7 @@ scheduler/
   - [x] Worker 侧非 WASM Runner 抽象（072：Rust SDK `ScriptRunner` / `ScriptRunnerTask` / `ScriptRunnerPolicy`，Shell/Python/Node/PowerShell/Rhai 类型识别；默认 Unsupported runner 只验证策略并拒绝执行，等待具体沙箱实现）
   - [x] Worker 侧沙箱执行器首个实现（073：Rust SDK `LocalSubprocessScriptRunner`，显式 opt-in，本地 stdin 子进程边界；校验 released version_id/version_number、content SHA-256、默认拒绝网络/文件/Secret，支持 timeout/output cap/runtime missing 测试；容器 runner 后续继续）
   - [x] 非 WASM 脚本 Worker Tunnel 协议绑定与能力路由（074：`ScriptProcessorBinding` 传递 released `script_versions` 快照 bytes/SHA-256/version/policy；dispatcher fail-closed 并按 `script:<language>`、`script:*`、`*` 过滤 worker；Rust SDK 仅在显式注册对应 `ScriptRunner` 后执行，Java SDK 明确拒绝暂不支持的脚本绑定；Web 展示语言所需 worker capability）
+  - [x] Worker 侧容器化脚本 Runner 基础（075：Rust SDK `ContainerScriptRunner`，显式 opt-in，通过 Docker-compatible CLI `run --rm -i` 以 stdin 传入 released snapshot；默认 `--network=none`、`--read-only`、无宿主路径挂载，仅注入白名单 env 和 scheduler 元数据；单元测试覆盖命令边界与危险策略预检，真实 Docker/K8s 执行治理后续增强）
 - [ ] 脚本策略引擎（能力声明、审批、资源限制、网络/文件策略）
   - [x] 默认拒绝策略元数据与不可变快照（072：`ScriptExecutionPolicy` 覆盖 resources/network/filesystem/secrets/env；`scripts.policy_json` 和 `script_versions.policy_json` 保存策略快照；HTTP create/update 拒绝网络/文件/Secret 危险能力；Web 可编辑资源/env 白名单并展示策略 diff）
   - [ ] 策略审批、签名、URL/File/Secret grant 与生产发布门禁
