@@ -1068,3 +1068,8 @@ Git:
 - Targeted verification so far: `cargo fmt --all`; `cargo test -p scheduler-server tunnel::dispatcher --all-features`; `cargo test --manifest-path sdks/rust/scheduler-worker-sdk/Cargo.toml --all-features`; Java Gradle test attempted but stopped due slow first distribution download.
 - Full verification passed for 068: `cargo fmt --all -- --check`; `cargo clippy --workspace --all-targets --all-features -- -D warnings`; `cargo test --workspace --all-features`; `cargo run -- --help`; `cd web && bun run typecheck`; `cd web && bun test`; `cd web && bun run build`; `cargo test --manifest-path sdks/rust/scheduler-worker-sdk/Cargo.toml --all-features`. Java SDK Gradle test was attempted but not completed because the first Gradle distribution download was too slow; rerun once cached.
 - Re-ran final 068 verification after proto boxing/clippy fixes: all listed Rust/backend/web/Rust-SDK checks passed again. Java SDK Gradle remains not completed due slow first distribution download.
+
+### 2026-05-22 Java SDK Gradle verification补齐
+- User corrected Gradle latest-version requirement; updated `sdks/java/gradlew` from 8.14.3 to Gradle 9.5.1 and defaulted distribution download to Huawei Cloud mirror with override support.
+- Fixed wrapper cwd from repo root to `sdks/java`.
+- Verification passed: `cd sdks/java && ./gradlew --version --no-daemon`; `cd sdks/java && ./gradlew test --no-daemon` (BUILD SUCCESSFUL). Warning: deprecated Gradle features need future Gradle 10 cleanup.
