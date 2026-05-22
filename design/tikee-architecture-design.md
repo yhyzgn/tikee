@@ -2229,8 +2229,9 @@ tikee/
   - [x] 告警规则 API、事件接入、去重静默、通知历史、恢复通知（080-082：alert_rules / alert_events 存储、HTTP API、script governance 事件历史 materialization、recovery 事件 append、alert-events:summary 运维汇总）
 - [ ] Prometheus 指标 + Grafana Dashboard 模板
   - [x] Prometheus 指标端点（`/metrics`）与 HTTP/Worker 最小指标
-  - [x] Metrics Summary API 基础（083：`GET /api/v1/metrics/summary` 汇总 worker online、实例状态、告警事件与脚本治理失败计数；Grafana 模板后续）
-  - [ ] Grafana Dashboard、调度延迟与完整业务 SLO 指标
+  - [x] Metrics Summary API 基础（083：`GET /api/v1/metrics/summary` 汇总 worker online、实例状态、告警事件与脚本治理失败计数）
+  - [x] Grafana Dashboard 模板基础（088：`observability/grafana/tikee-phase3-dashboard.json` 覆盖 HTTP request/rate/latency、worker connected/dispatch 与错误率 SLO 占位查询，含本地 JSON 结构/指标引用测试）
+  - [ ] 调度延迟与完整业务 SLO 指标
 - [ ] OpenTelemetry 分布式追踪
   - [x] HTTP Trace ID 传播基础（084：`x-request-id` / `x-trace-id` / W3C `traceparent` 解析，缺失时生成 `trc-*`，响应回写 `x-trace-id`，本地 tracing span 不依赖外部 collector）
 - [ ] Java Spring Boot Starter SDK（优先）

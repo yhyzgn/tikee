@@ -1249,3 +1249,9 @@ Git:
 - Added publish/rollback policy gate checks that re-validate immutable script version snapshots before changing the release pointer.
 - Dangerous legacy/imported versions that request network/filesystem/secret grants are blocked with a standard bad-request envelope and `failure_reason=script_policy_approval_required` audit rows.
 - Safe script publish and rollback behavior remains unchanged; added regression coverage for blocked dangerous publish/rollback and queryable failed audit entries.
+
+### 2026-05-23 — Phase 088 Grafana dashboard template foundation
+- Continued `.prompt/088-phase3-remaining-hardening.md` with the smallest locally verifiable observability hardening slice.
+- Added `observability/grafana/tikee-phase3-dashboard.json` as a deterministic Grafana dashboard template for existing Prometheus metrics: HTTP request rate, HTTP p95 latency, connected workers, worker dispatch outcomes, and an HTTP error-ratio SLO placeholder.
+- Added a Rust integration test that parses the dashboard JSON, asserts the expected title/panels shape, and verifies the required metric query strings stay present without needing a live Grafana/Prometheus service.
+- Roadmap now marks the Grafana template foundation complete while leaving richer scheduling-latency/business SLO metrics open.
