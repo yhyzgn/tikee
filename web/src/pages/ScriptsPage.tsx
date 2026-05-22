@@ -1,5 +1,5 @@
 import { Button, Descriptions, Drawer, Form, Input, InputNumber, Modal, Select, Space, Spin, Switch, Table, Tag, message } from 'antd';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { diffLines } from 'diff';
 import type { ScriptDiffResult, ScriptSummary, ScriptVersionSummary } from '../api/client';
 import { GuardedButton, PermissionGate, useCan } from '../components/Permission';
@@ -13,6 +13,7 @@ import {
   updateScript,
 } from '../api/client';
 import { CodeEditor } from '../components/CodeEditor';
+import { useUrlQueryState } from '../hooks/useUrlQueryState';
 
 const LANGUAGE_OPTIONS = [
   { value: 'shell', label: 'Shell' },
@@ -147,6 +148,7 @@ function PolicyDiffTable({ changes }: { changes: ScriptDiffResult['policy_diff']
 
 export function ScriptsPage() {
   const canManageScripts = useCan('scripts', 'manage');
+  const { query, setQuery } = useUrlQueryState({ page: 1, page_size: 10, keyword: '', language: '', status: '' });
   const [scripts, setScripts] = useState<ScriptSummary[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -371,6 +373,16 @@ export function ScriptsPage() {
     label: `v${v.version_number} - ${v.created_by} (${new Date(v.created_at).toLocaleString()})`,
   }));
 
+  const filteredScripts = useMemo(() => scripts.filter((script) => {
+    const keyword = String(query.keyword ?? '').trim().toLowerCase();
+    const language = String(query.language ?? '').trim();
+    const status = String(query.status ?? '').trim();
+    const matchesKeyword = keyword === '' || [script.name, script.id, script.created_by].some((value) => value.toLowerCase().includes(keyword));
+    const matchesLanguage = language === '' || script.language === language;
+    const matchesStatus = status === '' || script.status === status;
+    return matchesKeyword && matchesLanguage && matchesStatus;
+  }), [scripts, query.keyword, query.language, query.status]);
+
   const columns = [
     { title: '名称', dataIndex: 'name', key: 'name' },
     { title: '语言', dataIndex: 'language', key: 'language', render: (v: string) => v.toUpperCase() },
@@ -475,9 +487,14 @@ export function ScriptsPage() {
   return (
     <div>
       <div style={{ marginBottom: 16 }}>
-        <PermissionGate resource="scripts" action="manage"><Button type="primary" onClick={() => setModalOpen(true)}>新建脚本</Button></PermissionGate>
+        <Space wrap>
+          <PermissionGate resource="scripts" action="manage"><Button type="primary" onClick={() => setModalOpen(true)}>新建脚本</Button></PermissionGate>
+          <Input allowClear placeholder="搜索脚本/创建人" value={String(query.keyword ?? '')} onChange={(event) => setQuery({ keyword: event.target.value, page: 1 })} style={{ width: 220 }} />
+          <Select allowClear placeholder="语言" value={query.language || undefined} onChange={(value) => setQuery({ language: value ?? '', page: 1 })} style={{ width: 150 }} options={LANGUAGE_OPTIONS} />
+          <Select allowClear placeholder="状态" value={query.status || undefined} onChange={(value) => setQuery({ status: value ?? '', page: 1 })} style={{ width: 130 }} options={Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label }))} />
+        </Space>
       </div>
-      <Table rowKey="id" dataSource={scripts} columns={columns} loading={loading} pagination={false} />
+      <Table rowKey="id" dataSource={filteredScripts} columns={columns} loading={loading} pagination={{ pageSize: Number(query.page_size) || 10, current: Number(query.page) || 1, onChange: (page, pageSize) => setQuery({ page, page_size: pageSize }) }} />
 
       {/* Create Modal */}
       <Modal

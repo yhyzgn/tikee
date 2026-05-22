@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type { AuditLogQuery, AuditLogSummary } from '../api/client';
 import { exportAuditLogs, listAuditLogs } from '../api/client';
+import { useUrlQueryState } from '../hooks/useUrlQueryState';
 
 const ACTION_COLORS: Record<string, string> = {
   create: 'green',
@@ -24,7 +25,15 @@ export function AuditLogsPage() {
   const [logs, setLogs] = useState<AuditLogSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
-  const [query, setQuery] = useState<AuditLogQuery>({ page_size: PAGE_SIZE });
+  const { query: urlQuery, setQuery: setUrlQuery, resetQuery } = useUrlQueryState({ page_size: PAGE_SIZE, page_token: '', actor: '', action: '', resource_type: '', resource_id: '' });
+  const query = useMemo<AuditLogQuery>(() => ({
+    page_size: Number(urlQuery.page_size) || PAGE_SIZE,
+    page_token: urlQuery.page_token || undefined,
+    actor: urlQuery.actor || undefined,
+    action: urlQuery.action || undefined,
+    resource_type: urlQuery.resource_type || undefined,
+    resource_id: urlQuery.resource_id || undefined,
+  }), [urlQuery]);
 
   const fetchLogs = useCallback(async (nextQuery: AuditLogQuery = query) => {
     setLoading(true);
@@ -79,13 +88,17 @@ export function AuditLogsPage() {
     { title: 'IP', dataIndex: 'ip_address', key: 'ip', width: 150, render: (v: string | null) => v ?? '-' },
   ];
 
+  useEffect(() => {
+    form.setFieldsValue(query);
+  }, [form, query]);
+
   const applyFilters = (values: AuditLogQuery) => {
-    setQuery({ ...values, page_size: PAGE_SIZE, page_token: undefined });
+    setUrlQuery({ ...values, page_size: PAGE_SIZE, page_token: '' });
   };
 
   const resetFilters = () => {
     form.resetFields();
-    setQuery({ page_size: PAGE_SIZE });
+    resetQuery();
   };
 
   const exportCurrent = async () => {
@@ -157,7 +170,8 @@ export function AuditLogsPage() {
             pageSize: PAGE_SIZE,
             total,
             showSizeChanger: false,
-            onChange: (page) => setQuery((current) => ({ ...current, page_token: String((page - 1) * PAGE_SIZE) })),
+            current: query.page_token ? Math.floor(Number(query.page_token) / PAGE_SIZE) + 1 : 1,
+            onChange: (page) => setUrlQuery({ page_token: page > 1 ? String((page - 1) * PAGE_SIZE) : '' }),
           }}
           size="small"
         />

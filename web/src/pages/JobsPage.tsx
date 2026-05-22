@@ -1,13 +1,15 @@
 import { Button, Card, Dropdown, Form, Input, Select, Space, Switch, Table, Tag, Typography, message } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { createJob, listJobs, triggerJob, type CreateJobRequest, type JobSummary } from '../api/client';
 import { PermissionGate, useCan } from '../components/Permission';
+import { useUrlQueryState } from '../hooks/useUrlQueryState';
 
 export function JobsPage() {
   const canWriteJobs = useCan('jobs', 'write');
   const canExecuteInstances = useCan('instances', 'execute');
+  const { query, setQuery } = useUrlQueryState({ page: 1, page_size: 8, keyword: '', schedule_type: '' });
   const [jobs, setJobs] = useState<JobSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [form] = Form.useForm<CreateJobRequest>();
@@ -25,6 +27,14 @@ export function JobsPage() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  const filteredJobs = useMemo(() => jobs.filter((job) => {
+    const keyword = String(query.keyword ?? '').trim().toLowerCase();
+    const scheduleType = String(query.schedule_type ?? '').trim();
+    const matchesKeyword = keyword === '' || [job.name, job.namespace, job.app, job.processor_name ?? '', job.id].some((value) => value.toLowerCase().includes(keyword));
+    const matchesSchedule = scheduleType === '' || job.schedule_type === scheduleType;
+    return matchesKeyword && matchesSchedule;
+  }), [jobs, query.keyword, query.schedule_type]);
 
   const columns: ColumnsType<JobSummary> = [
     { title: 'Name', dataIndex: 'name' },
@@ -103,9 +113,9 @@ export function JobsPage() {
       <Card
         className="clean-card"
         title="任务列表"
-        extra={<Space><Button onClick={load}>刷新</Button></Space>}
+        extra={<Space><Input allowClear placeholder="搜索任务/Namespace/App" value={String(query.keyword ?? '')} onChange={(event) => setQuery({ keyword: event.target.value, page: 1 })} style={{ width: 220 }} /><Select allowClear placeholder="调度类型" value={query.schedule_type || undefined} onChange={(value) => setQuery({ schedule_type: value ?? '', page: 1 })} style={{ width: 130 }} options={[{ value: 'api' }, { value: 'cron' }, { value: 'fixed_rate' }]} /><Button onClick={load}>刷新</Button></Space>}
       >
-        <Table rowKey="id" loading={loading} columns={columns} dataSource={jobs} pagination={{ pageSize: 8 }} size="middle" />
+        <Table rowKey="id" loading={loading} columns={columns} dataSource={filteredJobs} pagination={{ pageSize: Number(query.page_size) || 8, current: Number(query.page) || 1, onChange: (page, pageSize) => setQuery({ page, page_size: pageSize }) }} size="middle" />
       </Card>
     </div>
   );

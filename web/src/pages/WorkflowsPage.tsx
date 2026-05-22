@@ -27,6 +27,7 @@ import {
   type WorkflowSummary,
 } from '../api/client';
 import { PermissionGate, useCan } from '../components/Permission';
+import { useUrlQueryState } from '../hooks/useUrlQueryState';
 import { useNavigate, useParams } from 'react-router-dom';
 
 const DEFAULT_WORKFLOW: WorkflowDefinition = {
@@ -613,6 +614,7 @@ function DagPreview({ definition, instance, jobs = [], editable = false, onChang
 export function WorkflowsPage() {
   const canManageWorkflows = useCan('workflows', 'manage');
   const canExecuteWorkflows = useCan('workflows', 'execute');
+  const { query, setQuery } = useUrlQueryState({ page: 1, page_size: 8, keyword: '', status: '' });
   const [items, setItems] = useState<WorkflowSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeWorkflow, setActiveWorkflow] = useState<WorkflowSummary | null>(null);
@@ -621,6 +623,20 @@ export function WorkflowsPage() {
   const [shards, setShards] = useState<WorkflowShardSummary[]>([]);
   const [expandedWorkflowId, setExpandedWorkflowId] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  const filteredItems = useMemo(() => items.filter((item) => {
+    const keyword = String(query.keyword ?? '').trim().toLowerCase();
+    const status = String(query.status ?? '').trim();
+    const matchesKeyword = keyword === '' || [item.name, item.id, item.created_by].some((value) => value.toLowerCase().includes(keyword));
+    const matchesStatus = status === '' || item.status === status;
+    return matchesKeyword && matchesStatus;
+  }), [items, query.keyword, query.status]);
+
+  const pagedItems = useMemo(() => {
+    const page = Number(query.page) || 1;
+    const pageSize = Number(query.page_size) || 8;
+    return filteredItems.slice((page - 1) * pageSize, page * pageSize);
+  }, [filteredItems, query.page, query.page_size]);
 
   const fetchItems = async () => {
     setLoading(true);
@@ -724,10 +740,11 @@ export function WorkflowsPage() {
         <div className="hero-panel__summary"><strong>{items.length}</strong><span>flows</span></div>
       </div>
 
-      <Card title="工作流列表" extra={<Space><PermissionGate resource="workflows" action="manage"><Button onClick={() => navigate('/workflows/new')} type="primary">新增工作流</Button></PermissionGate><Button onClick={fetchItems}>刷新</Button></Space>}>
+      <Card title="工作流列表" extra={<Space wrap><PermissionGate resource="workflows" action="manage"><Button onClick={() => navigate('/workflows/new')} type="primary">新增工作流</Button></PermissionGate><Input allowClear placeholder="搜索工作流" value={String(query.keyword ?? '')} onChange={(event) => setQuery({ keyword: event.target.value, page: 1 })} style={{ width: 200 }} /><Select allowClear placeholder="状态" value={query.status || undefined} onChange={(value) => setQuery({ status: value ?? '', page: 1 })} style={{ width: 130 }} options={[{ value: 'enabled' }, { value: 'disabled' }]} /><Button onClick={fetchItems}>刷新</Button></Space>}>
         <List
           loading={loading}
-          dataSource={items}
+          dataSource={pagedItems}
+          pagination={{ pageSize: Number(query.page_size) || 8, current: Number(query.page) || 1, total: filteredItems.length, onChange: (page, pageSize) => setQuery({ page, page_size: pageSize }) }}
           locale={{ emptyText: '暂无工作流' }}
           renderItem={(item) => (
             <div className="workflow-list-entry">

@@ -111,12 +111,25 @@ let authToken: string | null = readStoredToken();
 
 export class ApiClientError extends Error {
   readonly code: number;
+  readonly status: number;
 
-  constructor(code: number, message: string) {
+  constructor(code: number, message: string, status = 0) {
     super(message);
     this.name = 'ApiClientError';
     this.code = code;
+    this.status = status;
   }
+}
+
+export interface AuthErrorHandler {
+  onUnauthorized?: () => void;
+  onForbidden?: (message: string) => void;
+}
+
+let authErrorHandler: AuthErrorHandler | null = null;
+
+export function setAuthErrorHandler(handler: AuthErrorHandler | null): void {
+  authErrorHandler = handler;
 }
 
 export function getAuthToken(): string | null {
@@ -395,14 +408,21 @@ async function request<T>(path: string, init: SchedulerRequestInit = {}): Promis
   });
   const envelope = (await response.json()) as ApiResponse<T | null>;
 
+  if (response.status === 401) {
+    setAuthToken(null);
+    authErrorHandler?.onUnauthorized?.();
+  } else if (response.status === 403) {
+    authErrorHandler?.onForbidden?.(envelope.message);
+  }
+
   if (envelope.code !== 0) {
-    throw new ApiClientError(envelope.code, envelope.message);
+    throw new ApiClientError(envelope.code, envelope.message, response.status);
   }
   if (envelope.data === null) {
     if (allowNullData) {
       return null as T;
     }
-    throw new ApiClientError(-1, 'API returned null data for a non-empty operation');
+    throw new ApiClientError(-1, 'API returned null data for a non-empty operation', response.status);
   }
   return envelope.data;
 }

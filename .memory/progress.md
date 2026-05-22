@@ -419,3 +419,13 @@
 - Targeted verification so far: `cd web && bun run typecheck`.
 - Full verification passed for 064: `cargo fmt --all -- --check`; `cargo clippy --workspace --all-targets --all-features -- -D warnings`; `cargo test --workspace --all-features`; `cargo run -- --help`; `cd web && bun run typecheck`; `cd web && bun run build` (Vite chunk-size warning only).
 
+
+### 2026-05-22 Phase3 route meta, lazy loading, 401/403, URL query governance
+- Continued `.prompt/065-phase3-route-meta-lazy-401-403-url-governance.md` after Web dangerous action governance.
+- Added `web/src/routes.tsx` as route/menu/permission metadata source and rewired `AppShell` + route guards to consume it.
+- Converted routed pages to React lazy chunks with a shared `RouteFallback` without removing permission guards.
+- Added API auth error hooks: 401 clears token and redirects to login; 403 routes to a unified forbidden page while preserving envelope handling.
+- Added `useUrlQueryState` and persisted list filters/page state for audit logs, jobs, scripts, and workflows.
+- Added API client tests for 401/403 auth-error behavior.
+- Targeted verification so far: `cd web && bun run typecheck`; `cd web && bun test`.
+- Full verification passed for 065: `cargo fmt --all -- --check`; `cargo clippy --workspace --all-targets --all-features -- -D warnings`; `cargo test --workspace --all-features`; `cargo run -- --help`; `cd web && bun run typecheck`; `cd web && bun test`; `cd web && bun run build` (Vite chunk-size warning remains for Scripts/main chunks).

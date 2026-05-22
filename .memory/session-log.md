@@ -1037,3 +1037,10 @@ Git:
 - Targeted verification so far: `cd web && bun run typecheck`.
 - Full verification passed for 064: `cargo fmt --all -- --check`; `cargo clippy --workspace --all-targets --all-features -- -D warnings`; `cargo test --workspace --all-features`; `cargo run -- --help`; `cd web && bun run typecheck`; `cd web && bun run build` (Vite chunk-size warning only).
 
+
+### 2026-05-22 Phase3 route meta, lazy loading, 401/403, URL query governance
+- Started `.prompt/065-phase3-route-meta-lazy-401-403-url-governance.md`.
+- Implemented route metadata table, App/AppShell lazy-route wiring, shared route fallback/forbidden page, API auth error handler, URL query state hook, and query persistence on audit/jobs/scripts/workflows.
+- Updated design roadmap and created `.prompt/066-phase3-wasm-sandbox-processor-spike.md`.
+- Targeted verification so far: `cd web && bun run typecheck`; `cd web && bun test`.
+- Full verification passed for 065: `cargo fmt --all -- --check`; `cargo clippy --workspace --all-targets --all-features -- -D warnings`; `cargo test --workspace --all-features`; `cargo run -- --help`; `cd web && bun run typecheck`; `cd web && bun test`; `cd web && bun run build` (Vite chunk-size warning remains for Scripts/main chunks).

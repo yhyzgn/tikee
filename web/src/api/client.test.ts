@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 
-import { ApiClientError, createJob, listInstanceLogs, listJobs, login, setAuthToken, triggerJob } from './client';
+import { ApiClientError, createJob, getAuthToken, listInstanceLogs, listJobs, login, setAuthErrorHandler, setAuthToken, triggerJob } from './client';
 
 const originalFetch = globalThis.fetch;
 
@@ -11,6 +11,7 @@ function resetTokenStorage() {
 afterEach(() => {
   globalThis.fetch = originalFetch;
   resetTokenStorage();
+  setAuthErrorHandler(null);
 });
 
 describe('api client envelope handling', () => {
@@ -34,6 +35,40 @@ describe('api client envelope handling', () => {
     globalThis.fetch = mock(async () => new Response(JSON.stringify(body), { status: 400 })) as unknown as typeof fetch;
 
     await expect(listJobs()).rejects.toBeInstanceOf(ApiClientError);
+  });
+
+
+
+  test('clears token and notifies handler on 401 envelope', async () => {
+    setAuthToken('expired_token');
+    let unauthorized = false;
+    setAuthErrorHandler({ onUnauthorized: () => { unauthorized = true; } });
+    globalThis.fetch = mock(async () => new Response(JSON.stringify({
+      code: 40101,
+      message: 'unauthorized',
+      data: null,
+    }), { status: 401 })) as unknown as typeof fetch;
+
+    await expect(listJobs()).rejects.toMatchObject({ status: 401, code: 40101 });
+
+    expect(getAuthToken()).toBeNull();
+    expect(unauthorized).toBe(true);
+  });
+
+  test('notifies handler on 403 envelope without clearing token', async () => {
+    setAuthToken('valid_token');
+    let forbiddenMessage = '';
+    setAuthErrorHandler({ onForbidden: (message) => { forbiddenMessage = message; } });
+    globalThis.fetch = mock(async () => new Response(JSON.stringify({
+      code: 40301,
+      message: 'forbidden',
+      data: null,
+    }), { status: 403 })) as unknown as typeof fetch;
+
+    await expect(listJobs()).rejects.toMatchObject({ status: 403, code: 40301 });
+
+    expect(getAuthToken()).toBe('valid_token');
+    expect(forbiddenMessage).toBe('forbidden');
   });
 
   test('loads instance logs through the envelope', async () => {

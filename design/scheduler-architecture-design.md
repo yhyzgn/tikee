@@ -2180,7 +2180,7 @@ scheduler/
 - [ ] OIDC/SSO 集成
 - [ ] mTLS 传输加密
 - [x] Web 前端路由与导航治理基础（React Router v7、路由守卫、URL 持久化、菜单与路由对齐）
-  - [ ] 路由 meta、懒加载、统一 403/401 与 URL 查询参数治理
+  - [x] 路由 meta、懒加载、统一 403/401 与 URL 查询参数治理（`web/src/routes.tsx` 单一元信息源；页面 lazy chunks；API client 统一 401 清 token 跳登录、403 跳禁止页；审计/任务/脚本/工作流列表查询状态进入 URL）
 - [x] 审计日志骨架（`audit_logs` 表、Repository、HTTP API、关键写操作埋点）
   - [x] 审计分页与服务端过滤（actor/action/resource_type/resource_id + page_size/page_token + total）
   - [x] 审计 before/after、trace_id、失败结果基础（`audit_logs` 扩展 before/after/trace_id/result/failure_reason；API/Web 展示；无外键）

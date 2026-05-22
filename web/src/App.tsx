@@ -1,19 +1,29 @@
 import { ConfigProvider, theme } from 'antd';
+import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 
-import { logout, setAuthToken } from './api/client';
+import { logout, setAuthErrorHandler, setAuthToken } from './api/client';
 import { AppShell } from './components/AppShell';
 import { AuthGuard, RequirePermission } from './components/AuthGuard';
-import { Dashboard } from './pages/Dashboard';
-import { InstancesPage } from './pages/InstancesPage';
-import { JobsPage } from './pages/JobsPage';
-import { WorkflowEditorPage, WorkflowsPage } from './pages/WorkflowsPage';
-import { LoginPage } from './pages/LoginPage';
-import { AuditLogsPage } from './pages/AuditLogsPage';
-import { ScriptsPage } from './pages/ScriptsPage';
-import { UsersPage } from './pages/UsersPage';
-import { WorkersPage } from './pages/WorkersPage';
-import { Result, Button } from 'antd';
+import { ForbiddenPage } from './components/ForbiddenPage';
+import { RouteFallback } from './components/RouteFallback';
+import { ROUTE_META } from './routes';
+
+const Dashboard = lazy(() => import('./pages/Dashboard').then((module) => ({ default: module.Dashboard })));
+const InstancesPage = lazy(() => import('./pages/InstancesPage').then((module) => ({ default: module.InstancesPage })));
+const JobsPage = lazy(() => import('./pages/JobsPage').then((module) => ({ default: module.JobsPage })));
+const WorkflowEditorPage = lazy(() => import('./pages/WorkflowsPage').then((module) => ({ default: module.WorkflowEditorPage })));
+const WorkflowsPage = lazy(() => import('./pages/WorkflowsPage').then((module) => ({ default: module.WorkflowsPage })));
+const LoginPage = lazy(() => import('./pages/LoginPage').then((module) => ({ default: module.LoginPage })));
+const AuditLogsPage = lazy(() => import('./pages/AuditLogsPage').then((module) => ({ default: module.AuditLogsPage })));
+const ScriptsPage = lazy(() => import('./pages/ScriptsPage').then((module) => ({ default: module.ScriptsPage })));
+const UsersPage = lazy(() => import('./pages/UsersPage').then((module) => ({ default: module.UsersPage })));
+const WorkersPage = lazy(() => import('./pages/WorkersPage').then((module) => ({ default: module.WorkersPage })));
+
+function GuardedRoute({ route, children }: { route: { permission?: { resource: string; action: string } }; children: React.ReactNode }) {
+  if (!route.permission) return <>{children}</>;
+  return <RequirePermission resource={route.permission.resource} action={route.permission.action}>{children}</RequirePermission>;
+}
 
 function AppLayout() {
   const navigate = useNavigate();
@@ -24,34 +34,34 @@ function AppLayout() {
     navigate('/login', { replace: true });
   };
 
+  setAuthErrorHandler({
+    onUnauthorized: () => {
+      setAuthToken(null);
+      navigate('/login', { replace: true });
+    },
+    onForbidden: (message) => {
+      navigate('/forbidden', { replace: true, state: { message } });
+    },
+  });
+
   return (
     <AppShell onLogout={handleLogout}>
-      <Routes>
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/jobs" element={<JobsPage />} />
-        <Route path="/instances" element={<InstancesPage />} />
-        <Route path="/workflows" element={<RequirePermission resource="workflows" action="read"><WorkflowsPage /></RequirePermission>} />
-        <Route path="/workflows/new" element={<RequirePermission resource="workflows" action="manage"><WorkflowEditorPage /></RequirePermission>} />
-        <Route path="/workflows/:id/edit" element={<RequirePermission resource="workflows" action="manage"><WorkflowEditorPage /></RequirePermission>} />
-        <Route path="/workers" element={<RequirePermission resource="workers" action="read"><WorkersPage /></RequirePermission>} />
-        <Route path="/users" element={<RequirePermission resource="users" action="read"><UsersPage /></RequirePermission>} />
-        <Route path="/scripts" element={<RequirePermission resource="scripts" action="read"><ScriptsPage /></RequirePermission>} />
-        <Route path="/audit" element={<RequirePermission resource="audit" action="read"><AuditLogsPage /></RequirePermission>} />
-        <Route path="/forbidden" element={<ForbiddenPage />} />
-      </Routes>
+      <Suspense fallback={<RouteFallback />}>
+        <Routes>
+          <Route path={ROUTE_META.dashboard.path} element={<Dashboard />} />
+          <Route path={ROUTE_META.jobs.path} element={<JobsPage />} />
+          <Route path={ROUTE_META.instances.path} element={<InstancesPage />} />
+          <Route path={ROUTE_META.workflows.path} element={<GuardedRoute route={ROUTE_META.workflows}><WorkflowsPage /></GuardedRoute>} />
+          <Route path={ROUTE_META.workflowNew.path} element={<GuardedRoute route={ROUTE_META.workflowNew}><WorkflowEditorPage /></GuardedRoute>} />
+          <Route path={ROUTE_META.workflowEdit.path} element={<GuardedRoute route={ROUTE_META.workflowEdit}><WorkflowEditorPage /></GuardedRoute>} />
+          <Route path={ROUTE_META.workers.path} element={<GuardedRoute route={ROUTE_META.workers}><WorkersPage /></GuardedRoute>} />
+          <Route path={ROUTE_META.users.path} element={<GuardedRoute route={ROUTE_META.users}><UsersPage /></GuardedRoute>} />
+          <Route path={ROUTE_META.scripts.path} element={<GuardedRoute route={ROUTE_META.scripts}><ScriptsPage /></GuardedRoute>} />
+          <Route path={ROUTE_META.audit.path} element={<GuardedRoute route={ROUTE_META.audit}><AuditLogsPage /></GuardedRoute>} />
+          <Route path="/forbidden" element={<ForbiddenPage />} />
+        </Routes>
+      </Suspense>
     </AppShell>
-  );
-}
-
-function ForbiddenPage() {
-  const navigate = useNavigate();
-  return (
-    <Result
-      status="403"
-      title="403"
-      subTitle="当前账号没有访问该功能的权限"
-      extra={<Button type="primary" onClick={() => navigate('/dashboard', { replace: true })}>返回总览</Button>}
-    />
   );
 }
 
@@ -70,15 +80,17 @@ export function App() {
         },
       }}
     >
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route element={<AuthGuard />}>
-          <Route element={<AppLayout />}>
-            <Route index element={<Navigate to="/dashboard" replace />} />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Suspense fallback={<RouteFallback />}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route element={<AuthGuard />}>
+            <Route element={<AppLayout />}>
+              <Route index element={<Navigate to="/dashboard" replace />} />
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            </Route>
           </Route>
-        </Route>
-      </Routes>
+        </Routes>
+      </Suspense>
     </ConfigProvider>
   );
 }
