@@ -581,6 +581,95 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn raft_append_entries_internal_token_bypasses_human_session_only_for_transport() {
+        let db = connect_and_migrate("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("test storage should initialize: {error}"));
+        let cluster = coordinator_from_config_with_storage(
+            &ClusterConfig {
+                mode: ClusterModeConfig::Raft,
+                node_id: "scheduler-0".to_owned(),
+                peers: vec![
+                    ClusterPeerConfig {
+                        node_id: "scheduler-0".to_owned(),
+                        endpoint: "http://scheduler-0.scheduler-headless:9998".to_owned(),
+                    },
+                    ClusterPeerConfig {
+                        node_id: "scheduler-1".to_owned(),
+                        endpoint: "http://scheduler-1.scheduler-headless:9998".to_owned(),
+                    },
+                ],
+                transport_token: Some("secret-raft-token".to_owned()),
+            },
+            &RaftRepository::new(db.clone()),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("raft coordinator should start: {error}"));
+        let app = router_with_state(
+            AppState::new(
+                JobRepository::new(db.clone()),
+                JobInstanceRepository::new(db.clone()),
+                JobInstanceLogRepository::new(db.clone()),
+                JobInstanceAttemptRepository::new(db.clone()),
+                UserRepository::new(db.clone()),
+                ScriptRepository::new(db.clone()),
+                WorkflowRepository::new(db.clone()),
+                AuditLogRepository::new(db),
+                crate::tunnel::WorkerRegistry::default(),
+                cluster,
+            )
+            .with_raft_transport_token(Some("secret-raft-token".to_owned())),
+        );
+        let body = r#"{"from":1,"to":2,"term":1,"message_type":"MsgHeartbeat","index":0,"log_term":0,"commit":0,"snapshot_index":null,"snapshot_term":null,"entries":[],"context":null,"reject":false,"reject_hint":null,"leader_fencing_token":null}"#;
+
+        let accepted = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/raft/append-entries")
+                    .header("content-type", "application/json")
+                    .header("x-scheduler-raft-token", "secret-raft-token")
+                    .body(Body::from(body))
+                    .unwrap_or_else(|error| panic!("request should build: {error}")),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("router should respond: {error}"));
+        assert!(accepted.status().is_success());
+        let accepted_body = axum::body::to_bytes(accepted.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let accepted_json: Value = serde_json::from_slice(&accepted_body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+        assert_eq!(accepted_json["code"], 0);
+        assert_eq!(accepted_json["data"]["accepted"], true);
+        assert_eq!(accepted_json["data"]["local_role"], "follower");
+        assert_eq!(accepted_json["data"]["leader_fencing_token"], Value::Null);
+
+        let rejected = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/raft/append-entries")
+                    .header("content-type", "application/json")
+                    .header("x-scheduler-raft-token", "wrong-token")
+                    .body(Body::from(body))
+                    .unwrap_or_else(|error| panic!("request should build: {error}")),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("router should respond: {error}"));
+        assert_eq!(rejected.status(), axum::http::StatusCode::UNAUTHORIZED);
+        let rejected_body = axum::body::to_bytes(rejected.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let rejected_json: Value = serde_json::from_slice(&rejected_body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+        assert_ne!(rejected_json["code"], 0);
+        assert!(rejected_json.get("data").is_some());
+    }
+
+    #[tokio::test]
     async fn raft_membership_proposal_requires_real_leader_fencing() {
         let app = router().await;
         let response = app

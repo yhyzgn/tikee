@@ -371,3 +371,12 @@
 - Next prompt `.prompt/060-phase2-raft-rs-http-transport-smoke.md` keeps the remaining HTTP/Docker bridge transport smoke as the next Phase2 slice.
 - Targeted verification so far: `cargo fmt --all`; `cargo test -p scheduler-server raft_runtime_restore --all-features`; `cargo test -p scheduler-server raft --all-features`.
 - Full verification passed for 059: `cargo fmt --all -- --check`; `cargo clippy --workspace --all-targets --all-features -- -D warnings`; `cargo test --workspace --all-features`; `cargo run -- --help`; `cd web && bun run typecheck && bun run build` (Vite chunk-size warning only).
+
+### 2026-05-22 Phase2 raft-rs HTTP transport token smoke
+- Continued `.prompt/060-phase2-raft-rs-http-transport-smoke.md` after 059 push.
+- Added HTTP route smoke coverage for `/api/v1/raft/append-entries` with `x-scheduler-raft-token`: valid internal token bypasses human session auth and enqueues into the raft runtime inbox; invalid token falls back to normal auth and returns an unauthorized standard envelope.
+- The test keeps the safety semantics explicit: `accepted=true` means local runtime queue acceptance only, local role remains follower, and no leader fencing token/scheduling authority is granted.
+- Updated design roadmap to split completed route-level smoke from the remaining Docker bridge/K8s Service multi-container E2E script.
+- Next prompt `.prompt/061-phase2-raft-rs-docker-bridge-e2e-script.md` targets bridge-network script verification without host networking.
+- Targeted verification so far: `cargo fmt --all`; `cargo test -p scheduler-server raft_append_entries_internal_token --all-features`.
+- Full verification passed for 060: `cargo fmt --all -- --check`; `cargo clippy --workspace --all-targets --all-features -- -D warnings`; `cargo test --workspace --all-features`; `cargo run -- --help`; `cd web && bun run typecheck && bun run build` (Vite chunk-size warning only).

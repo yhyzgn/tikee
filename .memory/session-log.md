@@ -999,3 +999,10 @@ Git:
 - Added `.prompt/060-phase2-raft-rs-http-transport-smoke.md` for the next transport E2E/smoke slice.
 - Targeted verification so far: `cargo fmt --all`; `cargo test -p scheduler-server raft_runtime_restore --all-features`; `cargo test -p scheduler-server raft --all-features`.
 - Full verification passed for 059: `cargo fmt --all -- --check`; `cargo clippy --workspace --all-targets --all-features -- -D warnings`; `cargo test --workspace --all-features`; `cargo run -- --help`; `cd web && bun run typecheck && bun run build` (Vite chunk-size warning only).
+
+### 2026-05-22 Phase2 raft-rs HTTP transport token smoke
+- Resumed into `.prompt/060-phase2-raft-rs-http-transport-smoke.md`.
+- Added `http::tests::raft_append_entries_internal_token_bypasses_human_session_only_for_transport` in `crates/scheduler-server/src/http/mod.rs`.
+- Created `.prompt/061-phase2-raft-rs-docker-bridge-e2e-script.md` for the remaining no-host-network Docker bridge E2E work.
+- Targeted verification so far: `cargo fmt --all`; `cargo test -p scheduler-server raft_append_entries_internal_token --all-features`.
+- Full verification passed for 060: `cargo fmt --all -- --check`; `cargo clippy --workspace --all-targets --all-features -- -D warnings`; `cargo test --workspace --all-features`; `cargo run -- --help`; `cd web && bun run typecheck && bun run build` (Vite chunk-size warning only).
