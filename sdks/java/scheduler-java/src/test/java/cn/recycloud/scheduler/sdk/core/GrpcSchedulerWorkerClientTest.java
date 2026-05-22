@@ -171,6 +171,65 @@ class GrpcSchedulerWorkerClientTest {
         }
     }
 
+    @Test
+    void scriptBoundDispatchReportsUnsupportedWithoutInvokingProcessor() throws Exception {
+        String serverName = "scheduler-worker-test-" + UUID.randomUUID();
+        RecordingTunnelService service = new RecordingTunnelService(Worker.DispatchTask.newBuilder()
+                .setJobId("job-script")
+                .setProcessorName("script:script_shell")
+                .setInstanceId("instance-script")
+                .setProcessorBinding(Worker.TaskProcessorBinding.newBuilder()
+                        .setScript(Worker.ScriptProcessorBinding.newBuilder()
+                                .setScriptId("script_shell")
+                                .setVersion("1.0.0")
+                                .setLanguage("shell")
+                                .setContent(com.google.protobuf.ByteString.copyFromUtf8("exit 0"))
+                                .setVersionId("sv_1")
+                                .setVersionNumber(1)
+                                .setContentSha256("digest")
+                                .setTimeoutMs(1000)
+                                .setMaxMemoryBytes(1048576)
+                                .setMaxOutputBytes(1048576)
+                                .build())
+                        .build())
+                .build());
+        Server server = InProcessServerBuilder.forName(serverName)
+                .directExecutor()
+                .addService(service)
+                .build()
+                .start();
+        ManagedChannel channel = InProcessChannelBuilder.forName(serverName).directExecutor().build();
+        try {
+            AtomicReference<TaskContext> observed = new AtomicReference<>();
+            GrpcSchedulerWorkerClient client = new GrpcSchedulerWorkerClient(
+                    channel,
+                    false,
+                    new WorkerRegistration("java-instance-script", "default", "billing", "local", "local", List.of(), Map.of()),
+                    context -> {
+                        observed.set(context);
+                        return TaskOutcome.succeeded();
+                    },
+                    Duration.ofSeconds(60),
+                    Duration.ofSeconds(2),
+                    ignored -> {});
+
+            client.start();
+            service.awaitResult();
+            client.close();
+
+            assertNull(observed.get(), "unsupported script binding must not invoke the Java processor");
+            Worker.TaskResult result = service.result.get();
+            assertEquals("assigned-java-worker", result.getWorkerId());
+            assertEquals("instance-script", result.getInstanceId());
+            assertTrue(!result.getSuccess());
+            assertTrue(result.getMessage().contains("script"));
+            assertTrue(result.getMessage().contains("not supported"));
+        } finally {
+            channel.shutdownNow();
+            server.shutdownNow();
+        }
+    }
+
     private static final class RecordingTunnelService extends WorkerTunnelServiceGrpc.WorkerTunnelServiceImplBase {
         private final List<Worker.WorkerMessage> messages = new ArrayList<>();
         private final Worker.DispatchTask dispatchTask;

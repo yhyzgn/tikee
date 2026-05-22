@@ -1116,3 +1116,11 @@ Git:
 - The runner requires immutable released script version metadata and content digest verification before spawning a child process; it denies network/filesystem/secrets through `ScriptRunnerPolicy` and uses stdin rather than writing script files.
 - Added timeout, output cap, unavailable executable, digest mismatch, missing release snapshot, and successful shell smoke tests.
 - Verification passed across Rust workspace, Web build/test, Rust SDK native+wasm+clippy, and Java Gradle tests.
+
+### 2026-05-22 — Phase 074 non-WASM script protocol binding
+- Finished the handoff slice for non-WASM dynamic script dispatch.
+- Added protocol-level `ScriptProcessorBinding` and synchronized server/root/Rust SDK/Java SDK proto files.
+- Dispatcher binds only approved released immutable script snapshots, validates the released snapshot policy, and routes only to workers advertising `script:<language>`, `script:*`, or `*` capability.
+- Rust SDK now has explicit runner registry routing for script bindings; Java SDK refuses script bindings until Java runner support is intentionally designed.
+- Updated architecture roadmap and prepared `.prompt/075-script-runner-container-and-execution-governance.md`.
+- Verification passed across Rust workspace, scheduler-proto, dispatcher tests, Rust SDK native+wasm+clippy, Web typecheck/test/build, and Java Gradle tests.

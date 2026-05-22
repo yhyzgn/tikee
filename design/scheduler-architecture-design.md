@@ -596,7 +596,7 @@ Starter 需要提供：
 
 1. **Server 不执行用户代码**：Server 只保存脚本定义、版本、审批状态和策略，实际执行由匹配 Worker Pool 完成。
 2. **脚本版本化、发布指针与签名**：脚本内容按 content hash 存储；每次更新自动产生新版本记录（content、policy 变更均产生版本）；`scripts.released_version_id/released_version_number` 只作为软关联发布指针指向不可变 `script_versions` 快照，发布/回滚只移动指针不改历史；Worker 调度必须绑定发布快照的 bytes + SHA-256，禁止从可变 draft/current content 执行。支持任意两个版本间的 diff 对比（content diff、policy diff）；生产环境脚本必须经过审批、签名或可信发布流水线。
-3. **最小权限 capability**：脚本声明所需能力，例如 `network.egress`、`fs.read:/data/input`、`secret:db-readonly`；未声明能力默认不可用。
+3. **最小权限 capability**：脚本声明所需能力，例如 `network.egress`、`fs.read:/data/input`、`secret:db-readonly`；未声明能力默认不可用。Worker 注册时必须声明可执行语言能力，WASM 使用 `script:wasm`，非 WASM 脚本使用 `script:<language>`（例如 `script:shell`、`script:python`、`script:node`、`script:powershell`、`script:rhai`）；仅受控 Worker Pool 可使用 `script:*` 或 `*` 作为显式兜底能力。
 4. **资源限制**：每次执行强制 timeout、CPU quota、内存上限、输出大小、日志速率、最大并发和重试预算。
 5. **文件系统隔离**：默认临时工作目录；只读挂载输入；输出通过受控 artifact API 写入；禁止访问宿主敏感路径。
 6. **网络隔离**：默认禁止出站网络；允许时必须经过 URL policy、DNS pinning、内网/metadata 地址阻断、TLS 校验和请求审计。
@@ -609,8 +609,9 @@ Starter 需要提供：
 ```text
 Job Definition
   -> Script Processor(language, code_ref, runtime_policy)
-  -> Scheduler 选择具备对应 runtime 的 Worker Pool
-  -> Worker 接收/拉取 released script_version 快照并校验签名/hash
+  -> Scheduler 选择具备对应 runtime capability 的 Worker Pool（script:<language>/script:wasm）
+  -> Server 将 released script_version 快照 bytes + SHA-256 + version metadata 绑定到 Worker Tunnel 任务
+  -> Worker 校验签名/hash 后选择显式注册的 Runner
   -> Sandbox Runner 创建隔离环境
   -> 执行脚本并流式上报日志/指标/artifact
   -> 清理临时目录并提交审计事件
@@ -2201,7 +2202,8 @@ scheduler/
   - [ ] 完整审批流状态机（多级审批、签名、生产发布门禁）
   - [x] 脚本编辑器语法高亮（CodeMirror 6 Shell/Python/Node）
   - [x] Worker 侧非 WASM Runner 抽象（072：Rust SDK `ScriptRunner` / `ScriptRunnerTask` / `ScriptRunnerPolicy`，Shell/Python/Node/PowerShell/Rhai 类型识别；默认 Unsupported runner 只验证策略并拒绝执行，等待具体沙箱实现）
-  - [x] Worker 侧沙箱执行器首个实现（073：Rust SDK `LocalSubprocessScriptRunner`，显式 opt-in，本地 stdin 子进程边界；校验 released version_id/version_number、content SHA-256、默认拒绝网络/文件/Secret，支持 timeout/output cap/runtime missing 测试；容器 runner 与协议接入后续继续）
+  - [x] Worker 侧沙箱执行器首个实现（073：Rust SDK `LocalSubprocessScriptRunner`，显式 opt-in，本地 stdin 子进程边界；校验 released version_id/version_number、content SHA-256、默认拒绝网络/文件/Secret，支持 timeout/output cap/runtime missing 测试；容器 runner 后续继续）
+  - [x] 非 WASM 脚本 Worker Tunnel 协议绑定与能力路由（074：`ScriptProcessorBinding` 传递 released `script_versions` 快照 bytes/SHA-256/version/policy；dispatcher fail-closed 并按 `script:<language>`、`script:*`、`*` 过滤 worker；Rust SDK 仅在显式注册对应 `ScriptRunner` 后执行，Java SDK 明确拒绝暂不支持的脚本绑定；Web 展示语言所需 worker capability）
 - [ ] 脚本策略引擎（能力声明、审批、资源限制、网络/文件策略）
   - [x] 默认拒绝策略元数据与不可变快照（072：`ScriptExecutionPolicy` 覆盖 resources/network/filesystem/secrets/env；`scripts.policy_json` 和 `script_versions.policy_json` 保存策略快照；HTTP create/update 拒绝网络/文件/Secret 危险能力；Web 可编辑资源/env 白名单并展示策略 diff）
   - [ ] 策略审批、签名、URL/File/Secret grant 与生产发布门禁

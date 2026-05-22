@@ -3,10 +3,11 @@
 use std::time::Duration;
 
 use scheduler_core::{
-    InstanceStatus, ScriptLanguage, ScriptStatus, WasmCapabilities, WasmProcessorSpec,
+    InstanceStatus, ScriptExecutionPolicy, ScriptLanguage, ScriptStatus, WasmProcessorSpec,
 };
 use scheduler_proto::worker::v1::{
-    DispatchTask, TaskProcessorBinding, WasmProcessorBinding, task_processor_binding,
+    DispatchTask, ScriptProcessorBinding, TaskProcessorBinding, WasmProcessorBinding,
+    task_processor_binding,
 };
 use scheduler_storage::{
     JobInstanceAttemptRepository, JobInstanceRepository, JobRepository, ScriptRepository,
@@ -164,8 +165,13 @@ async fn dispatch_single_instances(
             continue;
         };
 
+        let required_capability = required_task_capability(&task);
         let eligible_workers = registry
-            .find_eligible_workers(&job.namespace, &job.app)
+            .find_eligible_workers_with_capability(
+                &job.namespace,
+                &job.app,
+                required_capability.as_deref(),
+            )
             .await;
         if let Some(worker_id) = eligible_workers.first()
             && let Some(worker_id) = registry.dispatch_to_worker(worker_id, task).await
@@ -220,6 +226,14 @@ async fn dispatch_broadcast_attempts(
             continue;
         };
 
+        let required_capability = required_task_capability(&task);
+        if !registry
+            .worker_supports_capability(&attempt.worker_id, required_capability.as_deref())
+            .await
+        {
+            continue;
+        }
+
         if let Some(worker_id) = registry.dispatch_to_worker(&attempt.worker_id, task).await {
             attempts
                 .update_status(
@@ -245,23 +259,38 @@ async fn build_dispatch_task(
     processor_name: String,
 ) -> Result<Option<DispatchTask>, scheduler_storage::DbErr> {
     let processor_binding = if let Some(script_id) = processor_name.strip_prefix("script:") {
-        match scripts.get(script_id).await? {
-            Some(script) if wasm_script_is_dispatchable(&script) => {
-                let Some(version_number) = script.released_version_number else {
-                    warn!(script_id = %script.id, "approved wasm script has no released version pointer; dispatch remains pending");
-                    return Ok(None);
-                };
-                let Some(version) = scripts
-                    .versions()
-                    .get_version_by_number(&script.id, version_number)
-                    .await?
-                else {
-                    warn!(script_id = %script.id, version_number, "released wasm script version is missing; dispatch remains pending");
-                    return Ok(None);
-                };
-                Some(Box::new(wasm_processor_binding(&script, &version)))
-            }
-            _ => None,
+        let Some(script) = scripts.get(script_id).await? else {
+            warn!(%script_id, "script processor binding references missing script; dispatch remains pending");
+            return Ok(None);
+        };
+        if !script_is_dispatchable(&script) {
+            warn!(script_id = %script.id, language = %script.language, status = %script.status, "script is not dispatchable; dispatch remains pending");
+            return Ok(None);
+        }
+        let Some(version_number) = script.released_version_number else {
+            warn!(script_id = %script.id, "approved script has no released version pointer; dispatch remains pending");
+            return Ok(None);
+        };
+        let Some(version) = scripts
+            .versions()
+            .get_version_by_number(&script.id, version_number)
+            .await?
+        else {
+            warn!(script_id = %script.id, version_number, "released script version is missing; dispatch remains pending");
+            return Ok(None);
+        };
+        let Some(language) = parse_script_language(&version.language) else {
+            warn!(script_id = %script.id, language = %version.language, "released script version has unsupported language; dispatch remains pending");
+            return Ok(None);
+        };
+        if !script_version_is_dispatchable(&version) {
+            warn!(script_id = %script.id, version_number, language = %version.language, "released script version policy is not dispatchable; dispatch remains pending");
+            return Ok(None);
+        }
+        if language == ScriptLanguage::Wasm {
+            Some(Box::new(wasm_processor_binding(&script, &version)))
+        } else {
+            Some(Box::new(script_processor_binding(&script, &version)))
         }
     } else {
         None
@@ -276,10 +305,66 @@ async fn build_dispatch_task(
     }))
 }
 
-fn wasm_script_is_dispatchable(script: &ScriptSummary) -> bool {
-    script.language == ScriptLanguage::Wasm.as_str()
-        && script.status == ScriptStatus::Approved.as_str()
-        && script_to_wasm_spec(script).validate().is_ok()
+fn required_task_capability(task: &DispatchTask) -> Option<String> {
+    let binding = task.processor_binding.as_ref()?;
+    match binding.kind.as_ref()? {
+        task_processor_binding::Kind::Wasm(_) => Some("script:wasm".to_owned()),
+        task_processor_binding::Kind::Script(script) => Some(format!("script:{}", script.language)),
+    }
+}
+
+fn script_is_dispatchable(script: &ScriptSummary) -> bool {
+    script.status == ScriptStatus::Approved.as_str()
+        && parse_script_language(&script.language).is_some()
+}
+
+fn script_version_is_dispatchable(version: &ScriptVersionSummary) -> bool {
+    parse_script_language(&version.language).is_some_and(|language| match language {
+        ScriptLanguage::Wasm => script_version_to_wasm_spec(version).validate().is_ok(),
+        ScriptLanguage::Shell
+        | ScriptLanguage::Python
+        | ScriptLanguage::Node
+        | ScriptLanguage::PowerShell
+        | ScriptLanguage::Rhai => script_policy(version.policy.clone())
+            .validate_default_deny()
+            .is_ok(),
+    })
+}
+
+fn parse_script_language(language: &str) -> Option<ScriptLanguage> {
+    language.parse::<ScriptLanguage>().ok()
+}
+
+fn script_processor_binding(
+    script: &ScriptSummary,
+    version: &ScriptVersionSummary,
+) -> TaskProcessorBinding {
+    let policy = script_policy(version.policy.clone());
+    TaskProcessorBinding {
+        kind: Some(task_processor_binding::Kind::Script(
+            ScriptProcessorBinding {
+                script_id: script.id.clone(),
+                version: script.version.clone(),
+                language: version.language.clone(),
+                content: version.content.as_bytes().to_vec(),
+                version_id: version.id.clone(),
+                version_number: u64::try_from(version.version_number).unwrap_or_default(),
+                content_sha256: version.content_sha256.clone(),
+                timeout_ms: policy.resources.timeout_ms,
+                max_memory_bytes: policy.resources.max_memory_bytes,
+                max_output_bytes: policy.resources.max_output_bytes,
+                allow_network: policy.network.enabled,
+                allowed_env_vars: policy.env_vars,
+                read_only_paths: policy.filesystem.read_only_paths,
+                writable_paths: policy.filesystem.writable_paths,
+                secret_refs: policy.secrets.refs,
+            },
+        )),
+    }
+}
+
+fn script_policy(value: serde_json::Value) -> ScriptExecutionPolicy {
+    serde_json::from_value(value).unwrap_or_default()
 }
 
 fn wasm_processor_binding(
@@ -326,28 +411,6 @@ fn script_version_to_wasm_spec(version: &ScriptVersionSummary) -> WasmProcessorS
     spec
 }
 
-fn script_to_wasm_spec(script: &ScriptSummary) -> WasmProcessorSpec {
-    let mut spec = WasmProcessorSpec::default();
-    spec.resources.timeout_ms = script
-        .timeout_seconds
-        .and_then(|value| u64::try_from(value).ok())
-        .filter(|value| *value > 0)
-        .map_or(spec.resources.timeout_ms, |seconds| {
-            seconds.saturating_mul(1000)
-        });
-    spec.resources.max_memory_bytes = script
-        .max_memory_bytes
-        .and_then(|value| u64::try_from(value).ok())
-        .filter(|value| *value > 0)
-        .unwrap_or(spec.resources.max_memory_bytes);
-    spec.capabilities = WasmCapabilities {
-        network: script.allow_network,
-        preopened_dirs: Vec::new(),
-        env_vars: script.allowed_env_vars.clone().unwrap_or_default(),
-    };
-    spec
-}
-
 async fn resolve_processor_name(
     workflows: &WorkflowRepository,
     instance_id: &str,
@@ -377,13 +440,14 @@ mod tests {
     use scheduler_proto::worker::v1::{RegisterWorker, server_message, task_processor_binding};
     use scheduler_storage::{
         CreateJob, CreateJobInstance, JobInstanceAttemptRepository, JobInstanceRepository,
-        JobRepository, ScriptRepository, ScriptSummary, WorkflowRepository, connect_and_migrate,
+        JobRepository, ScriptRepository, ScriptSummary, ScriptVersionSummary, WorkflowRepository,
+        connect_and_migrate,
     };
     use tokio::sync::mpsc;
 
     use super::{
         WorkerRegistry, build_dispatch_task, dispatch_once, dispatch_once_if_owner,
-        wasm_script_is_dispatchable,
+        script_is_dispatchable, script_version_is_dispatchable,
     };
 
     #[tokio::test]
@@ -792,7 +856,7 @@ mod tests {
                     namespace: "default".to_owned(),
                     cluster: "local".to_owned(),
                     region: "local".to_owned(),
-                    capabilities: Vec::new(),
+                    capabilities: vec!["script:wasm".to_owned()],
                     labels: HashMap::default(),
                 },
                 tx,
@@ -847,6 +911,73 @@ mod tests {
                 }
             }
             other => panic!("unexpected server message: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn dispatch_includes_non_wasm_script_binding_only_for_released_safe_script() {
+        let db = connect_and_migrate("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("test storage should initialize: {error}"));
+        let scripts = ScriptRepository::new(db);
+
+        let script = scripts
+            .create_script(scheduler_storage::CreateScript {
+                name: "shell echo".to_owned(),
+                language: "shell".to_owned(),
+                version: "1.0.0".to_owned(),
+                content: "printf ok".to_owned(),
+                created_by: "tester".to_owned(),
+                timeout_seconds: Some(5),
+                max_memory_bytes: Some(1024 * 1024),
+                allow_network: false,
+                allowed_env_vars: None,
+                policy_json: Some(r#"{"resources":{"timeout_ms":7000,"max_memory_bytes":33554432,"max_output_bytes":4096},"network":{"enabled":false,"allowed_hosts":[]},"filesystem":{"read_only_paths":[],"writable_paths":[]},"secrets":{"refs":[]},"env_vars":["SAFE_ENV"]}"#.to_owned()),
+            })
+            .await
+            .unwrap_or_else(|error| panic!("script should be created: {error}"));
+        let version = scripts
+            .versions()
+            .get_version_by_number(&script.id, 1)
+            .await
+            .unwrap_or_else(|error| panic!("script version should load: {error}"))
+            .unwrap_or_else(|| panic!("script version should exist"));
+        let script = scripts
+            .publish_version(&script.id, version.version_number)
+            .await
+            .unwrap_or_else(|error| panic!("script should publish: {error}"))
+            .unwrap_or_else(|| panic!("script should exist"));
+
+        let task = build_dispatch_task(
+            &scripts,
+            "instance-shell".to_owned(),
+            "job-shell".to_owned(),
+            format!("script:{}", script.id),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("task build should not error: {error}"))
+        .unwrap_or_else(|| panic!("released safe script should dispatch"));
+
+        let binding = task
+            .processor_binding
+            .unwrap_or_else(|| panic!("script binding expected"));
+        match binding.kind {
+            Some(task_processor_binding::Kind::Script(script_binding)) => {
+                assert_eq!(script_binding.script_id, script.id);
+                assert_eq!(script_binding.language, "shell");
+                assert_eq!(script_binding.content, version.content.as_bytes());
+                assert_eq!(script_binding.version_id, version.id);
+                assert_eq!(script_binding.content_sha256, version.content_sha256);
+                assert_eq!(script_binding.timeout_ms, 7_000);
+                assert_eq!(script_binding.max_memory_bytes, 33_554_432);
+                assert_eq!(script_binding.max_output_bytes, 4_096);
+                assert!(!script_binding.allow_network);
+                assert_eq!(script_binding.allowed_env_vars, vec!["SAFE_ENV"]);
+                assert!(script_binding.read_only_paths.is_empty());
+                assert!(script_binding.writable_paths.is_empty());
+                assert!(script_binding.secret_refs.is_empty());
+            }
+            other => panic!("unexpected binding: {other:?}"),
         }
     }
 
@@ -932,12 +1063,33 @@ mod tests {
             created_at: "now".to_owned(),
             updated_at: "now".to_owned(),
         };
-        assert!(!wasm_script_is_dispatchable(&script));
+        assert!(!script_is_dispatchable(&script));
 
         script.status = "approved".to_owned();
-        assert!(wasm_script_is_dispatchable(&script));
+        assert!(script_is_dispatchable(&script));
 
-        script.allow_network = true;
-        assert!(!wasm_script_is_dispatchable(&script));
+        script.language = "unknown".to_owned();
+        assert!(!script_is_dispatchable(&script));
+
+        let mut version = ScriptVersionSummary {
+            id: "version_1".to_owned(),
+            script_id: script.id.clone(),
+            version_number: 1,
+            content: "module".to_owned(),
+            content_sha256: script.content_sha256.clone(),
+            language: "wasm".to_owned(),
+            status: "draft".to_owned(),
+            timeout_seconds: Some(1),
+            max_memory_bytes: Some(1024),
+            allow_network: false,
+            allowed_env_vars: None,
+            policy: script.policy,
+            created_by: "tester".to_owned(),
+            created_at: "now".to_owned(),
+        };
+        assert!(script_version_is_dispatchable(&version));
+
+        version.allow_network = true;
+        assert!(!script_version_is_dispatchable(&version));
     }
 }

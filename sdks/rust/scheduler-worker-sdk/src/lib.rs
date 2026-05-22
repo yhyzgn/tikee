@@ -25,8 +25,9 @@ pub mod proto {
 }
 
 use crate::proto::worker::v1::{
-    DispatchTask, Heartbeat, Ping, RegisterWorker, ServerMessage, TaskLog, TaskResult,
-    WorkerMessage, WorkerRegistered, server_message, task_processor_binding, worker_message,
+    DispatchTask, Heartbeat, Ping, RegisterWorker, ScriptProcessorBinding, ServerMessage, TaskLog,
+    TaskResult, WorkerMessage, WorkerRegistered, server_message, task_processor_binding,
+    worker_message,
     worker_tunnel_service_client::WorkerTunnelServiceClient,
 };
 use async_trait::async_trait;
@@ -190,10 +191,29 @@ impl WorkerSession {
     where
         P: TaskProcessor,
     {
+        self.process_next_with_script_runners(processor, &ScriptRunnerRegistry::default())
+            .await
+    }
+
+    /// Wait for one dispatched task, run dynamic script bindings through explicitly registered
+    /// script runners, and report the result.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the tunnel closes, the scheduler returns a gRPC error,
+    /// or the result cannot be sent back.
+    pub async fn process_next_with_script_runners<P>(
+        &mut self,
+        processor: &P,
+        script_runners: &ScriptRunnerRegistry,
+    ) -> Result<TaskOutcome, WorkerSdkError>
+    where
+        P: TaskProcessor,
+    {
         loop {
             let message = self.next_server_message().await?;
             if let Some(server_message::Kind::DispatchTask(task)) = message.kind {
-                return self.process_task(processor, task).await;
+                return self.process_task(processor, script_runners, task).await;
             }
         }
     }
@@ -201,6 +221,7 @@ impl WorkerSession {
     async fn process_task<P>(
         &self,
         processor: &P,
+        script_runners: &ScriptRunnerRegistry,
         task: DispatchTask,
     ) -> Result<TaskOutcome, WorkerSdkError>
     where
@@ -208,7 +229,7 @@ impl WorkerSession {
     {
         let context = task_context(&task);
         let outcome = if let Some(binding) = task.processor_binding.as_ref() {
-            process_bound_task(binding, &task)
+            process_bound_task(binding, &task, script_runners).await
         } else {
             match processor.process(context.clone()).await {
                 Ok(outcome) => outcome,
@@ -316,13 +337,54 @@ fn task_context(task: &DispatchTask) -> TaskContext {
     }
 }
 
-fn process_bound_task(
+async fn process_bound_task(
     binding: &crate::proto::worker::v1::TaskProcessorBinding,
     task: &DispatchTask,
+    script_runners: &ScriptRunnerRegistry,
 ) -> TaskOutcome {
     match binding.kind.as_ref() {
         Some(task_processor_binding::Kind::Wasm(wasm)) => process_wasm_binding(wasm, task),
+        Some(task_processor_binding::Kind::Script(script)) => {
+            process_script_binding(script, script_runners).await
+        }
         None => TaskOutcome::Failed("empty dynamic processor binding".to_owned()),
+    }
+}
+
+async fn process_script_binding(
+    binding: &ScriptProcessorBinding,
+    script_runners: &ScriptRunnerRegistry,
+) -> TaskOutcome {
+    let Some(kind) = ScriptRunnerKind::from_language(&binding.language) else {
+        return TaskOutcome::Failed(format!("unsupported script language: {}", binding.language));
+    };
+    let Some(runner) = script_runners.get(kind) else {
+        return TaskOutcome::Failed(format!(
+            "{} script runner is not registered on this worker",
+            kind.as_str()
+        ));
+    };
+    let task = ScriptRunnerTask {
+        script_id: binding.script_id.clone(),
+        version_id: binding.version_id.clone(),
+        version_number: binding.version_number,
+        language: binding.language.clone(),
+        content: String::from_utf8_lossy(&binding.content).into_owned(),
+        content_sha256: binding.content_sha256.clone(),
+        policy: ScriptRunnerPolicy {
+            timeout_ms: binding.timeout_ms,
+            max_memory_bytes: binding.max_memory_bytes,
+            max_output_bytes: binding.max_output_bytes,
+            allow_network: binding.allow_network,
+            env_vars: binding.allowed_env_vars.clone(),
+            read_only_paths: binding.read_only_paths.clone(),
+            writable_paths: binding.writable_paths.clone(),
+            secret_refs: binding.secret_refs.clone(),
+        },
+    };
+    match runner.run(task).await {
+        Ok(outcome) => outcome,
+        Err(error) => TaskOutcome::Failed(error.to_string()),
     }
 }
 
@@ -424,7 +486,7 @@ mod wasm_runtime {
 
 
 /// Supported non-WASM dynamic script runner kinds.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ScriptRunnerKind {
     /// POSIX shell runner.
     Shell,
@@ -540,6 +602,32 @@ impl ScriptRunnerPolicy {
             ));
         }
         Ok(())
+    }
+}
+
+/// Explicit worker-side script runner registry.
+#[derive(Default)]
+pub struct ScriptRunnerRegistry {
+    runners: HashMap<ScriptRunnerKind, Box<dyn ScriptRunner>>,
+}
+
+impl ScriptRunnerRegistry {
+    /// Create an empty registry.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Register or replace a runner for its language/kind.
+    pub fn register<R>(&mut self, runner: R)
+    where
+        R: ScriptRunner,
+    {
+        self.runners.insert(runner.kind(), Box::new(runner));
+    }
+
+    fn get(&self, kind: ScriptRunnerKind) -> Option<&dyn ScriptRunner> {
+        self.runners.get(&kind).map(std::convert::AsRef::as_ref)
     }
 }
 
@@ -851,15 +939,16 @@ mod tests {
     use tonic::{Request, Response, Status, transport::Server};
 
     use crate::proto::worker::v1::{
-        DispatchTask, Ping, ServerMessage, TaskProcessorBinding, WasmProcessorBinding,
-        WorkerMessage, WorkerRegistered, server_message, task_processor_binding, worker_message,
+        DispatchTask, Ping, ScriptProcessorBinding, ServerMessage, TaskProcessorBinding,
+        WasmProcessorBinding, WorkerMessage, WorkerRegistered, server_message,
+        task_processor_binding, worker_message,
         worker_tunnel_service_server, worker_tunnel_service_server::WorkerTunnelServiceServer,
     };
 
     use super::{
         LocalSubprocessScriptRunner, ScriptRunner, ScriptRunnerKind, ScriptRunnerPolicy,
-        ScriptRunnerTask, TaskContext, TaskOutcome, TaskProcessor, UnsupportedScriptRunner,
-        WorkerClient, WorkerConfig, WorkerSdkError,
+        ScriptRunnerRegistry, ScriptRunnerTask, TaskContext, TaskOutcome, TaskProcessor,
+        UnsupportedScriptRunner, WorkerClient, WorkerConfig, WorkerSdkError,
     };
 
 
@@ -975,6 +1064,51 @@ mod tests {
             Err(error) => error,
         };
         assert!(matches!(error, WorkerSdkError::ScriptRuntimeUnavailable(_)));
+    }
+
+    #[tokio::test]
+    async fn worker_session_executes_script_binding_with_registered_runner() {
+        let dispatch = script_dispatch_task("instance-script-ok", "exit 0\n");
+        let (addr, server, mut events) = start_mock_tunnel_server(Some(dispatch)).await;
+        let config = WorkerConfig::local(format!("http://{addr}"), "worker-sdk-script-ok");
+        let mut session = WorkerClient::new(config)
+            .connect()
+            .await
+            .unwrap_or_else(|error| panic!("worker should register: {error}"));
+        let mut registry = ScriptRunnerRegistry::new();
+        registry.register(LocalSubprocessScriptRunner::new(ScriptRunnerKind::Shell));
+
+        let outcome = session
+            .process_next_with_script_runners(&EchoProcessor, &registry)
+            .await
+            .unwrap_or_else(|error| panic!("script result should report: {error}"));
+
+        assert_eq!(outcome, TaskOutcome::Succeeded);
+        let result = next_task_result(&mut events).await;
+        assert!(result.success);
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn worker_session_rejects_script_binding_without_registered_runner() {
+        let dispatch = script_dispatch_task("instance-script-missing-runner", "exit 0\n");
+        let (addr, server, mut events) = start_mock_tunnel_server(Some(dispatch)).await;
+        let config = WorkerConfig::local(format!("http://{addr}"), "worker-sdk-script-missing");
+        let mut session = WorkerClient::new(config)
+            .connect()
+            .await
+            .unwrap_or_else(|error| panic!("worker should register: {error}"));
+
+        let outcome = session
+            .process_next(&EchoProcessor)
+            .await
+            .unwrap_or_else(|error| panic!("script rejection should report: {error}"));
+
+        assert!(matches!(outcome, TaskOutcome::Failed(message) if message.contains("not registered")));
+        let result = next_task_result(&mut events).await;
+        assert!(!result.success);
+        assert!(result.message.contains("not registered"));
+        server.abort();
     }
 
     #[tokio::test]
@@ -1298,6 +1432,34 @@ mod tests {
             content: content.to_owned(),
             content_sha256: format!("{:x}", Sha256::digest(content.as_bytes())),
             policy,
+        }
+    }
+
+    fn script_dispatch_task(instance_id: &str, content: &str) -> DispatchTask {
+        DispatchTask {
+            instance_id: instance_id.to_owned(),
+            job_id: "job-script".to_owned(),
+            payload: Vec::new(),
+            processor_name: "script:script_shell".to_owned(),
+            processor_binding: Some(Box::new(TaskProcessorBinding {
+                kind: Some(task_processor_binding::Kind::Script(ScriptProcessorBinding {
+                    script_id: "script_shell".to_owned(),
+                    version: "1.0.0".to_owned(),
+                    language: "shell".to_owned(),
+                    content: content.as_bytes().to_vec(),
+                    version_id: "sv_shell_1".to_owned(),
+                    version_number: 1,
+                    content_sha256: format!("{:x}", Sha256::digest(content.as_bytes())),
+                    timeout_ms: 1_000,
+                    max_memory_bytes: 64 * 1024 * 1024,
+                    max_output_bytes: 1024 * 1024,
+                    allow_network: false,
+                    allowed_env_vars: Vec::new(),
+                    read_only_paths: Vec::new(),
+                    writable_paths: Vec::new(),
+                    secret_refs: Vec::new(),
+                })),
+            })),
         }
     }
 

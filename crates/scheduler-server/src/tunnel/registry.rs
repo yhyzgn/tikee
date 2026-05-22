@@ -73,13 +73,45 @@ impl WorkerRegistry {
 
     /// Return worker ids matching the given namespace and app.
     pub async fn find_eligible_workers(&self, namespace: &str, app: &str) -> Vec<String> {
+        self.find_eligible_workers_with_capability(namespace, app, None)
+            .await
+    }
+
+    /// Return worker ids matching namespace/app and an optional required capability.
+    pub async fn find_eligible_workers_with_capability(
+        &self,
+        namespace: &str,
+        app: &str,
+        required_capability: Option<&str>,
+    ) -> Vec<String> {
         self.workers
             .read()
             .await
             .values()
-            .filter(|w| is_match(&w.namespace, namespace) && is_match(&w.app, app))
+            .filter(|w| {
+                is_match(&w.namespace, namespace)
+                    && is_match(&w.app, app)
+                    && required_capability
+                        .is_none_or(|capability| worker_has_capability(w, capability))
+            })
             .map(|w| w.worker_id.clone())
             .collect()
+    }
+
+    /// Return true when a connected worker advertises the required capability.
+    pub async fn worker_supports_capability(
+        &self,
+        worker_id: &str,
+        required_capability: Option<&str>,
+    ) -> bool {
+        let Some(required_capability) = required_capability else {
+            return true;
+        };
+        self.workers
+            .read()
+            .await
+            .get(worker_id)
+            .is_some_and(|worker| worker_has_capability(worker, required_capability))
     }
 
     /// Dispatch one task to a specific currently registered worker.
@@ -121,6 +153,14 @@ fn is_match(worker_val: &str, job_val: &str) -> bool {
         || worker_val.is_empty()
         || job_val == "*"
         || job_val.is_empty()
+}
+
+fn worker_has_capability(worker: &RegisteredWorker, required: &str) -> bool {
+    worker.capabilities.iter().any(|capability| {
+        capability == required
+            || capability == "*"
+            || capability == "script:*" && required.starts_with("script:")
+    })
 }
 
 /// Registered worker metadata.

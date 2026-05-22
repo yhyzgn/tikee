@@ -62,7 +62,26 @@ message DispatchTask {
 message TaskProcessorBinding {
   oneof kind {
     WasmProcessorBinding wasm = 1;
+    ScriptProcessorBinding script = 2;
   }
+}
+
+message ScriptProcessorBinding {
+  string script_id = 1;
+  string version = 2;
+  string language = 3;
+  bytes content = 4;
+  string version_id = 5;
+  uint64 version_number = 6;
+  string content_sha256 = 7;
+  uint64 timeout_ms = 8;
+  uint64 max_memory_bytes = 9;
+  uint64 max_output_bytes = 10;
+  bool allow_network = 11;
+  repeated string allowed_env_vars = 12;
+  repeated string read_only_paths = 13;
+  repeated string writable_paths = 14;
+  repeated string secret_refs = 15;
 }
 
 message WasmProcessorBinding {

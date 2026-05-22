@@ -254,6 +254,8 @@ public final class GrpcSchedulerWorkerClient implements SchedulerWorkerClient {
             TaskOutcome outcome;
             if (task.hasProcessorBinding() && task.getProcessorBinding().hasWasm()) {
                 outcome = TaskOutcome.failed("wasm processor binding is not supported by Java SDK yet");
+            } else if (task.hasProcessorBinding() && task.getProcessorBinding().hasScript()) {
+                outcome = TaskOutcome.failed("script processor binding is not supported by Java SDK yet");
             } else {
                 try {
                     outcome = processor.process(new TaskContext(

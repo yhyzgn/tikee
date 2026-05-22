@@ -428,3 +428,10 @@ Constraint:
 - `DispatchTask.processor_name` is the explicit SDK routing key for Java/Spring `@SchedulerProcessor` and future language SDK adapters.
 - Server currently populates `processor_name` from `job_id` for compatibility until job definitions carry a distinct processor binding.
 - SDKs may fallback to `job_id` only when `processor_name` is empty for backward compatibility.
+
+## 2026-05-22 — Non-WASM script dispatch requires worker runtime capabilities
+
+- Decision: Dynamic scripts dispatched over Worker Tunnel must target workers advertising `script:<language>`; WASM uses `script:wasm`; controlled pools may opt into `script:*` or `*` wildcard capability.
+- Server remains a metadata dispatcher only. It sends released immutable `script_versions` bytes, hash, version metadata, and policy fields, but never runs user code.
+- Rust SDK workers must explicitly register a matching `ScriptRunner`; missing runner support is a task failure, not a fallback to normal task processors.
+- Java SDK intentionally rejects script bindings until Java-side runner abstractions are designed.

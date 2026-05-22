@@ -75,6 +75,14 @@ function policySummary(policy?: ScriptExecutionPolicy): string {
   return `timeout=${p.resources.timeout_ms}ms, memory=${p.resources.max_memory_bytes}B, output=${p.resources.max_output_bytes}B, network=${p.network.enabled ? 'allow' : 'deny'}, fs=${p.filesystem.read_only_paths.length + p.filesystem.writable_paths.length}, secrets=${p.secrets.refs.length}`;
 }
 
+function scriptCapabilitySummary(script?: ScriptSummary): string {
+  if (!script) return '-';
+  if (script.language === 'wasm') {
+    return 'Worker 需声明 script:wasm 能力并启用 Rust SDK wasm feature';
+  }
+  return `Worker 需声明 script:${script.language} 能力，并显式注册对应 Rust SDK LocalSubprocessScriptRunner`;
+}
+
 function shortDigest(value?: string | null): string {
   return value ? `${value.slice(0, 12)}…${value.slice(-8)}` : '-';
 }
@@ -780,6 +788,7 @@ export function ScriptsPage() {
               <Descriptions.Item label="WASM Entrypoint">{detailScript.language === 'wasm' ? '_start' : '-'}</Descriptions.Item>
               <Descriptions.Item label="WASM Fuel">{defaultFuel(detailScript)}</Descriptions.Item>
               <Descriptions.Item label="模块签名">{detailScript.language === 'wasm' ? '预留，当前未启用' : '-'}</Descriptions.Item>
+              <Descriptions.Item label="Worker 执行能力" span={2}>{scriptCapabilitySummary(detailScript)}</Descriptions.Item>
               <Descriptions.Item label="执行策略" span={2}>{policySummary(detailScript.policy)}</Descriptions.Item>
               <Descriptions.Item label="策略环境变量">
                 {detailScript.policy.env_vars.length > 0 ? detailScript.policy.env_vars.join(', ') : '-'}

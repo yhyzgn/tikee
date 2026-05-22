@@ -1,11 +1,11 @@
 # Next Work
 
 ## Immediate next slice
-- Continue with `.prompt/074-script-runner-protocol-and-ui-binding.md`.
+- Continue with `.prompt/075-script-runner-container-and-execution-governance.md`.
 - Focus areas:
-  1. Decide and implement Worker Tunnel protocol metadata for non-WASM script bindings, still binding only released immutable `script_versions` snapshots.
-  2. Wire dispatcher/SDK adapter selection without letting scheduler Server execute user code.
-  3. Update Web/docs to clearly show which script languages are executable by which worker capabilities.
+  1. Add a safer containerized Worker-side script runner option for non-WASM scripts, preserving explicit opt-in and default-deny network/filesystem/secrets.
+  2. Add execution governance hooks for script-bound tasks: audit fields, worker capability visibility, and clear failure reasons for missing runner/capability/policy rejection.
+  3. Keep the Server as dispatcher/metadata authority only; it must never execute user code and must only bind released immutable `script_versions` snapshots.
 
 ## Current status
-- Phase 073 slice completed. Rust SDK has an explicit opt-in local subprocess runner foundation with digest/release checks, default-deny policy enforcement, timeout/output caps, env clearing, and runtime-unavailable handling. It is not yet wired into Worker Tunnel dispatch protocol for non-WASM scripts.
+- Phase 074 slice completed. Worker Tunnel now supports non-WASM `ScriptProcessorBinding` payloads from released immutable script versions, dispatcher filters workers by `script:<language>` / `script:*` / `*`, Rust SDK executes only through explicitly registered `ScriptRunner`s, Java SDK explicitly rejects script bindings for now, and Web script details document the required worker capabilities.
