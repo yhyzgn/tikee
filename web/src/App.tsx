@@ -2,7 +2,7 @@ import { ConfigProvider, theme } from 'antd';
 import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 
-import { logout, setAuthErrorHandler, setAuthToken } from './api/client';
+import { getAuthToken, logout, setAuthErrorHandler, setAuthToken } from './api/client';
 import { AppShell } from './components/AppShell';
 import { AuthGuard, RequirePermission } from './components/AuthGuard';
 import { ForbiddenPage } from './components/ForbiddenPage';
@@ -24,6 +24,13 @@ const WorkersPage = lazy(() => import('./pages/WorkersPage').then((module) => ({
 function GuardedRoute({ route, children }: { route: { permission?: { resource: string; action: string } }; children: React.ReactNode }) {
   if (!route.permission) return <>{children}</>;
   return <RequirePermission resource={route.permission.resource} action={route.permission.action}>{children}</RequirePermission>;
+}
+
+function LoginRoute() {
+  if (getAuthToken() !== null) {
+    return <Navigate to={ROUTE_META.dashboard.path} replace />;
+  }
+  return <LoginPage />;
 }
 
 function AppLayout() {
@@ -85,7 +92,7 @@ export function App() {
       <Suspense fallback={<RouteFallback />}>
         <Routes>
           <Route path="/" element={<Navigate to={ROUTE_META.dashboard.path} replace />} />
-          <Route path="/login" element={<LoginPage />} />
+          <Route path="/login" element={<LoginRoute />} />
           <Route element={<AuthGuard />}>
             <Route element={<AppLayout />}>
               <Route index element={<Navigate to={ROUTE_META.dashboard.path} replace />} />

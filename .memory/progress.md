@@ -819,3 +819,10 @@ Verification evidence:
 - `rtk cargo clippy --manifest-path sdks/rust/tikee/Cargo.toml --all-targets --all-features -- -D warnings` passed.
 - `rtk bash -lc 'cd web && bun run lint && bun run typecheck && bun test && bun run build'` passed.
 - `rtk bash -lc 'cd sdks/java && ./gradlew test --warning-mode all --no-daemon'` passed.
+
+### 2026-05-24 — Web route-level login bypass hardening
+- `/login` now redirects authenticated client sessions at the route layer before rendering `LoginPage`; `/` continues to default to the dashboard overview.
+- Regression coverage locks the route wrapper and root dashboard default.
+Verification evidence:
+- Targeted route test failed before implementation and passed after.
+- Web lint, typecheck, targeted route test, and production build passed through RTK.

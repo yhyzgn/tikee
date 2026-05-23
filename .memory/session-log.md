@@ -1380,3 +1380,12 @@ Verification evidence:
 - `rtk cargo clippy --manifest-path sdks/rust/tikee/Cargo.toml --all-targets --all-features -- -D warnings` passed.
 - `rtk bash -lc 'cd web && bun run lint && bun run typecheck && bun test && bun run build'` passed.
 - `rtk bash -lc 'cd sdks/java && ./gradlew test --warning-mode all --no-daemon'` passed.
+
+### 2026-05-24 — Web route-level login bypass hardening
+- Tightened the login-session UX fix after user feedback: `/login` now uses a route-level guard that redirects to the dashboard before rendering `LoginPage` when a client auth token exists.
+- Kept the bare `/` default route pointing at the dashboard overview route.
+- Added/updated route regression coverage so the login route must use the bypass wrapper instead of rendering the login page directly.
+Verification evidence:
+- `rtk bash -lc "cd web && bun test src/pages/__tests__/RouteAuth.test.tsx"` failed before the route-level guard, then passed after implementation.
+- `rtk bash -lc "cd web && bun run lint && bun run typecheck && bun test src/pages/__tests__/RouteAuth.test.tsx"` passed.
+- `rtk bash -lc "cd web && bun run build"` passed.

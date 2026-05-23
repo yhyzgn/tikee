@@ -2,7 +2,6 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 
 const appSource = readFileSync(new URL('../../App.tsx', import.meta.url), 'utf8');
-const loginSource = readFileSync(new URL('../LoginPage.tsx', import.meta.url), 'utf8');
 
 describe('route defaults and authenticated login bypass', () => {
   test('root domain explicitly redirects to the dashboard route', () => {
@@ -10,9 +9,10 @@ describe('route defaults and authenticated login bypass', () => {
     expect(appSource).toContain('to={ROUTE_META.dashboard.path}');
   });
 
-  test('login page skips itself when an auth token already exists', () => {
-    expect(loginSource).toContain('getAuthToken');
-    expect(loginSource).toContain('useEffect');
-    expect(loginSource).toContain('navigate(ROUTE_META.dashboard.path');
+  test('login route bypasses the login page before rendering it when an auth token already exists', () => {
+    expect(appSource).toContain('function LoginRoute()');
+    expect(appSource).toContain('getAuthToken() !== null');
+    expect(appSource).toContain('element={<LoginRoute />}');
+    expect(appSource).not.toContain('path="/login" element={<LoginPage />}');
   });
 });
