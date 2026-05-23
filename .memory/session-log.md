@@ -1361,3 +1361,22 @@ Verification evidence:
 - `LoginPage` now checks `getAuthToken()` on mount and replace-navigates to the dashboard when a token is present; successful login still returns to the originally requested protected path when available.
 - Added a source-level route regression test for the login bypass and root default route.
 - Verification passed: targeted RED/green route test and full Web `lint`, `typecheck`, `bun test`, `build`.
+### 2026-05-24 — Phase 104 API token namespace/app/worker-pool scope bindings
+- Continued `.prompt/104-phase3-api-token-scope-bindings.md` by closing the remaining API-token multi-tenant binding foundation gap.
+- Added `AccessScopeBinding` metadata with optional namespace/app/worker_pool fields; API token create/list, rotate, and `/auth/me` now preserve and expose bindings without plaintext token storage.
+- Enforced namespace/app bindings for job list/create/trigger: bound tokens only see matching jobs and cannot create/trigger outside their binding.
+- Enforced worker-pool visibility for `/api/v1/workers` using `worker_pool` / `worker-pool` worker labels in addition to namespace/app.
+- Full tenant/app/worker-pool CRUD/UI and OIDC identity-to-tenant mapping remain open.
+Verification evidence:
+- `rtk cargo test -p tikee-server api_token_scope_bindings --all-features` failed before implementation because bindings were ignored, then passed with 2 tests.
+- `rtk cargo test -p tikee-server api_token --all-features` passed with 6 tests.
+- `rtk cargo fmt --all -- --check` passed.
+- `rtk cargo clippy --workspace --all-targets --all-features -- -D warnings` passed.
+- `rtk cargo test --workspace --all-features` passed: 122 tests.
+- `rtk cargo build --workspace --all-features` passed.
+- `rtk cargo run -- --help` passed.
+- `rtk cargo test --manifest-path sdks/rust/tikee/Cargo.toml` passed.
+- `rtk cargo test --manifest-path sdks/rust/tikee/Cargo.toml --features wasm` passed.
+- `rtk cargo clippy --manifest-path sdks/rust/tikee/Cargo.toml --all-targets --all-features -- -D warnings` passed.
+- `rtk bash -lc 'cd web && bun run lint && bun run typecheck && bun test && bun run build'` passed.
+- `rtk bash -lc 'cd sdks/java && ./gradlew test --warning-mode all --no-daemon'` passed.

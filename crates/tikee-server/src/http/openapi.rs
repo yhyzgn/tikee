@@ -138,6 +138,7 @@ use super::{auth, dto, routes};
         dto::RotateApiTokenRequest,
         dto::CreatedApiToken,
         dto::ApiTokenSummary,
+        dto::AccessScopeBinding,
         dto::AuthSession,
         dto::AuthStatusResponse,
         dto::OidcAuthorizeResponse,

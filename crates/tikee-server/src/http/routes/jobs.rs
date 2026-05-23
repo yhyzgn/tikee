@@ -42,14 +42,30 @@ use super::common::{
 )]
 pub async fn list_jobs(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Query(_query): Query<PageQuery>,
 ) -> Result<Json<JobPageApiResponse>, ApiError> {
+    let principal = if has_auth_header(&headers) {
+        Some(auth::require_permission(&headers, &state, "jobs", "read").await?)
+    } else {
+        None
+    };
     let items = state
         .jobs
         .list_jobs()
         .await
         .map_err(|error| ApiError::storage(&error))?
         .into_iter()
+        .filter(|job| {
+            principal.as_ref().is_none_or(|principal| {
+                crate::http::access_scope::allows_resource(
+                    &principal.scope_bindings,
+                    &job.namespace,
+                    &job.app,
+                    None,
+                )
+            })
+        })
         .map(JobSummary::from)
         .collect();
 
@@ -81,12 +97,24 @@ pub async fn create_job(
     Json(request): Json<CreateJobRequest>,
 ) -> Result<Json<JobApiResponse>, ApiError> {
     let principal = auth::require_permission(&headers, &state, "jobs", "write").await?;
+    let namespace = defaulted(request.namespace, "default");
+    let app = defaulted(request.app, "default");
+    if !crate::http::access_scope::allows_resource(
+        &principal.scope_bindings,
+        &namespace,
+        &app,
+        None,
+    ) {
+        return Err(ApiError::forbidden(
+            "api token scope binding does not allow this namespace/app",
+        ));
+    }
     let schedule_type = parse_schedule_type(request.schedule_type.as_deref().unwrap_or("api"))?;
     let created = state
         .jobs
         .create_job(CreateJob {
-            namespace: defaulted(request.namespace, "default"),
-            app: defaulted(request.app, "default"),
+            namespace,
+            app,
             name: request.name.clone(),
             schedule_type: schedule_type.to_string(),
             schedule_expr: request.schedule_expr.clone(),
@@ -143,6 +171,16 @@ pub async fn trigger_job(
         .await
         .map_err(|error| ApiError::storage(&error))?
         .ok_or_else(|| ApiError::not_found(format!("job not found: {job}")))?;
+    if !crate::http::access_scope::allows_resource(
+        &principal.scope_bindings,
+        &job_summary.namespace,
+        &job_summary.app,
+        None,
+    ) {
+        return Err(ApiError::forbidden(
+            "api token scope binding does not allow this namespace/app",
+        ));
+    }
 
     let trigger_type = parse_trigger_type(request.trigger_type.as_deref().unwrap_or("api"))?;
     let execution_mode =
@@ -195,6 +233,10 @@ pub async fn trigger_job(
     Ok(Json(ApiResponse::success(JobInstanceSummary::from(
         instance,
     ))))
+}
+
+fn has_auth_header(headers: &HeaderMap) -> bool {
+    headers.contains_key(axum::http::header::AUTHORIZATION) || headers.contains_key("x-tikee-token")
 }
 
 /// List instances for a job.

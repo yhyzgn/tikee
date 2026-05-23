@@ -28,10 +28,19 @@ pub async fn list_workers(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<WorkerListApiResponse>, ApiError> {
-    auth::require_permission(&headers, &state, "workers", "read").await?;
+    let principal = auth::require_permission(&headers, &state, "workers", "read").await?;
     let workers = state.registry.workers().await;
     let items = workers
         .into_iter()
+        .filter(|worker| {
+            let worker_pool = worker_pool_label(worker).unwrap_or_default();
+            crate::http::access_scope::allows_resource(
+                &principal.scope_bindings,
+                &worker.namespace,
+                &worker.app,
+                Some(&worker_pool),
+            )
+        })
         .map(|worker| WorkerSummary {
             worker_id: worker.worker_id,
             app: worker.app,
@@ -46,6 +55,14 @@ pub async fn list_workers(
         online: items.len(),
         items,
     })))
+}
+
+fn worker_pool_label(worker: &crate::tunnel::RegisteredWorker) -> Option<String> {
+    worker
+        .labels
+        .get("worker_pool")
+        .or_else(|| worker.labels.get("worker-pool"))
+        .cloned()
 }
 
 #[utoipa::path(get, path = "/api/v1/dispatch-queue", tag = "workers")]

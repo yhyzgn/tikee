@@ -13,6 +13,7 @@ use url::Url;
 
 use super::{
     AppState,
+    access_scope::validate_scope_bindings,
     dto::{
         ApiResponse, ApiTokenSummary, AuthSession, AuthStatusResponse, CreateApiTokenRequest,
         CreatedApiToken, LoginRequest, MeResponse, OidcAuthorizeResponse, OidcStatus,
@@ -157,6 +158,7 @@ pub async fn login(
             device_id: None,
             device_name: None,
             token_scopes: Vec::new(),
+            scope_bindings: Vec::new(),
             expires_in_seconds: None,
         })
         .await?;
@@ -214,6 +216,10 @@ pub async fn create_api_token(
     let roles = vec![user.role.clone()];
     let permissions = state.rbac.permissions_for_roles(&roles).await?;
     let token_scopes = validate_api_token_scopes(request.scopes.unwrap_or_default(), &permissions)?;
+    let scope_bindings = validate_scope_bindings(
+        request.scope_bindings.unwrap_or_default(),
+        &principal.scope_bindings,
+    )?;
     let expires_in_seconds =
         validate_api_token_ttl(request.expires_in_seconds, &state.auth_config.api_tokens)?;
     let created = state
@@ -225,6 +231,7 @@ pub async fn create_api_token(
             device_id: None,
             device_name: Some(name.to_owned()),
             token_scopes,
+            scope_bindings,
             expires_in_seconds: Some(expires_in_seconds),
         })
         .await?;
@@ -289,6 +296,8 @@ pub async fn rotate_api_token(
     let roles = vec![user.role.clone()];
     let permissions = state.rbac.permissions_for_roles(&roles).await?;
     let token_scopes = validate_api_token_scopes(existing.scopes, &permissions)?;
+    let scope_bindings =
+        validate_scope_bindings(existing.scope_bindings, &principal.scope_bindings)?;
     let name = request
         .name
         .as_deref()
@@ -308,6 +317,7 @@ pub async fn rotate_api_token(
             device_id: None,
             device_name: Some(name),
             token_scopes,
+            scope_bindings,
             expires_in_seconds: Some(expires_in_seconds),
         })
         .await?;

@@ -10,7 +10,7 @@
 - Real HTTP and Worker Tunnel TLS/mTLS listeners and certificate reload/rotation.
 - Full multi-level script approval state machine, verified signatures/KMS, production release gates, and URL/File/Secret grants.
 - Real alert provider delivery for email/Slack/DingTalk/Feishu/WeCom/PagerDuty/webhooks.
-- Multi-tenant namespace/app/worker-pool scope binding.
+- Full tenant/app/worker-pool management UI and OIDC identity-to-tenant mapping.
 - Full business SLO metrics/histograms beyond the current summary-backed snapshots, plus live Prometheus/Grafana recording-rule validation and real OTLP exporter collector smoke.
 
 ## Deferred out of Phase 3

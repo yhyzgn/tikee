@@ -410,6 +410,8 @@ pub struct CreateApiTokenRequest {
     pub name: String,
     /// Optional scope allow-list in `resource:action` form. Omit for current role permissions.
     pub scopes: Option<Vec<String>>,
+    /// Optional namespace/app/worker-pool bindings. Omit or empty for unrestricted scope.
+    pub scope_bindings: Option<Vec<AccessScopeBinding>>,
     /// Optional token lifetime in seconds, bounded by server policy.
     pub expires_in_seconds: Option<i64>,
 }
@@ -434,6 +436,8 @@ pub struct ApiTokenSummary {
     pub username: String,
     /// Optional scope allow-list in `resource:action` form. Empty means current role permissions.
     pub scopes: Vec<String>,
+    /// Optional namespace/app/worker-pool bindings. Empty means unrestricted.
+    pub scope_bindings: Vec<AccessScopeBinding>,
     /// RFC3339 expiration timestamp.
     pub expires_at: String,
     /// RFC3339 creation timestamp.
@@ -447,6 +451,17 @@ pub struct CreatedApiToken {
     pub token: ApiTokenSummary,
     /// Raw bearer token; store it immediately because it is not persisted in plaintext.
     pub access_token: String,
+}
+
+/// Optional API token scope binding for tenant/app/pool-level access.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct AccessScopeBinding {
+    /// Namespace name. `None` means any namespace.
+    pub namespace: Option<String>,
+    /// Application name. `None` means any app.
+    pub app: Option<String>,
+    /// Worker pool label. `None` means any worker pool.
+    pub worker_pool: Option<String>,
 }
 
 /// OIDC authorization bootstrap response. Secrets are never included.
@@ -529,6 +544,8 @@ pub struct MeResponse {
     pub scope_limited: bool,
     /// Active API-token scopes in `resource:action` form, if any.
     pub token_scopes: Vec<String>,
+    /// Active API-token namespace/app/worker-pool bindings, if any.
+    pub scope_bindings: Vec<AccessScopeBinding>,
 }
 
 /// Workflow definition API envelope.

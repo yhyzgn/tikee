@@ -1,5 +1,6 @@
 //! HTTP management gateway for tikee.
 
+pub mod access_scope;
 pub mod auth;
 pub mod dto;
 pub mod error;
@@ -2247,6 +2248,153 @@ mod tests {
             json["message"]
                 .as_str()
                 .is_some_and(|message| message.contains("expires_in_seconds"))
+        );
+    }
+
+    #[tokio::test]
+    async fn api_token_scope_bindings_limit_job_namespace_and_app_access() {
+        let app = router().await;
+        let admin = admin_token(app.clone()).await;
+        let _billing = post_json_raw(
+            app.clone(),
+            "/api/v1/jobs",
+            r#"{"namespace":"default","app":"billing","name":"billing-visible"}"#,
+            Some(&admin),
+        )
+        .await;
+        let _payroll = post_json_raw(
+            app.clone(),
+            "/api/v1/jobs",
+            r#"{"namespace":"finance","app":"payroll","name":"payroll-hidden"}"#,
+            Some(&admin),
+        )
+        .await;
+
+        let created = post_json_raw(
+            app.clone(),
+            "/api/v1/auth/api-tokens",
+            r#"{"name":"billing automation","scopes":["jobs:read","jobs:write"],"scope_bindings":[{"namespace":"default","app":"billing","worker_pool":"pool-a"}]}"#,
+            Some(&admin),
+        )
+        .await;
+        assert_eq!(created["code"], 0);
+        assert_eq!(
+            created["data"]["token"]["scope_bindings"][0]["namespace"],
+            "default"
+        );
+        assert_eq!(
+            created["data"]["token"]["scope_bindings"][0]["app"],
+            "billing"
+        );
+        assert_eq!(
+            created["data"]["token"]["scope_bindings"][0]["worker_pool"],
+            "pool-a"
+        );
+        let api_token = created["data"]["access_token"]
+            .as_str()
+            .unwrap_or_else(|| panic!("api token value should be returned once"))
+            .to_owned();
+
+        let visible_jobs = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/jobs")
+                    .header("authorization", format!("Bearer {api_token}"))
+                    .body(Body::empty())
+                    .unwrap_or_else(|error| panic!("request should build: {error}")),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("router should respond: {error}"));
+        assert!(visible_jobs.status().is_success());
+        let body = axum::body::to_bytes(visible_jobs.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+        assert_eq!(json["data"]["items"].as_array().map(Vec::len), Some(1));
+        assert_eq!(json["data"]["items"][0]["name"], "billing-visible");
+
+        let denied_create = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/jobs")
+                    .header("authorization", format!("Bearer {api_token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        r#"{"namespace":"finance","app":"payroll","name":"blocked"}"#,
+                    ))
+                    .unwrap_or_else(|error| panic!("request should build: {error}")),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("router should respond: {error}"));
+        assert_eq!(denied_create.status(), axum::http::StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn api_token_scope_bindings_filter_worker_pool_visibility() {
+        let db = connect_and_migrate("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("test storage should initialize: {error}"));
+        let registry = crate::tunnel::WorkerRegistry::default();
+        let (tx1, _rx1) = tokio::sync::mpsc::channel(1);
+        let (tx2, _rx2) = tokio::sync::mpsc::channel(1);
+        let mut pool_a = worker("pool-a-worker", "billing");
+        pool_a
+            .labels
+            .insert("worker_pool".to_owned(), "pool-a".to_owned());
+        let mut pool_b = worker("pool-b-worker", "billing");
+        pool_b
+            .labels
+            .insert("worker_pool".to_owned(), "pool-b".to_owned());
+        let registered_a = registry.register(pool_a, tx1).await;
+        let _registered_b = registry.register(pool_b, tx2).await;
+        let app = router_with_state(AppState::new(
+            JobRepository::new(db.clone()),
+            JobInstanceRepository::new(db.clone()),
+            JobInstanceLogRepository::new(db.clone()),
+            JobInstanceAttemptRepository::new(db.clone()),
+            UserRepository::new(db.clone()),
+            ScriptRepository::new(db.clone()),
+            WorkflowRepository::new(db.clone()),
+            AuditLogRepository::new(db),
+            registry,
+            StandaloneCoordinator::shared("test-node"),
+        ));
+        let admin = admin_token(app.clone()).await;
+        let created = post_json_raw(
+            app.clone(),
+            "/api/v1/auth/api-tokens",
+            r#"{"name":"pool a worker reader","scopes":["workers:read"],"scope_bindings":[{"namespace":"default","app":"billing","worker_pool":"pool-a"}]}"#,
+            Some(&admin),
+        )
+        .await;
+        let api_token = created["data"]["access_token"]
+            .as_str()
+            .unwrap_or_else(|| panic!("api token value should be returned once"))
+            .to_owned();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/workers")
+                    .header("authorization", format!("Bearer {api_token}"))
+                    .body(Body::empty())
+                    .unwrap_or_else(|error| panic!("request should build: {error}")),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("router should respond: {error}"));
+        assert!(response.status().is_success());
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+        assert_eq!(json["data"]["online"], 1);
+        assert_eq!(
+            json["data"]["items"][0]["worker_id"],
+            registered_a.worker_id
         );
     }
 
