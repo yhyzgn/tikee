@@ -19,14 +19,15 @@ pub use repository::{
     AlertRuleSummary, AppSummary, AppendJobInstanceLog, AuditLogFilters, AuditLogPageSummary,
     AuditLogRepository, AuditLogSummary, AuthSessionRepository, AuthSessionSummary,
     CompleteWorkflowShardInput, CompleteWorkflowShardResult, CreateAlertRule, CreateAuditLog,
-    CreateAuthSession, CreateJob, CreateJobInstance, CreateJobInstanceAttempt, CreateScript,
-    CreateUser, CreateWorkflow, DispatchQueueClaim, DispatchQueueSloSummary, DispatchQueueSummary,
-    InstanceEventSummary, JobInstanceAttemptRepository, JobInstanceAttemptSummary,
-    JobInstanceLogRepository, JobInstanceLogSummary, JobInstanceRepository, JobInstanceSummary,
-    JobRepository, JobSummary, MaterializeWorkflowNodeResult, NamespaceSummary, PermissionSummary,
-    QueueOverview, RaftAppliedCommandSummary, RaftLogEntrySummary, RaftMemberSummary,
-    RaftMembershipProposalSummary, RaftMetadataSummary, RaftRepository, RaftSnapshotSummary,
-    RbacRepository, RecordAlertDeliveryAttempt, RecordRaftAppliedCommand,
+    CreateAuthSession, CreateJob, CreateJobInstance, CreateJobInstanceAttempt, CreateOidcAuthState,
+    CreateScript, CreateUser, CreateWorkflow, DispatchQueueClaim, DispatchQueueSloSummary,
+    DispatchQueueSummary, InstanceEventSummary, JobInstanceAttemptRepository,
+    JobInstanceAttemptSummary, JobInstanceLogRepository, JobInstanceLogSummary,
+    JobInstanceRepository, JobInstanceSummary, JobRepository, JobSummary,
+    MaterializeWorkflowNodeResult, NamespaceSummary, OidcAuthStateRepository, OidcAuthStateSummary,
+    PermissionSummary, QueueOverview, RaftAppliedCommandSummary, RaftLogEntrySummary,
+    RaftMemberSummary, RaftMembershipProposalSummary, RaftMetadataSummary, RaftRepository,
+    RaftSnapshotSummary, RbacRepository, RecordAlertDeliveryAttempt, RecordRaftAppliedCommand,
     RecordRaftMembershipProposal, RecoverWorkflowNodeInput, RecoverWorkflowNodeResult,
     ScopeRepository, ScriptRepository, ScriptSummary, ScriptVersionRepository,
     ScriptVersionSummary, UpdateScript, UpdateUser, UpdateWorkflow, UpsertRaftLogEntry,
@@ -68,6 +69,7 @@ pub async fn connect_and_migrate(database_url: &str) -> Result<DatabaseConnectio
 async fn ensure_sqlite_schema_compatibility(db: &DatabaseConnection) -> Result<(), sea_orm::DbErr> {
     ensure_broadcast_schema_compatibility(db).await?;
     ensure_auth_schema_compatibility(db).await?;
+    ensure_oidc_auth_state_schema_compatibility(db).await?;
     ensure_rbac_schema_compatibility(db).await?;
     ensure_job_schema_compatibility(db).await?;
     ensure_scripts_schema_compatibility(db).await?;
@@ -644,6 +646,37 @@ async fn seed_sqlite_role_permissions(
     Ok(())
 }
 
+async fn ensure_oidc_auth_state_schema_compatibility(
+    db: &DatabaseConnection,
+) -> Result<(), sea_orm::DbErr> {
+    if db.get_database_backend() != DatabaseBackend::Sqlite {
+        return Ok(());
+    }
+    db.execute(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        r"CREATE TABLE IF NOT EXISTS oidc_auth_states (
+            id varchar NOT NULL PRIMARY KEY,
+            state_hash varchar NOT NULL,
+            redirect_uri varchar NOT NULL,
+            expires_at varchar NOT NULL,
+            consumed_at varchar,
+            created_at varchar NOT NULL
+        )",
+    ))
+    .await?;
+    db.execute(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_oidc_auth_states_state_hash ON oidc_auth_states (state_hash)",
+    ))
+    .await?;
+    db.execute(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        "CREATE INDEX IF NOT EXISTS idx_oidc_auth_states_expires ON oidc_auth_states (expires_at)",
+    ))
+    .await?;
+    Ok(())
+}
+
 async fn ensure_auth_schema_compatibility(db: &DatabaseConnection) -> Result<(), sea_orm::DbErr> {
     if db.get_database_backend() != DatabaseBackend::Sqlite {
         return Ok(());
@@ -946,6 +979,8 @@ async fn ensure_sqlite_indexes(db: &DatabaseConnection) -> Result<(), sea_orm::D
         "CREATE INDEX IF NOT EXISTS idx_job_instance_logs_instance_seq ON job_instance_logs (instance_id, sequence)",
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_auth_sessions_token_hash ON auth_sessions (token_hash)",
         "CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions (user_id)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_oidc_auth_states_state_hash ON oidc_auth_states (state_hash)",
+        "CREATE INDEX IF NOT EXISTS idx_oidc_auth_states_expires ON oidc_auth_states (expires_at)",
     ] {
         db.execute(Statement::from_string(DatabaseBackend::Sqlite, sql))
             .await?;

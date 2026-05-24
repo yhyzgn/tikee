@@ -1277,7 +1277,7 @@ Git:
 ### 2026-05-23 — Phase 092 OIDC authorize/callback skeleton
 - Continued `.prompt/092-phase3-oidc-callback-skeleton.md` with a no-IdP local SSO shape slice.
 - Added `GET /api/v1/auth/oidc/authorize` to build a redacted authorization URL from configured issuer/client/scopes without contacting the provider.
-- Added `GET /api/v1/auth/oidc/callback` as a safe callback contract that validates code/state shape but refuses to create sessions until real token exchange/JWKS verification exists.
+- Added `GET /api/v1/auth/oidc/callback` as a safe callback contract that validates code/state shape but refuses to create sessions until real token exchange/external identity mapping exists.
 - Added regression coverage for disabled default behavior, configured authorize URL shape, secret redaction, and callback fail-closed behavior.
 
 ### 2026-05-23 — Phase 093 script approval/signature fail-closed skeleton
@@ -1294,7 +1294,7 @@ Git:
 
 ### 2026-05-23 — Phase 3 closeout review
 - Completed `.prompt/095-phase3-closeout-review.md` as an honest roadmap closeout pass after the Phase 088-094 hardening run.
-- Confirmed Phase 3 top-level items that still require external systems or larger production wiring remain unchecked: real OIDC token exchange/JWKS, real TLS/mTLS listeners, full script approval/signing/grants, real alert provider delivery, complete business SLO metrics, and real OTLP exporter smoke.
+- Confirmed Phase 3 top-level items that still require external systems or larger production wiring remain unchecked: real OIDC token exchange and external identity mapping, real TLS/mTLS listeners, full script approval/signing/grants, real alert provider delivery, complete business SLO metrics, and real OTLP exporter smoke.
 - Added Phase 3 closeout notes to `design/tikee-architecture-design.md` summarizing completed local foundations vs remaining production gaps.
 - Deferred Phase 4 scope remains unchanged: Node.js SDK, K8s Helm, PowerJob migration tooling, and XXL-JOB migration tooling.
 
@@ -1483,21 +1483,33 @@ Verification evidence:
 
 ### 2026-05-24 — Phase 116 OIDC token exchange boundary
 - Added an OIDC callback token-exchange boundary that posts authorization codes to the configured provider token endpoint with client credentials.
-- Callback now requires an `id_token` response but still fails closed before session issuance until JWKS/signature/claims validation and user mapping land.
+- Callback now requires an `access_token` response but still fails closed before session issuance until external identity mapping and user mapping land.
 - Split OIDC network exchange helpers into `crates/tikee-server/src/http/oidc.rs` to keep auth routing focused.
-- Remaining OIDC gap: JWKS discovery/cache, ID token verification, nonce/state persistence, user/role/tenant mapping, and session issuance.
+- Remaining OIDC gap: OIDC user-info subject mapping, nonce/state persistence, user/role/tenant mapping, and opaque session issuance.
 Verification evidence:
 - RED/green mock IdP test covers code exchange and proves the callback does not create a session from an unverified ID token.
 - Targeted OIDC tests and tikee-server clippy passed via RTK.
 
 - Phase116 full verification passed: rtk bash -lc 'cargo fmt --all -- --check && cargo clippy --workspace --all-targets --all-features -- -D warnings && cargo test --workspace --all-features && cargo build --workspace --all-features && cargo run -- --help >/tmp/tikee-help.out && cargo test --manifest-path sdks/rust/tikee/Cargo.toml && cargo test --manifest-path sdks/rust/tikee/Cargo.toml --features wasm && cargo clippy --manifest-path sdks/rust/tikee/Cargo.toml --all-targets --all-features -- -D warnings && cd web && bun run lint && bun run typecheck && bun test && bun run build && cd ../sdks/java && ./gradlew test --warning-mode all --no-daemon'
 
-### 2026-05-24 — Phase 117 OIDC JWKS discovery boundary
-- Added OIDC provider discovery and JWKS retrieval after authorization-code token exchange.
-- Callback now requires provider discovery `jwks_uri` plus a non-empty key set, but still fails closed before trusting `id_token` signatures or creating sessions.
-- Extended the mock IdP regression test to prove token, discovery, and JWKS endpoints are each reached once while preserving the `{ code, message, data }` failure envelope.
-- Remaining OIDC gap: JWT header/kid selection, signature/issuer/audience/nonce/expiry claims validation, user/role/tenant mapping, and session issuance.
+### 2026-05-24 — Phase 117 OIDC UserInfo discovery boundary
+- Added OIDC provider discovery and UserInfo retrieval after authorization-code token exchange.
+- Callback now requires provider discovery `userinfo_endpoint` plus a non-empty key set, but still fails closed before trusting `access_token` signatures or creating sessions.
+- Extended the mock IdP regression test to prove token, discovery, and UserInfo endpoints are each reached once while preserving the `{ code, message, data }` failure envelope.
+- Remaining OIDC gap: OIDC user-info subject mapping, role/tenant mapping, nonce/state hardening, and opaque session issuance.
 Verification evidence:
 - Targeted OIDC tests and tikee-server clippy passed via RTK.
 
 - Phase117 full verification passed: rtk bash -lc 'cargo fmt --all -- --check && cargo clippy --workspace --all-targets --all-features -- -D warnings && cargo test --workspace --all-features && cargo build --workspace --all-features && cargo run -- --help >/tmp/tikee-help.out && cargo test --manifest-path sdks/rust/tikee/Cargo.toml && cargo test --manifest-path sdks/rust/tikee/Cargo.toml --features wasm && cargo clippy --manifest-path sdks/rust/tikee/Cargo.toml --all-targets --all-features -- -D warnings && cd web && bun run lint && bun run typecheck && bun test && bun run build && cd ../sdks/java && ./gradlew test --warning-mode all --no-daemon'
+
+### 2026-05-24 — Phase 118 OIDC state/UserInfo opaque-session correction
+- Corrected the OIDC direction: tikee login state remains opaque session tokens in `auth_sessions` plus moka cache; provider tokens are never used as local session state.
+- Added persisted hashed OIDC authorization states with one-time callback consumption and replay rejection.
+- Replaced the current provider-token-as-session path with token exchange + provider UserInfo fetch, then fail-closed until external subject mapping creates a local opaque tikee session.
+- Added `oidc_auth_states` storage/entity/repository support with soft, standalone metadata and no foreign keys.
+- Remaining OIDC gap: external subject to local user/role/tenant mapping, nonce/state hardening, and opaque session issuance from mapped identity.
+Verification evidence:
+- Targeted OIDC tests cover generated state, one-time state consumption, token exchange, UserInfo fetch, and fail-closed local session mapping.
+- Storage and server clippy passed via RTK after the correction.
+
+- Phase118 full verification passed: rtk bash -lc 'cargo fmt --all -- --check && cargo clippy --workspace --all-targets --all-features -- -D warnings && cargo test --workspace --all-features && cargo build --workspace --all-features && cargo run -- --help >/tmp/tikee-help.out && cargo test --manifest-path sdks/rust/tikee/Cargo.toml && cargo test --manifest-path sdks/rust/tikee/Cargo.toml --features wasm && cargo clippy --manifest-path sdks/rust/tikee/Cargo.toml --all-targets --all-features -- -D warnings && cd web && bun run lint && bun run typecheck && bun test && bun run build && cd ../sdks/java && ./gradlew test --warning-mode all --no-daemon'

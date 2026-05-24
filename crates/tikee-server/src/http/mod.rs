@@ -480,6 +480,7 @@ mod tests {
         ScriptRepository, UserRepository, WorkflowDefinition, WorkflowNodeSpec, WorkflowRepository,
         connect_and_migrate,
     };
+    use url::Url;
 
     const ADMIN_LOGIN: &str = r#"{"username":"tikee_init","password":"Tikee@2026!"}"#;
     use tower::ServiceExt;
@@ -490,18 +491,45 @@ mod tests {
         issuer: String,
         token_hits: std::sync::Arc<std::sync::atomic::AtomicUsize>,
         discovery_hits: std::sync::Arc<std::sync::atomic::AtomicUsize>,
-        jwks_hits: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+        userinfo_hits: std::sync::Arc<std::sync::atomic::AtomicUsize>,
         server: tokio::task::JoinHandle<()>,
+    }
+
+    async fn authorize_oidc_state(app: axum::Router, redirect_uri: &str) -> String {
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!(
+                        "/api/v1/auth/oidc/authorize?redirect_uri={redirect_uri}"
+                    ))
+                    .body(Body::empty())
+                    .unwrap_or_else(|error| panic!("request should build: {error}")),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("authorize route should respond: {error}"));
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+        let authorization_url = json["data"]["authorization_url"]
+            .as_str()
+            .unwrap_or_else(|| panic!("authorization_url should be a string"));
+        Url::parse(authorization_url)
+            .unwrap_or_else(|error| panic!("authorization_url should parse: {error}"))
+            .query_pairs()
+            .find_map(|(key, value)| (key == "state").then(|| value.into_owned()))
+            .unwrap_or_else(|| panic!("authorization_url should include state"))
     }
 
     async fn spawn_mock_oidc_provider() -> MockOidcProvider {
         let token_hits = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let discovery_hits = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let jwks_hits = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let userinfo_hits = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let app = mock_oidc_router(
             token_hits.clone(),
             discovery_hits.clone(),
-            jwks_hits.clone(),
+            userinfo_hits.clone(),
         );
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
@@ -523,7 +551,7 @@ mod tests {
             issuer,
             token_hits,
             discovery_hits,
-            jwks_hits,
+            userinfo_hits,
             server,
         }
     }
@@ -531,7 +559,7 @@ mod tests {
     fn mock_oidc_router(
         token_hits: std::sync::Arc<std::sync::atomic::AtomicUsize>,
         discovery_hits: std::sync::Arc<std::sync::atomic::AtomicUsize>,
-        jwks_hits: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+        userinfo_hits: std::sync::Arc<std::sync::atomic::AtomicUsize>,
     ) -> axum::Router<String> {
         axum::Router::new()
             .route(
@@ -557,8 +585,7 @@ mod tests {
                             );
                             token_hits.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                             axum::Json(serde_json::json!({
-                                "access_token": "access",
-                                "id_token": "unsigned.id.token",
+                                "access_token": "provider-access-token",
                                 "token_type": "Bearer"
                             }))
                         }
@@ -574,27 +601,28 @@ mod tests {
                             discovery_hits.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                             axum::Json(serde_json::json!({
                                 "issuer": format!("{base_url}/realms/tikee"),
-                                "jwks_uri": format!("{base_url}/realms/tikee/protocol/openid-connect/certs")
+                                "userinfo_endpoint": format!("{base_url}/realms/tikee/protocol/openid-connect/userinfo")
                             }))
                         }
                     },
                 ),
             )
             .route(
-                "/realms/tikee/protocol/openid-connect/certs",
-                axum::routing::get(move || {
-                    let jwks_hits = jwks_hits.clone();
+                "/realms/tikee/protocol/openid-connect/userinfo",
+                axum::routing::get(move |headers: axum::http::HeaderMap| {
+                    let userinfo_hits = userinfo_hits.clone();
                     async move {
-                        jwks_hits.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                        assert_eq!(
+                            headers
+                                .get(axum::http::header::AUTHORIZATION)
+                                .and_then(|value| value.to_str().ok()),
+                            Some("Bearer provider-access-token")
+                        );
+                        userinfo_hits.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                         axum::Json(serde_json::json!({
-                            "keys": [{
-                                "kty": "RSA",
-                                "kid": "mock-key",
-                                "use": "sig",
-                                "alg": "RS256",
-                                "n": "00",
-                                "e": "AQAB"
-                            }]
+                            "sub": "idp-user-001",
+                            "preferred_username": "oidc.alice",
+                            "email": "alice@example.com"
                         }))
                     }
                 }),
@@ -763,13 +791,22 @@ mod tests {
                 .as_str()
                 .is_some_and(|value| value.contains("response_type=code"))
         );
+        let auth_url = json["data"]["authorization_url"]
+            .as_str()
+            .unwrap_or_else(|| panic!("authorization_url should be a string"));
+        let state = Url::parse(auth_url)
+            .unwrap_or_else(|error| panic!("authorization_url should parse: {error}"))
+            .query_pairs()
+            .find_map(|(key, value)| (key == "state").then(|| value.into_owned()))
+            .unwrap_or_else(|| panic!("authorization_url should include persisted state"));
+        assert_ne!(state, "fake");
         assert!(json["data"].get("client_secret").is_none());
 
         let callback = app
             .clone()
             .oneshot(
                 Request::builder()
-                    .uri("/api/v1/auth/oidc/callback?code=fake&state=fake")
+                    .uri(format!("/api/v1/auth/oidc/callback?code=fake&state={state}&redirect_uri=http://localhost:5173/auth/callback"))
                     .body(Body::empty())
                     .unwrap_or_else(|error| panic!("request should build: {error}")),
             )
@@ -788,10 +825,32 @@ mod tests {
                 .as_str()
                 .is_some_and(|value| value.contains("token exchange failed"))
         );
+
+        let replay = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!(
+                        "/api/v1/auth/oidc/callback?code=fake&state={state}&redirect_uri=http://localhost:5173/auth/callback"
+                    ))
+                    .body(Body::empty())
+                    .unwrap_or_else(|error| panic!("request should build: {error}")),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("replay callback route should respond: {error}"));
+        let replay_body = axum::body::to_bytes(replay.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let replay_json: Value = serde_json::from_slice(&replay_body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+        assert!(
+            replay_json["message"]
+                .as_str()
+                .is_some_and(|value| value.contains("already used"))
+        );
     }
 
     #[tokio::test]
-    async fn oidc_callback_exchanges_code_and_fetches_jwks_before_failing_closed() {
+    async fn oidc_callback_exchanges_code_and_fetches_userinfo_before_local_session_mapping() {
         let mock = spawn_mock_oidc_provider().await;
         let db = connect_and_migrate("sqlite::memory:")
             .await
@@ -817,10 +876,11 @@ mod tests {
             .with_auth_config(auth),
         );
 
+        let state = authorize_oidc_state(app.clone(), "http://localhost:5173/auth/callback").await;
         let callback = app
             .oneshot(
                 Request::builder()
-                    .uri("/api/v1/auth/oidc/callback?code=mock-code&state=mock-state&redirect_uri=http://localhost:5173/auth/callback")
+                    .uri(format!("/api/v1/auth/oidc/callback?code=mock-code&state={state}&redirect_uri=http://localhost:5173/auth/callback"))
                     .body(Body::empty())
                     .unwrap_or_else(|error| panic!("request should build: {error}")),
             )
@@ -838,7 +898,7 @@ mod tests {
         assert!(
             json["message"]
                 .as_str()
-                .is_some_and(|value| value.contains("signature verification"))
+                .is_some_and(|value| value.contains("no local session mapping"))
         );
         assert_eq!(mock.token_hits.load(std::sync::atomic::Ordering::SeqCst), 1);
         assert_eq!(
@@ -846,7 +906,10 @@ mod tests {
                 .load(std::sync::atomic::Ordering::SeqCst),
             1
         );
-        assert_eq!(mock.jwks_hits.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(
+            mock.userinfo_hits.load(std::sync::atomic::Ordering::SeqCst),
+            1
+        );
         mock.server.abort();
     }
 

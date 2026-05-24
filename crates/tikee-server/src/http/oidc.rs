@@ -1,12 +1,15 @@
 //! OIDC authorization-code token exchange helpers.
 //!
-//! This module owns the network boundary to the configured `IdP`. Identity is still
-//! fail-closed at the caller until `id_token` verification and JWKS validation are
-//! wired, so the server never creates a session from unverified provider data.
+//! This module owns the network boundary to the configured `IdP`. tikee never
+//! uses provider tokens as local login state: successful external identity mapping
+//! must still issue an opaque tikee session persisted in `auth_sessions` and cached
+//! through moka.
 
+use base64::Engine;
 use serde::Deserialize;
-use serde_json::Value;
+use sha2::{Digest, Sha256};
 use url::Url;
+use uuid::Uuid;
 
 use super::error::ApiError;
 
@@ -15,8 +18,6 @@ use super::error::ApiError;
 pub struct OidcAuthorizeQuery {
     /// Optional UI callback URL.
     pub redirect_uri: Option<String>,
-    /// Optional caller-provided CSRF state value.
-    pub state: Option<String>,
 }
 
 /// Query parameters received by the OIDC callback.
@@ -32,25 +33,29 @@ pub struct OidcCallbackQuery {
     pub error: Option<String>,
 }
 
-/// Minimal token response data required before local identity verification can proceed.
+/// Minimal token response data needed to call the provider user-info endpoint.
 #[derive(Debug, Deserialize)]
 pub struct OidcTokenResponse {
-    /// Provider-issued ID token that still requires signature/JWKS validation.
-    pub id_token: Option<String>,
+    /// Provider access token used only for the upstream user-info request.
+    pub access_token: Option<String>,
+    /// Provider token type, usually `Bearer`.
+    pub token_type: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 struct OidcDiscoveryDocument {
-    jwks_uri: Option<String>,
+    userinfo_endpoint: Option<String>,
 }
 
-/// Minimal JWKS metadata fetched before local signature verification can proceed.
-#[derive(Debug, Clone)]
-pub struct OidcJwks {
-    /// Raw JWKS document.
-    pub document: Value,
-    /// Number of keys in the key set.
-    pub key_count: usize,
+/// Minimal external identity data returned by the provider user-info endpoint.
+#[derive(Debug, Clone, Deserialize)]
+pub struct OidcUserInfo {
+    /// Stable provider subject identifier.
+    pub sub: String,
+    /// Optional preferred username.
+    pub preferred_username: Option<String>,
+    /// Optional email address.
+    pub email: Option<String>,
 }
 
 /// Build the configured provider token endpoint URL.
@@ -66,7 +71,7 @@ pub fn token_endpoint(issuer: &str) -> Result<Url, ApiError> {
     .map_err(|_| ApiError::bad_request("auth.oidc.issuer_url must be a valid URL"))
 }
 
-/// Exchange an authorization code for token response data.
+/// Exchange an authorization code for provider token response data.
 ///
 /// # Errors
 ///
@@ -102,12 +107,12 @@ pub async fn exchange_authorization_code(
         .map_err(|error| ApiError::bad_request(format!("OIDC token response is invalid: {error}")))
 }
 
-/// Discover the provider JWKS URI from the standard `OpenID` Provider Configuration document.
+/// Discover the provider user-info endpoint from `OpenID` Provider Configuration.
 ///
 /// # Errors
 ///
-/// Returns a bad request when discovery fails or the provider omits `jwks_uri`.
-pub async fn discover_jwks_uri(issuer: &str) -> Result<Url, ApiError> {
+/// Returns a bad request when discovery fails or the provider omits `userinfo_endpoint`.
+pub async fn discover_userinfo_endpoint(issuer: &str) -> Result<Url, ApiError> {
     let discovery_url = Url::parse(&format!(
         "{}/.well-known/openid-configuration",
         issuer.trim_end_matches('/')
@@ -130,44 +135,57 @@ pub async fn discover_jwks_uri(issuer: &str) -> Result<Url, ApiError> {
         .map_err(|error| {
             ApiError::bad_request(format!("OIDC discovery response is invalid: {error}"))
         })?;
-    let jwks_uri = discovery
-        .jwks_uri
+    let endpoint = discovery
+        .userinfo_endpoint
         .as_deref()
         .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| ApiError::bad_request("OIDC discovery response missing jwks_uri"))?;
-    Url::parse(jwks_uri)
-        .map_err(|_| ApiError::bad_request("OIDC discovery jwks_uri must be a valid URL"))
+        .ok_or_else(|| {
+            ApiError::bad_request("OIDC discovery response missing userinfo_endpoint")
+        })?;
+    Url::parse(endpoint)
+        .map_err(|_| ApiError::bad_request("OIDC discovery userinfo_endpoint must be a valid URL"))
 }
 
-/// Fetch the provider JWKS document.
+/// Fetch external identity attributes from the provider user-info endpoint.
 ///
 /// # Errors
 ///
-/// Returns a bad request when the key set cannot be fetched or is empty.
-pub async fn fetch_jwks(jwks_uri: Url) -> Result<OidcJwks, ApiError> {
+/// Returns a bad request when user-info cannot be fetched or omits `sub`.
+pub async fn fetch_userinfo(
+    userinfo_endpoint: Url,
+    access_token: &str,
+) -> Result<OidcUserInfo, ApiError> {
     let response = reqwest::Client::new()
-        .get(jwks_uri)
+        .get(userinfo_endpoint)
+        .bearer_auth(access_token)
         .send()
         .await
-        .map_err(|error| ApiError::bad_request(format!("OIDC JWKS fetch failed: {error}")))?;
+        .map_err(|error| ApiError::bad_request(format!("OIDC userinfo fetch failed: {error}")))?;
     let status = response.status();
     if !status.is_success() {
         return Err(ApiError::bad_request(format!(
-            "OIDC JWKS fetch rejected with status {status}"
+            "OIDC userinfo fetch rejected with status {status}"
         )));
     }
-    let document = response.json::<Value>().await.map_err(|error| {
-        ApiError::bad_request(format!("OIDC JWKS response is invalid: {error}"))
+    let userinfo = response.json::<OidcUserInfo>().await.map_err(|error| {
+        ApiError::bad_request(format!("OIDC userinfo response is invalid: {error}"))
     })?;
-    let key_count = document
-        .get("keys")
-        .and_then(Value::as_array)
-        .map_or(0, Vec::len);
-    if key_count == 0 {
-        return Err(ApiError::bad_request("OIDC JWKS response contains no keys"));
+    if userinfo.sub.trim().is_empty() {
+        return Err(ApiError::bad_request("OIDC userinfo response missing sub"));
     }
-    Ok(OidcJwks {
-        document,
-        key_count,
-    })
+    Ok(userinfo)
+}
+
+/// Generate an opaque OIDC state value.
+#[must_use]
+pub fn generate_state() -> String {
+    format!("oidc-state-{}", Uuid::now_v7())
+}
+
+/// Hash a state value before persistence.
+#[must_use]
+pub fn hash_state(state: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(state.as_bytes());
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(hasher.finalize())
 }

@@ -14,6 +14,7 @@ mod instance;
 mod job;
 mod job_repo;
 mod log;
+mod oidc;
 mod raft;
 mod scope;
 mod script;
@@ -38,6 +39,7 @@ pub use instance::{CreateJobInstance, JobInstanceRepository, JobInstanceSummary}
 pub use job::{CreateJob, JobSummary};
 pub use job_repo::JobRepository;
 pub use log::{AppendJobInstanceLog, JobInstanceLogRepository, JobInstanceLogSummary};
+pub use oidc::{CreateOidcAuthState, OidcAuthStateRepository, OidcAuthStateSummary};
 pub use raft::{
     RaftAppliedCommandSummary, RaftLogEntrySummary, RaftMemberSummary,
     RaftMembershipProposalSummary, RaftMetadataSummary, RaftRepository, RaftSnapshotSummary,

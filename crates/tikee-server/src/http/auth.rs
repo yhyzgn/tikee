@@ -7,6 +7,7 @@ use axum::{
 };
 use bcrypt::verify;
 use std::sync::Arc;
+use tikee_storage::{CreateOidcAuthState, OidcAuthStateRepository};
 use tracing::warn;
 
 use super::{
@@ -434,6 +435,15 @@ pub async fn oidc_authorize(
         .redirect_uri
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| "/api/v1/auth/oidc/callback".to_owned());
+    let state_value = super::oidc::generate_state();
+    OidcAuthStateRepository::new(state.users.db())
+        .create_state(CreateOidcAuthState {
+            state_hash: super::oidc::hash_state(&state_value),
+            redirect_uri: redirect_uri.clone(),
+            ttl_seconds: 600,
+        })
+        .await
+        .map_err(|error| ApiError::storage(&error))?;
     let mut authorization_url = url::Url::parse(&format!(
         "{}/protocol/openid-connect/auth",
         issuer.trim_end_matches('/')
@@ -445,15 +455,9 @@ pub async fn oidc_authorize(
         .append_pair("client_id", client_id)
         .append_pair("redirect_uri", &redirect_uri)
         .append_pair("scope", &oidc.scopes.join(" "));
-    if let Some(state_value) = query
-        .state
-        .as_ref()
-        .filter(|value| !value.trim().is_empty())
-    {
-        authorization_url
-            .query_pairs_mut()
-            .append_pair("state", state_value);
-    }
+    authorization_url
+        .query_pairs_mut()
+        .append_pair("state", &state_value);
     Ok(Json(ApiResponse::success(OidcAuthorizeResponse {
         provider: "oidc".to_owned(),
         authorization_url: authorization_url.to_string(),
@@ -469,7 +473,7 @@ pub async fn oidc_authorize(
 /// # Errors
 ///
 /// Returns a bad request when OIDC is disabled, callback data is malformed, token exchange fails,
-/// or until real `IdP` ID token verification/JWKS validation is implemented.
+/// or until external identity is mapped to a local opaque session.
 #[utoipa::path(get, path = "/api/v1/auth/oidc/callback", tag = "auth")]
 pub async fn oidc_callback(
     State(state): State<Arc<AppState>>,
@@ -489,7 +493,14 @@ pub async fn oidc_callback(
         )));
     }
     let code = configured_value(query.code.as_ref(), "OIDC callback code")?;
-    let _state = configured_value(query.state.as_ref(), "OIDC callback state")?;
+    let state_value = configured_value(query.state.as_ref(), "OIDC callback state")?;
+    let oidc_state = OidcAuthStateRepository::new(state.users.db())
+        .consume_state(&super::oidc::hash_state(state_value))
+        .await
+        .map_err(|error| ApiError::storage(&error))?
+        .ok_or_else(|| {
+            ApiError::bad_request("OIDC callback state is invalid, expired, or already used")
+        })?;
     let issuer = configured_value(oidc.issuer_url.as_ref(), "auth.oidc.issuer_url")?;
     let client_id = configured_value(oidc.client_id.as_ref(), "auth.oidc.client_id")?;
     let client_secret = configured_value(oidc.client_secret.as_ref(), "auth.oidc.client_secret")?;
@@ -497,7 +508,12 @@ pub async fn oidc_callback(
         .redirect_uri
         .as_deref()
         .filter(|value| !value.trim().is_empty())
-        .unwrap_or("/api/v1/auth/oidc/callback");
+        .unwrap_or(oidc_state.redirect_uri.as_str());
+    if redirect_uri != oidc_state.redirect_uri {
+        return Err(ApiError::bad_request(
+            "OIDC callback redirect_uri does not match authorization state",
+        ));
+    }
     let token = super::oidc::exchange_authorization_code(
         super::oidc::token_endpoint(issuer)?,
         code,
@@ -506,12 +522,21 @@ pub async fn oidc_callback(
         client_secret,
     )
     .await?;
-    configured_value(token.id_token.as_ref(), "OIDC token response id_token")?;
-    let jwks = super::oidc::fetch_jwks(super::oidc::discover_jwks_uri(issuer).await?).await?;
+    let access_token = configured_value(
+        token.access_token.as_ref(),
+        "OIDC token response access_token",
+    )?;
+    let _token_type =
+        configured_value(token.token_type.as_ref(), "OIDC token response token_type")?;
+    let userinfo = super::oidc::fetch_userinfo(
+        super::oidc::discover_userinfo_endpoint(issuer).await?,
+        access_token,
+    )
+    .await?;
 
     Err(ApiError::bad_request(format!(
-        "OIDC id_token signature verification is not yet enabled after fetching {key_count} JWKS key(s); no session was created",
-        key_count = jwks.key_count
+        "OIDC external identity subject {subject} has no local session mapping yet; no tikee session was created",
+        subject = userinfo.sub
     )))
 }
 

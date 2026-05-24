@@ -28,6 +28,7 @@ impl MigrationTrait for CreateMetadataTables {
         create_users(manager).await?;
         create_rbac_tables(manager).await?;
         create_auth_sessions(manager).await?;
+        create_oidc_auth_states(manager).await?;
         create_scripts(manager).await?;
         create_script_versions(manager).await?;
         create_workflow_tables(manager).await?;
@@ -109,9 +110,7 @@ impl MigrationTrait for CreateMetadataTables {
         manager
             .drop_table(Table::drop().table(Scripts::Table).to_owned())
             .await?;
-        manager
-            .drop_table(Table::drop().table(AuthSessions::Table).to_owned())
-            .await?;
+        drop_auth_tables(manager).await?;
         manager
             .drop_table(Table::drop().table(RolePermissions::Table).to_owned())
             .await?;
@@ -279,6 +278,23 @@ async fn create_auth_sessions(manager: &SchemaManager<'_>) -> Result<(), DbErr> 
         .await
 }
 
+async fn create_oidc_auth_states(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    manager
+        .create_table(
+            Table::create()
+                .table(OidcAuthStates::Table)
+                .if_not_exists()
+                .col(string_pk(OidcAuthStates::Id))
+                .col(string_col(OidcAuthStates::StateHash))
+                .col(string_col(OidcAuthStates::RedirectUri))
+                .col(string_col(OidcAuthStates::ExpiresAt))
+                .col(string_null(OidcAuthStates::ConsumedAt))
+                .col(string_col(OidcAuthStates::CreatedAt))
+                .to_owned(),
+        )
+        .await
+}
+
 async fn create_scripts(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
     manager
         .create_table(
@@ -303,6 +319,15 @@ async fn create_scripts(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
                 .col(string_col(Scripts::UpdatedAt))
                 .to_owned(),
         )
+        .await
+}
+
+async fn drop_auth_tables(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    manager
+        .drop_table(Table::drop().table(OidcAuthStates::Table).to_owned())
+        .await?;
+    manager
+        .drop_table(Table::drop().table(AuthSessions::Table).to_owned())
         .await
 }
 
@@ -942,6 +967,28 @@ async fn create_job_instances(manager: &SchemaManager<'_>) -> Result<(), DbErr> 
         .await
 }
 
+async fn create_oidc_auth_state_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_oidc_auth_states_state_hash")
+            .table(OidcAuthStates::Table)
+            .col(OidcAuthStates::StateHash)
+            .unique()
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_oidc_auth_states_expires")
+            .table(OidcAuthStates::Table)
+            .col(OidcAuthStates::ExpiresAt)
+            .to_owned(),
+    )
+    .await
+}
+
 #[allow(clippy::too_many_lines)]
 async fn create_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
     create_index(
@@ -1079,6 +1126,7 @@ async fn create_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
             .to_owned(),
     )
     .await?;
+    create_oidc_auth_state_indexes(manager).await?;
     create_index(
         manager,
         Index::create()
@@ -1543,6 +1591,17 @@ enum AuthSessions {
     ExpiresAt,
     CreatedAt,
     UpdatedAt,
+}
+
+#[derive(DeriveIden)]
+enum OidcAuthStates {
+    Table,
+    Id,
+    StateHash,
+    RedirectUri,
+    ExpiresAt,
+    ConsumedAt,
+    CreatedAt,
 }
 
 #[derive(DeriveIden)]
