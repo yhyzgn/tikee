@@ -1543,3 +1543,10 @@ Verification evidence:
 - Updated `design/tikee-architecture-design.md` roadmap with a Phase 4 Worker identity/session lifecycle governance item.
 Verification evidence:
 - Documentation-only change reviewed with `rtk git diff --check`.
+
+
+### 2026-05-24 — Worker identity lifecycle design: bare metal support
+- Extended `design/worker-identity-lifecycle-design.md` so Worker identity/session lifecycle governance explicitly supports bare metal, VM, systemd, Supervisor, and Windows Service deployments in addition to K8s/Docker.
+- Added host-id + instance-slot identity guidance, auto identity-mode precedence, and route-map updates in the architecture roadmap wording.
+Verification evidence:
+- Documentation-only change reviewed with `rtk git diff --check`.
