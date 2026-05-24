@@ -71,6 +71,7 @@ async fn ensure_sqlite_schema_compatibility(db: &DatabaseConnection) -> Result<(
     ensure_auth_schema_compatibility(db).await?;
     ensure_oidc_auth_state_schema_compatibility(db).await?;
     ensure_rbac_schema_compatibility(db).await?;
+    ensure_scope_schema_compatibility(db).await?;
     ensure_job_schema_compatibility(db).await?;
     ensure_scripts_schema_compatibility(db).await?;
     ensure_script_versions_schema_compatibility(db).await?;
@@ -79,6 +80,46 @@ async fn ensure_sqlite_schema_compatibility(db: &DatabaseConnection) -> Result<(
     ensure_workflow_schema_compatibility(db).await?;
     ensure_raft_schema_compatibility(db).await?;
     remove_sqlite_foreign_keys(db).await
+}
+
+async fn ensure_scope_schema_compatibility(db: &DatabaseConnection) -> Result<(), sea_orm::DbErr> {
+    if db.get_database_backend() != DatabaseBackend::Sqlite {
+        return Ok(());
+    }
+    db.execute(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        r"CREATE TABLE IF NOT EXISTS namespaces (
+            id varchar NOT NULL PRIMARY KEY,
+            name varchar NOT NULL,
+            created_at varchar NOT NULL,
+            updated_at varchar NOT NULL
+        )",
+    ))
+    .await?;
+    db.execute(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        r"CREATE TABLE IF NOT EXISTS apps (
+            id varchar NOT NULL PRIMARY KEY,
+            namespace_id varchar NOT NULL,
+            name varchar NOT NULL,
+            created_at varchar NOT NULL,
+            updated_at varchar NOT NULL
+        )",
+    ))
+    .await?;
+    db.execute(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        r"CREATE TABLE IF NOT EXISTS worker_pools (
+            id varchar NOT NULL PRIMARY KEY,
+            namespace_id varchar NOT NULL,
+            app_id varchar NOT NULL,
+            name varchar NOT NULL,
+            created_at varchar NOT NULL,
+            updated_at varchar NOT NULL
+        )",
+    ))
+    .await?;
+    Ok(())
 }
 
 async fn ensure_job_schema_compatibility(db: &DatabaseConnection) -> Result<(), sea_orm::DbErr> {
@@ -1038,6 +1079,81 @@ mod tests {
             assert!(
                 rows.is_empty(),
                 "table {table} must use soft relationships only"
+            );
+        }
+    }
+    #[tokio::test]
+    async fn sqlite_compatibility_creates_scope_tables_before_indexes_for_existing_dev_db() {
+        let db = sea_orm::Database::connect("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("sqlite memory db should connect: {error}"));
+        for sql in [
+            r"CREATE TABLE jobs (
+                id varchar NOT NULL PRIMARY KEY,
+                namespace_id varchar NOT NULL,
+                app_id varchar NOT NULL,
+                name varchar NOT NULL,
+                schedule_type varchar NOT NULL,
+                schedule_expr varchar,
+                processor_name varchar,
+                enabled boolean NOT NULL,
+                created_at varchar NOT NULL,
+                updated_at varchar NOT NULL
+            )",
+            r"CREATE TABLE job_instances (
+                id varchar NOT NULL PRIMARY KEY,
+                job_id varchar NOT NULL,
+                status varchar NOT NULL,
+                trigger_type varchar NOT NULL,
+                execution_mode varchar NOT NULL,
+                created_at varchar NOT NULL,
+                updated_at varchar NOT NULL
+            )",
+            r"CREATE TABLE job_instance_attempts (
+                id varchar NOT NULL PRIMARY KEY,
+                instance_id varchar NOT NULL,
+                worker_id varchar NOT NULL,
+                status varchar NOT NULL,
+                started_at varchar NOT NULL,
+                finished_at varchar,
+                error_message text,
+                created_at varchar NOT NULL
+            )",
+            r"CREATE TABLE job_instance_logs (
+                id varchar NOT NULL PRIMARY KEY,
+                instance_id varchar NOT NULL,
+                worker_id varchar,
+                level varchar NOT NULL,
+                message text NOT NULL,
+                sequence bigint NOT NULL,
+                created_at varchar NOT NULL
+            )",
+        ] {
+            db.execute(Statement::from_string(
+                DatabaseBackend::Sqlite,
+                sql.to_owned(),
+            ))
+            .await
+            .unwrap_or_else(|error| panic!("legacy indexed table should create: {error}"));
+        }
+
+        crate::ensure_sqlite_schema_compatibility(&db)
+            .await
+            .unwrap_or_else(|error| {
+                panic!("compatibility migration should create scope tables before indexes: {error}")
+            });
+
+        for table in ["namespaces", "apps", "worker_pools"] {
+            let row = db
+                .query_one(Statement::from_string(
+                    DatabaseBackend::Sqlite,
+                    format!("SELECT name FROM sqlite_master WHERE type='table' AND name='{table}'"),
+                ))
+                .await
+                .unwrap_or_else(|error| panic!("sqlite_master query should run: {error}"));
+            assert!(
+                row.is_some(),
+                "{table} should exist after compatibility migration"
             );
         }
     }
