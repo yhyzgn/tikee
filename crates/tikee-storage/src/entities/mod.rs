@@ -14,6 +14,7 @@ pub mod job_instance_attempt;
 pub mod job_instance_log;
 pub mod namespace;
 pub mod oidc_auth_state;
+pub mod oidc_identity;
 pub mod permission;
 pub mod raft_applied_command;
 pub mod raft_log_entry;

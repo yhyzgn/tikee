@@ -29,6 +29,7 @@ impl MigrationTrait for CreateMetadataTables {
         create_rbac_tables(manager).await?;
         create_auth_sessions(manager).await?;
         create_oidc_auth_states(manager).await?;
+        create_oidc_identities(manager).await?;
         create_scripts(manager).await?;
         create_script_versions(manager).await?;
         create_workflow_tables(manager).await?;
@@ -295,6 +296,26 @@ async fn create_oidc_auth_states(manager: &SchemaManager<'_>) -> Result<(), DbEr
         .await
 }
 
+async fn create_oidc_identities(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    manager
+        .create_table(
+            Table::create()
+                .table(OidcIdentities::Table)
+                .if_not_exists()
+                .col(string_pk(OidcIdentities::Id))
+                .col(string_col(OidcIdentities::Issuer))
+                .col(string_col(OidcIdentities::Subject))
+                .col(string_col(OidcIdentities::Username))
+                .col(string_null(OidcIdentities::Namespace))
+                .col(string_null(OidcIdentities::App))
+                .col(string_null(OidcIdentities::WorkerPool))
+                .col(string_col(OidcIdentities::CreatedAt))
+                .col(string_col(OidcIdentities::UpdatedAt))
+                .to_owned(),
+        )
+        .await
+}
+
 async fn create_scripts(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
     manager
         .create_table(
@@ -323,6 +344,9 @@ async fn create_scripts(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
 }
 
 async fn drop_auth_tables(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    manager
+        .drop_table(Table::drop().table(OidcIdentities::Table).to_owned())
+        .await?;
     manager
         .drop_table(Table::drop().table(OidcAuthStates::Table).to_owned())
         .await?;
@@ -989,8 +1013,41 @@ async fn create_oidc_auth_state_indexes(manager: &SchemaManager<'_>) -> Result<(
     .await
 }
 
-#[allow(clippy::too_many_lines)]
+async fn create_oidc_identity_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_oidc_identities_issuer_subject")
+            .table(OidcIdentities::Table)
+            .col(OidcIdentities::Issuer)
+            .col(OidcIdentities::Subject)
+            .unique()
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_oidc_identities_username")
+            .table(OidcIdentities::Table)
+            .col(OidcIdentities::Username)
+            .to_owned(),
+    )
+    .await
+}
+
 async fn create_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    create_scope_indexes(manager).await?;
+    create_job_indexes(manager).await?;
+    create_auth_indexes(manager).await?;
+    create_script_indexes(manager).await?;
+    create_audit_log_indexes(manager).await?;
+    create_workflow_indexes(manager).await?;
+    create_dispatch_indexes(manager).await?;
+    create_raft_indexes(manager).await
+}
+
+async fn create_scope_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
     create_index(
         manager,
         Index::create()
@@ -1022,7 +1079,10 @@ async fn create_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
             .unique()
             .to_owned(),
     )
-    .await?;
+    .await
+}
+
+async fn create_job_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
     create_index(
         manager,
         Index::create()
@@ -1063,8 +1123,10 @@ async fn create_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
             .col(JobInstanceLogs::Sequence)
             .to_owned(),
     )
-    .await?;
+    .await
+}
 
+async fn create_auth_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
     create_index(
         manager,
         Index::create()
@@ -1127,6 +1189,10 @@ async fn create_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
     )
     .await?;
     create_oidc_auth_state_indexes(manager).await?;
+    create_oidc_identity_indexes(manager).await
+}
+
+async fn create_script_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
     create_index(
         manager,
         Index::create()
@@ -1164,7 +1230,10 @@ async fn create_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
             .unique()
             .to_owned(),
     )
-    .await?;
+    .await
+}
+
+async fn create_audit_log_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
     create_index(
         manager,
         Index::create()
@@ -1192,7 +1261,10 @@ async fn create_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
             .col(AuditLogs::ResourceId)
             .to_owned(),
     )
-    .await?;
+    .await
+}
+
+async fn create_workflow_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
     create_index(
         manager,
         Index::create()
@@ -1249,7 +1321,10 @@ async fn create_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
             .col(WorkflowShards::WorkflowNodeInstanceId)
             .to_owned(),
     )
-    .await?;
+    .await
+}
+
+async fn create_dispatch_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
     create_index(
         manager,
         Index::create()
@@ -1269,10 +1344,8 @@ async fn create_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
             .col(InstanceEvents::CreatedAt)
             .to_owned(),
     )
-    .await?;
-    create_raft_indexes(manager).await
+    .await
 }
-
 async fn create_raft_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
     create_index(
         manager,
@@ -1602,6 +1675,20 @@ enum OidcAuthStates {
     ExpiresAt,
     ConsumedAt,
     CreatedAt,
+}
+
+#[derive(DeriveIden)]
+enum OidcIdentities {
+    Table,
+    Id,
+    Issuer,
+    Subject,
+    Username,
+    Namespace,
+    App,
+    WorkerPool,
+    CreatedAt,
+    UpdatedAt,
 }
 
 #[derive(DeriveIden)]

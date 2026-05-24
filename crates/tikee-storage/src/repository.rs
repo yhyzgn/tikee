@@ -15,6 +15,7 @@ mod job;
 mod job_repo;
 mod log;
 mod oidc;
+mod oidc_identity;
 mod raft;
 mod scope;
 mod script;
@@ -40,6 +41,7 @@ pub use job::{CreateJob, JobSummary};
 pub use job_repo::JobRepository;
 pub use log::{AppendJobInstanceLog, JobInstanceLogRepository, JobInstanceLogSummary};
 pub use oidc::{CreateOidcAuthState, OidcAuthStateRepository, OidcAuthStateSummary};
+pub use oidc_identity::{OidcIdentityRepository, OidcIdentitySummary, UpsertOidcIdentity};
 pub use raft::{
     RaftAppliedCommandSummary, RaftLogEntrySummary, RaftMemberSummary,
     RaftMembershipProposalSummary, RaftMetadataSummary, RaftRepository, RaftSnapshotSummary,

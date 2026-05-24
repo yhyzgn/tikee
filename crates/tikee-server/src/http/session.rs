@@ -17,11 +17,11 @@ use uuid::Uuid;
 use super::{
     dto::{AccessScopeBinding, ApiTokenSummary, AuthSession, CreatedApiToken, MeResponse},
     error::ApiError,
+    session_metadata::{
+        api_token_scopes, api_token_summary, encode_api_token_device_id, encode_session_device_id,
+        is_api_token_session, session_scope_bindings,
+    },
 };
-
-const API_TOKEN_DEVICE_PREFIX: &str = "api-token:";
-const API_TOKEN_SCOPE_SEPARATOR: &str = ";scopes=";
-const API_TOKEN_BINDING_SEPARATOR: &str = ";bindings=";
 
 /// Session creation input passed from the authentication boundary.
 #[derive(Debug, Clone)]
@@ -207,7 +207,7 @@ impl SessionStore for DbMokaSessionStore {
             .create_session(CreateAuthSession {
                 user_id: input.user_id,
                 token_hash: token_hash.clone(),
-                device_id: input.device_id,
+                device_id: encode_session_device_id(input.device_id, &input.scope_bindings),
                 device_name: input.device_name,
                 expires_at,
             })
@@ -220,13 +220,14 @@ impl SessionStore for DbMokaSessionStore {
             .permissions_for_roles(&roles)
             .await
             .map_err(|error| ApiError::storage(&error))?;
+        let scope_bindings = session_scope_bindings(&summary);
         let principal = MeResponse {
             username: summary.username.clone(),
             roles,
             permissions,
-            scope_limited: false,
+            scope_limited: !scope_bindings.is_empty(),
             token_scopes: Vec::new(),
-            scope_bindings: Vec::new(),
+            scope_bindings,
         };
         self.cache.insert(token_hash, principal.clone()).await;
 
@@ -276,7 +277,7 @@ impl SessionStore for DbMokaSessionStore {
             .await
             .map_err(|error| ApiError::storage(&error))?;
         let token_scopes = api_token_scopes(&summary);
-        let scope_bindings = api_token_scope_bindings(&summary);
+        let scope_bindings = session_scope_bindings(&summary);
         let permissions = if token_scopes.is_empty() {
             role_permissions
         } else {
@@ -358,7 +359,7 @@ impl SessionStore for DbMokaSessionStore {
             .await
             .map_err(|error| ApiError::storage(&error))?;
         let token_scopes = api_token_scopes(&summary);
-        let scope_bindings = api_token_scope_bindings(&summary);
+        let scope_bindings = session_scope_bindings(&summary);
         let permissions = if token_scopes.is_empty() {
             role_permissions
         } else {
@@ -395,111 +396,6 @@ impl SessionStore for DbMokaSessionStore {
         // short local cache keeps correctness simple; DB remains authoritative.
         self.cache.invalidate_all();
         Ok(())
-    }
-}
-
-fn is_api_token_session(session: &tikee_storage::AuthSessionSummary) -> bool {
-    session
-        .device_id
-        .as_ref()
-        .is_some_and(|value| value.starts_with(API_TOKEN_DEVICE_PREFIX))
-}
-
-fn api_token_summary(session: tikee_storage::AuthSessionSummary) -> ApiTokenSummary {
-    let scopes = api_token_scopes(&session);
-    let scope_bindings = api_token_scope_bindings(&session);
-    ApiTokenSummary {
-        id: session.id,
-        name: session
-            .device_name
-            .unwrap_or_else(|| "api-token".to_owned()),
-        username: session.username,
-        scopes,
-        scope_bindings,
-        expires_at: session.expires_at,
-        created_at: session.created_at,
-    }
-}
-
-fn encode_api_token_device_id(scopes: &[String], bindings: &[AccessScopeBinding]) -> String {
-    let id = format!("{API_TOKEN_DEVICE_PREFIX}{}", Uuid::new_v4().as_simple());
-    let scope_suffix = if scopes.is_empty() {
-        String::new()
-    } else {
-        format!("{API_TOKEN_SCOPE_SEPARATOR}{}", scopes.join(","))
-    };
-    let binding_suffix = if bindings.is_empty() {
-        String::new()
-    } else {
-        format!(
-            "{API_TOKEN_BINDING_SEPARATOR}{}",
-            bindings
-                .iter()
-                .map(encode_scope_binding)
-                .collect::<Vec<_>>()
-                .join(",")
-        )
-    };
-    format!("{id}{scope_suffix}{binding_suffix}")
-}
-
-fn api_token_scopes(session: &tikee_storage::AuthSessionSummary) -> Vec<String> {
-    let Some(device_id) = session.device_id.as_deref() else {
-        return Vec::new();
-    };
-    let Some((_, tail)) = device_id.split_once(API_TOKEN_SCOPE_SEPARATOR) else {
-        return Vec::new();
-    };
-    let scopes = tail.split_once(';').map_or(tail, |(scopes, _)| scopes);
-    scopes
-        .split(',')
-        .map(str::trim)
-        .filter(|scope| !scope.is_empty())
-        .map(str::to_owned)
-        .collect()
-}
-
-fn api_token_scope_bindings(
-    session: &tikee_storage::AuthSessionSummary,
-) -> Vec<AccessScopeBinding> {
-    let Some(device_id) = session.device_id.as_deref() else {
-        return Vec::new();
-    };
-    let Some((_, bindings)) = device_id.split_once(API_TOKEN_BINDING_SEPARATOR) else {
-        return Vec::new();
-    };
-    bindings
-        .split(',')
-        .filter_map(decode_scope_binding)
-        .collect()
-}
-
-fn encode_scope_binding(binding: &AccessScopeBinding) -> String {
-    [
-        binding.namespace.as_deref().unwrap_or("*"),
-        binding.app.as_deref().unwrap_or("*"),
-        binding.worker_pool.as_deref().unwrap_or("*"),
-    ]
-    .join("|")
-}
-
-fn decode_scope_binding(value: &str) -> Option<AccessScopeBinding> {
-    let mut parts = value.split('|');
-    let namespace = decode_scope_binding_part(parts.next()?);
-    let app = decode_scope_binding_part(parts.next()?);
-    let worker_pool = decode_scope_binding_part(parts.next()?);
-    Some(AccessScopeBinding {
-        namespace,
-        app,
-        worker_pool,
-    })
-}
-
-fn decode_scope_binding_part(value: &str) -> Option<String> {
-    if value == "*" || value.trim().is_empty() {
-        None
-    } else {
-        Some(value.to_owned())
     }
 }
 

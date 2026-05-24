@@ -25,14 +25,15 @@ pub use repository::{
     JobInstanceAttemptSummary, JobInstanceLogRepository, JobInstanceLogSummary,
     JobInstanceRepository, JobInstanceSummary, JobRepository, JobSummary,
     MaterializeWorkflowNodeResult, NamespaceSummary, OidcAuthStateRepository, OidcAuthStateSummary,
-    PermissionSummary, QueueOverview, RaftAppliedCommandSummary, RaftLogEntrySummary,
-    RaftMemberSummary, RaftMembershipProposalSummary, RaftMetadataSummary, RaftRepository,
-    RaftSnapshotSummary, RbacRepository, RecordAlertDeliveryAttempt, RecordRaftAppliedCommand,
+    OidcIdentityRepository, OidcIdentitySummary, PermissionSummary, QueueOverview,
+    RaftAppliedCommandSummary, RaftLogEntrySummary, RaftMemberSummary,
+    RaftMembershipProposalSummary, RaftMetadataSummary, RaftRepository, RaftSnapshotSummary,
+    RbacRepository, RecordAlertDeliveryAttempt, RecordRaftAppliedCommand,
     RecordRaftMembershipProposal, RecoverWorkflowNodeInput, RecoverWorkflowNodeResult,
     ScopeRepository, ScriptRepository, ScriptSummary, ScriptVersionRepository,
-    ScriptVersionSummary, UpdateScript, UpdateUser, UpdateWorkflow, UpsertRaftLogEntry,
-    UpsertRaftMember, UpsertRaftMetadata, UpsertRaftSnapshot, UserRepository, UserSummary,
-    WorkerPoolSummary, WorkflowDefinition, WorkflowEdgeSpec, WorkflowInstanceSummary,
+    ScriptVersionSummary, UpdateScript, UpdateUser, UpdateWorkflow, UpsertOidcIdentity,
+    UpsertRaftLogEntry, UpsertRaftMember, UpsertRaftMetadata, UpsertRaftSnapshot, UserRepository,
+    UserSummary, WorkerPoolSummary, WorkflowDefinition, WorkflowEdgeSpec, WorkflowInstanceSummary,
     WorkflowJobResultOutcome, WorkflowNodeInstanceSummary, WorkflowNodeSpec, WorkflowRepository,
     WorkflowShardSummary, WorkflowSloSummary, WorkflowSummary, WorkflowValidationResult,
     validate_workflow_definition,
@@ -70,6 +71,7 @@ async fn ensure_sqlite_schema_compatibility(db: &DatabaseConnection) -> Result<(
     ensure_broadcast_schema_compatibility(db).await?;
     ensure_auth_schema_compatibility(db).await?;
     ensure_oidc_auth_state_schema_compatibility(db).await?;
+    ensure_oidc_identity_schema_compatibility(db).await?;
     ensure_rbac_schema_compatibility(db).await?;
     ensure_scope_schema_compatibility(db).await?;
     ensure_job_schema_compatibility(db).await?;
@@ -718,6 +720,40 @@ async fn ensure_oidc_auth_state_schema_compatibility(
     Ok(())
 }
 
+async fn ensure_oidc_identity_schema_compatibility(
+    db: &DatabaseConnection,
+) -> Result<(), sea_orm::DbErr> {
+    if db.get_database_backend() != DatabaseBackend::Sqlite {
+        return Ok(());
+    }
+    db.execute(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        r"CREATE TABLE IF NOT EXISTS oidc_identities (
+            id varchar NOT NULL PRIMARY KEY,
+            issuer varchar NOT NULL,
+            subject varchar NOT NULL,
+            username varchar NOT NULL,
+            namespace varchar,
+            app varchar,
+            worker_pool varchar,
+            created_at varchar NOT NULL,
+            updated_at varchar NOT NULL
+        )",
+    ))
+    .await?;
+    db.execute(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_oidc_identities_issuer_subject ON oidc_identities (issuer, subject)",
+    ))
+    .await?;
+    db.execute(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        "CREATE INDEX IF NOT EXISTS idx_oidc_identities_username ON oidc_identities (username)",
+    ))
+    .await?;
+    Ok(())
+}
+
 async fn ensure_auth_schema_compatibility(db: &DatabaseConnection) -> Result<(), sea_orm::DbErr> {
     if db.get_database_backend() != DatabaseBackend::Sqlite {
         return Ok(());
@@ -1022,6 +1058,8 @@ async fn ensure_sqlite_indexes(db: &DatabaseConnection) -> Result<(), sea_orm::D
         "CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions (user_id)",
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_oidc_auth_states_state_hash ON oidc_auth_states (state_hash)",
         "CREATE INDEX IF NOT EXISTS idx_oidc_auth_states_expires ON oidc_auth_states (expires_at)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_oidc_identities_issuer_subject ON oidc_identities (issuer, subject)",
+        "CREATE INDEX IF NOT EXISTS idx_oidc_identities_username ON oidc_identities (username)",
     ] {
         db.execute(Statement::from_string(DatabaseBackend::Sqlite, sql))
             .await?;

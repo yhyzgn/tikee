@@ -1556,3 +1556,12 @@ Verification evidence:
 - P0 now prioritizes features that directly affect service use: OIDC mapped opaque login, real TLS/mTLS, Worker lifecycle identity, deployment bootstrap, and production alert delivery.
 Verification evidence:
 - Documentation-only change reviewed with `rtk git diff --check`.
+
+### 2026-05-25 — P0 OIDC mapped opaque session issuance
+- Completed P0 OIDC external-subject mapping: `oidc_identities` maps `(issuer, subject)` to a local username plus optional namespace/app/worker_pool bindings without database foreign keys.
+- OIDC callback now uses provider tokens only for token exchange/UserInfo, then issues a local opaque `atk_` session from `auth_sessions` + moka after mapping succeeds; unmapped identities still fail closed.
+- Split new code by responsibility: storage identity repository, OIDC callback completion, and session metadata encoding are separate modules; no new clippy allow was added.
+Verification evidence:
+- RED mapped-subject callback test failed before `OidcIdentityRepository` existed, then passed.
+- Targeted OIDC tests, storage/server clippy, and fmt check passed via RTK.
+- P0 OIDC mapped opaque session full backend verification passed: `rtk bash -lc 'set -euo pipefail; cargo fmt --all -- --check; cargo clippy --workspace --all-targets --all-features -- -D warnings; cargo test --workspace --all-features; cargo build --workspace --all-features; cargo run -- --help >/tmp/tikee-help.out'`.

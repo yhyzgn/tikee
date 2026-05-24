@@ -2207,6 +2207,7 @@ tikee/
   - [x] OIDC 授权/回调骨架（092：`GET /api/v1/auth/oidc/authorize` 生成授权 URL 且不暴露 secret；`/callback` 校验 code/state 形状但明确拒绝未验证 token，不创建 session）
   - [x] OIDC token exchange 边界（116：callback 使用配置的 client credentials 调用 provider token endpoint，要求返回 `access_token`，但在 UserInfo/signature/claims 验证和用户映射前仍 fail-closed 不创建 session）
   - [x] OIDC UserInfo 获取边界（117 修正：callback token exchange 后读取 provider discovery 的 `userinfo_endpoint` 并获取外部 subject；在本地 user/role/tenant 映射前仍 fail-closed，不创建 tikee opaque session）
+  - [x] OIDC 外部身份映射与 opaque session 签发（122：`oidc_identities` 以 `(issuer, subject)` 软链接本地 username 和 namespace/app/worker_pool scope；callback 只用 provider access token 读取 UserInfo，映射命中后签发本地 `auth_sessions` opaque bearer token，继续严禁 JWT 作为本地登录态）
 - [ ] mTLS 传输加密
   - [x] TLS/mTLS 配置与诊断基础（086：`transport_security` 配置、`GET /api/v1/security/transport` 脱敏显示 HTTP/Worker Tunnel TLS/mTLS readiness）
   - [x] TLS listener 边界 fail-closed（094：状态返回 `listener_mode=plaintext|tls_pending_listener`；TLS/mTLS 开启时即使证书路径齐全也标记 not ready，直到真实监听器 TLS wiring 完成）
@@ -2292,7 +2293,7 @@ Phase 3 closeout 按“本地可验证 foundation 完成、生产级闭环明确
 
 **P0 — 服务使用 / 生产上线阻塞项（优先实现）**
 
-- [ ] OIDC 外部 subject → 本地 user/role/tenant 映射，并签发 tikee opaque session（继续严禁 JWT 作为本地登录态）。
+- [x] OIDC 外部 subject → 本地 user/role/tenant 映射，并签发 tikee opaque session（122：provider token 不成为本地登录态；`auth_sessions` + moka 仍是唯一登录态来源；OIDC scope binding 可限制 namespace/app/worker_pool）。
 - [ ] 真实 HTTP 与 Worker Tunnel TLS/mTLS listener、证书 reload/rotation、启动诊断和失败回滚。
 - [ ] Worker 身份与会话生命周期治理（K8s/Docker 与裸机/VM/systemd 同等支持；Logical Worker / Session / generation / fencing token / lost reason 分层）。
 - [ ] 部署与运维 bootstrap：本地/裸机/systemd/Compose 的最小生产模板优先，Helm 在外部 DB、secret、网关和 TLS 参数稳定后落地。

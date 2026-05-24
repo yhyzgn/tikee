@@ -5,10 +5,12 @@ pub mod auth;
 pub mod dto;
 pub mod error;
 pub mod oidc;
+mod oidc_session;
 pub mod openapi;
 pub mod routes;
 pub mod services;
 pub mod session;
+mod session_metadata;
 pub mod trace;
 
 use std::{net::SocketAddr, sync::Arc, time::SystemTime};
@@ -847,6 +849,112 @@ mod tests {
                 .as_str()
                 .is_some_and(|value| value.contains("already used"))
         );
+    }
+
+    #[tokio::test]
+    async fn oidc_callback_issues_opaque_session_for_mapped_external_subject() {
+        let mock = spawn_mock_oidc_provider().await;
+        let db = connect_and_migrate("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("test storage should initialize: {error}"));
+        UserRepository::new(db.clone())
+            .create_user(tikee_storage::CreateUser {
+                username: "oidc.alice".to_owned(),
+                password: "external-oidc-login-disabled".to_owned(),
+                role: "viewer".to_owned(),
+            })
+            .await
+            .unwrap_or_else(|error| panic!("mapped user should be created: {error}"));
+        tikee_storage::OidcIdentityRepository::new(db.clone())
+            .upsert_identity(tikee_storage::UpsertOidcIdentity {
+                issuer: mock.issuer.clone(),
+                subject: "idp-user-001".to_owned(),
+                username: "oidc.alice".to_owned(),
+                namespace: Some("tenant-a".to_owned()),
+                app: Some("billing".to_owned()),
+                worker_pool: None,
+            })
+            .await
+            .unwrap_or_else(|error| panic!("oidc identity mapping should be created: {error}"));
+
+        let mut auth = tikee_config::AuthConfig::default();
+        auth.oidc.enabled = true;
+        auth.oidc.issuer_url = Some(mock.issuer.clone());
+        auth.oidc.client_id = Some("tikee-web".to_owned());
+        auth.oidc.client_secret = Some("super-secret".to_owned());
+        let app = router_with_state(
+            AppState::new(
+                JobRepository::new(db.clone()),
+                JobInstanceRepository::new(db.clone()),
+                JobInstanceLogRepository::new(db.clone()),
+                JobInstanceAttemptRepository::new(db.clone()),
+                UserRepository::new(db.clone()),
+                ScriptRepository::new(db.clone()),
+                WorkflowRepository::new(db.clone()),
+                AuditLogRepository::new(db),
+                crate::tunnel::WorkerRegistry::default(),
+                StandaloneCoordinator::shared("test-node"),
+            )
+            .with_auth_config(auth),
+        );
+
+        let state = authorize_oidc_state(app.clone(), "http://localhost:5173/auth/callback").await;
+        let callback = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/v1/auth/oidc/callback?code=mock-code&state={state}&redirect_uri=http://localhost:5173/auth/callback"))
+                    .body(Body::empty())
+                    .unwrap_or_else(|error| panic!("request should build: {error}")),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("callback route should respond: {error}"));
+        let status = callback.status();
+        let body = axum::body::to_bytes(callback.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+
+        assert_eq!(status, axum::http::StatusCode::OK);
+        assert_eq!(json["code"], 0);
+        assert_eq!(json["data"]["username"], "oidc.alice");
+        assert_eq!(json["data"]["roles"][0], "viewer");
+        let token = json["data"]["token"]
+            .as_str()
+            .filter(|value| value.starts_with("atk_") && value.len() > 32)
+            .unwrap_or_else(|| panic!("callback should return a local opaque tikee token"));
+        assert!(!token.contains("provider-access-token"));
+
+        let me = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/auth/me")
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap_or_else(|error| panic!("request should build: {error}")),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("me route should respond: {error}"));
+        let body = axum::body::to_bytes(me.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let me_json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+        assert_eq!(me_json["code"], 0);
+        assert_eq!(me_json["data"]["username"], "oidc.alice");
+        assert_eq!(me_json["data"]["scope_limited"], true);
+        assert_eq!(
+            me_json["data"]["scope_bindings"][0]["namespace"],
+            "tenant-a"
+        );
+        assert_eq!(me_json["data"]["scope_bindings"][0]["app"], "billing");
+        assert_eq!(mock.token_hits.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(
+            mock.userinfo_hits.load(std::sync::atomic::Ordering::SeqCst),
+            1
+        );
+        mock.server.abort();
     }
 
     #[tokio::test]

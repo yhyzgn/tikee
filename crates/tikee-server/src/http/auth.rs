@@ -477,67 +477,11 @@ pub async fn oidc_authorize(
 #[utoipa::path(get, path = "/api/v1/auth/oidc/callback", tag = "auth")]
 pub async fn oidc_callback(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Query(query): Query<super::oidc::OidcCallbackQuery>,
-) -> Result<Json<ApiResponse<super::dto::EmptyData>>, ApiError> {
-    let oidc = &state.auth_config.oidc;
-    if !oidc.enabled {
-        return Err(ApiError::bad_request("OIDC login is not enabled"));
-    }
-    if let Some(error) = query
-        .error
-        .as_ref()
-        .filter(|value| !value.trim().is_empty())
-    {
-        return Err(ApiError::bad_request(format!(
-            "OIDC provider returned error: {error}"
-        )));
-    }
-    let code = configured_value(query.code.as_ref(), "OIDC callback code")?;
-    let state_value = configured_value(query.state.as_ref(), "OIDC callback state")?;
-    let oidc_state = OidcAuthStateRepository::new(state.users.db())
-        .consume_state(&super::oidc::hash_state(state_value))
-        .await
-        .map_err(|error| ApiError::storage(&error))?
-        .ok_or_else(|| {
-            ApiError::bad_request("OIDC callback state is invalid, expired, or already used")
-        })?;
-    let issuer = configured_value(oidc.issuer_url.as_ref(), "auth.oidc.issuer_url")?;
-    let client_id = configured_value(oidc.client_id.as_ref(), "auth.oidc.client_id")?;
-    let client_secret = configured_value(oidc.client_secret.as_ref(), "auth.oidc.client_secret")?;
-    let redirect_uri = query
-        .redirect_uri
-        .as_deref()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or(oidc_state.redirect_uri.as_str());
-    if redirect_uri != oidc_state.redirect_uri {
-        return Err(ApiError::bad_request(
-            "OIDC callback redirect_uri does not match authorization state",
-        ));
-    }
-    let token = super::oidc::exchange_authorization_code(
-        super::oidc::token_endpoint(issuer)?,
-        code,
-        redirect_uri,
-        client_id,
-        client_secret,
-    )
-    .await?;
-    let access_token = configured_value(
-        token.access_token.as_ref(),
-        "OIDC token response access_token",
-    )?;
-    let _token_type =
-        configured_value(token.token_type.as_ref(), "OIDC token response token_type")?;
-    let userinfo = super::oidc::fetch_userinfo(
-        super::oidc::discover_userinfo_endpoint(issuer).await?,
-        access_token,
-    )
-    .await?;
-
-    Err(ApiError::bad_request(format!(
-        "OIDC external identity subject {subject} has no local session mapping yet; no tikee session was created",
-        subject = userinfo.sub
-    )))
+) -> Result<Json<ApiResponse<AuthSession>>, ApiError> {
+    let session = super::oidc_session::complete_oidc_callback(&state, &headers, &query).await?;
+    Ok(Json(ApiResponse::success(session)))
 }
 
 fn configured_value<'a>(value: Option<&'a String>, field: &str) -> Result<&'a str, ApiError> {
@@ -621,7 +565,7 @@ pub async fn logout(
     Ok(Json(ApiResponse::success(super::dto::EmptyData {})))
 }
 
-fn redact_token_for_audit(token: &str) -> String {
+pub(super) fn redact_token_for_audit(token: &str) -> String {
     let prefix: String = token.chars().take(8).collect();
     format!("{prefix}…redacted")
 }
