@@ -1550,3 +1550,9 @@ Verification evidence:
 - Added host-id + instance-slot identity guidance, auto identity-mode precedence, and route-map updates in the architecture roadmap wording.
 Verification evidence:
 - Documentation-only change reviewed with `rtk git diff --check`.
+
+### 2026-05-24 — Phase3/Phase4 service-priority rebalance
+- Updated `design/tikee-architecture-design.md`, `.memory/next.md`, and `.prompt/121-phase3-phase4-service-priority-rebalance.md` with P0/P1/P2 ordering.
+- P0 now prioritizes features that directly affect service use: OIDC mapped opaque login, real TLS/mTLS, Worker lifecycle identity, deployment bootstrap, and production alert delivery.
+Verification evidence:
+- Documentation-only change reviewed with `rtk git diff --check`.

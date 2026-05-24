@@ -2286,21 +2286,59 @@ tikee/
 
 Phase 3 closeout 按“本地可验证 foundation 完成、生产级闭环明确后续”的标准收敛：RBAC、审计、WASM/脚本治理、Worker Tunnel 分发绑定、告警历史、Prometheus/Grafana 基础（含 dispatch queue pending-age histogram、实例成功率与治理失败 gauges）、trace-id/OTLP 配置、OIDC 授权骨架、TLS/mTLS 诊断边界均有测试覆盖；仍保持未勾选的是需要外部系统或更大架构闭环的生产能力：真实 OIDC UserInfo subject 到本地用户/角色/租户映射与 opaque session 签发、真实 TLS/mTLS listener、完整多级审批/签名/KMS/URL/File/Secret grant、生产 SMTP TLS/auth、后台 retry worker 调度、真实 recording-rule 校验、完整租户/app/worker-pool 管理 UI 与 OIDC 身份映射。Node.js SDK、K8s Helm、PowerJob/XXL-JOB 迁移工具按用户要求留在 Phase 4。
 
+#### Phase 3/4 service-usage priority rebalance (2026-05-24)
+
+剩余工作按“是否直接影响真实团队把 tikee 作为共享服务使用”重新排序。原则：先补齐登录、安全传输、Worker 生命周期、部署运维和可靠告警这些服务可用闭环；再做生产治理增强；最后做迁移工具、生态集成和高级差异化。
+
+**P0 — 服务使用 / 生产上线阻塞项（优先实现）**
+
+- [ ] OIDC 外部 subject → 本地 user/role/tenant 映射，并签发 tikee opaque session（继续严禁 JWT 作为本地登录态）。
+- [ ] 真实 HTTP 与 Worker Tunnel TLS/mTLS listener、证书 reload/rotation、启动诊断和失败回滚。
+- [ ] Worker 身份与会话生命周期治理（K8s/Docker 与裸机/VM/systemd 同等支持；Logical Worker / Session / generation / fencing token / lost reason 分层）。
+- [ ] 部署与运维 bootstrap：本地/裸机/systemd/Compose 的最小生产模板优先，Helm 在外部 DB、secret、网关和 TLS 参数稳定后落地。
+- [ ] 生产告警投递硬化：SMTP TLS/auth/secret reference、Provider secret 管理、重试/DLQ 可视化与最小 live smoke。
+
+**P1 — 生产治理增强 / 常见企业用法**
+
+- [ ] 完整脚本审批/签名/KMS 与 URL/File/Secret grant，生产发布门禁闭环。
+- [ ] OIDC tenant/app/role 绑定策略与高级租户隔离 UI。
+- [ ] Prometheus/Grafana recording-rule 校验、运维 runbook 与真实 scrape 验证。
+- [ ] Go SDK + Python SDK（常见非 Java/Rust 业务接入）。
+- [ ] Node.js SDK（待 Worker 身份语义和 SDK 生命周期稳定后实现）。
+
+**P2 — 生态迁移 / 高级差异化（不阻塞服务先跑起来）**
+
+- [ ] PowerJob 迁移工具与报告。
+- [ ] XXL-JOB 迁移工具与 GLUE/child_jobid 风险报告。
+- [ ] Terraform Provider、GitOps/IaC、K8s CRD。
+- [ ] 任务依赖自动发现、拓扑可视化、工作流回放、智能调度。
+- [ ] 插件系统、高级 Webhook/事件源、任务版本管理、灰度/回滚。
+
 ### Phase 4: 高级能力 (月 10-12)
 
 **目标**：超越 PowerJob，建立差异化竞争力。
 
+**P0 — 服务使用 / 运维优先**
+
+- [ ] Worker 身份与会话生命周期治理（Worker Pool / Logical Worker / Worker Session 三层身份；兼容 K8s/Docker 与裸机/VM/systemd；generation + fencing token；graceful/replaced/heartbeat_timeout 证据分级；历史归档与 Worker UI 分层，详见 `design/worker-identity-lifecycle-design.md`）
+- [ ] 部署与运维 bootstrap（Compose/systemd/裸机模板优先；K8s Helm Chart 随外部 DB、secret、网关、TLS 参数稳定后落地）
+- [ ] 多租户隔离增强（tenant/app/worker-pool scope policy 与 OIDC tenant binding 对齐）
+
+**P1 — 常见接入与生产治理**
+
 - [ ] Go SDK + Python SDK（从 Phase 2 后置；待核心分布式/日志能力稳定后实现）
-- [ ] Node.js SDK（从 Phase 3 后置；待 Rust/Java SDK 与 Worker Tunnel 稳定后实现）
-- [ ] K8s Helm Chart（从 Phase 3 后置；待生产部署参数、外部数据库和网关策略收敛后实现）
+- [ ] Node.js SDK（从 Phase 3 后置；待 Rust/Java SDK 与 Worker Tunnel/身份生命周期稳定后实现）
+- [ ] 脚本生产治理增强（完整审批/签名/KMS、URL/File/Secret grant、生产发布门禁）
+- [ ] Prometheus/Grafana recording-rule 与真实 scrape 验证
+
+**P2 — 生态迁移与高级差异化**
+
 - [ ] PowerJob 迁移工具（从 Phase 3 后置；与迁移报告/双跑能力一起实现）
 - [ ] XXL-JOB 迁移工具（新增；覆盖 xxl_job_group / xxl_job_info / CRON / child_jobid / GLUE 脚本迁移报告）
+- [ ] Terraform Provider、GitOps/IaC、K8s CRD
 - [ ] 任务依赖自动发现与拓扑可视化
 - [ ] 智能调度 (基于历史数据的资源预测)
-- [ ] 多租户隔离增强
-- [ ] Worker 身份与会话生命周期治理（Worker Pool / Logical Worker / Worker Session 三层身份；兼容 K8s/Docker 与裸机/VM/systemd；generation + fencing token；graceful/replaced/heartbeat_timeout 证据分级；历史归档与 Worker UI 分层，详见 `design/worker-identity-lifecycle-design.md`）
 - [ ] 插件系统 (自定义处理器类型、告警通道)
-- [ ] Terraform Provider
 - [ ] Webhook 入站/出站
 - [ ] 任务版本管理与回滚
 - [ ] 灰度发布支持 (任务 A/B 测试)

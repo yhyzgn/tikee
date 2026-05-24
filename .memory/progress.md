@@ -974,3 +974,10 @@ Verification evidence:
 - Added host-id + instance-slot identity guidance, auto identity-mode precedence, and route-map updates in the architecture roadmap wording.
 Verification evidence:
 - Documentation-only change reviewed with `rtk git diff --check`.
+
+### 2026-05-24 — Phase3/Phase4 service-priority rebalance
+- Reorganized remaining Phase 3 / Phase 4 roadmap around service usability instead of chronological feature accumulation.
+- Raised P0 priority for OIDC opaque-session mapping, real TLS/mTLS listeners, Worker identity/session lifecycle governance, deployment/operations bootstrap, and production alert delivery hardening.
+- Moved migration tools, Terraform/GitOps/CRD, dependency topology, intelligent scheduling, plugin system, webhook/event sources, and canary/version rollback into P2 because they do not block initial shared-service adoption.
+Verification evidence:
+- Documentation-only change reviewed with `rtk git diff --check`.

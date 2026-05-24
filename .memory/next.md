@@ -1,17 +1,26 @@
 # Next Work
 
-## Current pause point
-- Java Spring worker demo is currently running against the local tikee server and visible through the Worker API / Worker cluster page.
-- Live local processes started for the user: backend `cargo run -- serve --config config/dev.toml`, web `bun run dev`, and Java demo `TIKEE_WORKER_DRY_RUN=false TIKEE_WORKER_ENDPOINT=http://127.0.0.1:9998 ./gradlew bootRun`.
-- Resume Phase 3 with the next production gap that can be made locally verifiable without pulling Phase 4 scope back in.
+## Current priority direction
+Rebalance remaining Phase 3 / Phase 4 work around service usability first. Prefer items that make tikee safer and easier to run as a real shared service before ecosystem or migration features.
 
-## Remaining production follow-ups intentionally not marked complete
-- OIDC external subject to local user/role/tenant mapping, nonce/state hardening, and opaque session issuance.
-- Real HTTP and Worker Tunnel TLS/mTLS listeners and certificate reload/rotation.
-- Full multi-level script approval state machine, verified signatures/KMS, production release gates, and URL/File/Secret grants.
-- Remaining alert delivery hardening: production SMTP TLS/auth/secret handling and live provider smoke for external SMTP/Slack/DingTalk/Feishu/WeCom/PagerDuty endpoints.
-- OIDC identity-to-tenant mapping and advanced tenant isolation policy UI.
-- Remaining business observability hardening: live Prometheus/Grafana recording-rule validation.
+## P0 — service usage / production blockers
+1. OIDC external subject -> local user/role/tenant mapping and opaque tikee session issuance; keep JWT forbidden for local login state.
+2. Real HTTP and Worker Tunnel TLS/mTLS listeners, certificate reload/rotation, and startup diagnostics.
+3. Worker identity/session lifecycle governance for K8s/Docker and bare metal/VM/systemd: logical worker, session generation, fencing token, lost-reason evidence, history UI.
+4. Deployment/operations bootstrap: Compose/systemd/bare-metal templates first; Helm after production parameters for external DB, secrets, gateway, and TLS settle.
+5. Production alert delivery hardening: SMTP TLS/auth/secret references, provider secrets, retry/DLQ visibility, minimal live smoke.
 
-## Deferred out of Phase 3
-- Node.js SDK, K8s Helm Chart, PowerJob migration tooling, and XXL-JOB migration tooling belong to Phase 4.
+## P1 — production hardening / common enterprise use
+- Full script approval/signature/KMS plus URL/File/Secret grants and production release gates.
+- OIDC tenant/app/role binding and advanced tenant isolation UI.
+- Prometheus/Grafana recording-rule validation and operational runbooks.
+- Go/Python SDKs; Node.js SDK after Worker identity/lifecycle semantics stabilize.
+
+## P2 — ecosystem / advanced differentiation
+- PowerJob and XXL-JOB migration tooling.
+- Terraform Provider, GitOps/IaC, K8s CRD.
+- Task dependency discovery/topology, workflow replay, intelligent scheduling.
+- Plugin system, advanced webhook/event sources, task versioning/canary rollback.
+
+## Deferred boundary reminders
+- Node.js SDK, K8s Helm, PowerJob migration, and XXL-JOB migration remain Phase 4, but Helm/deployment bootstrap should be prioritized by service usability once core production parameters are stable.
