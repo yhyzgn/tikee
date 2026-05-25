@@ -991,6 +991,37 @@ pub struct ScriptReleaseRequest {
     pub signature: Option<String>,
 }
 
+/// Query for previewing script release gates.
+#[derive(Debug, Clone, Deserialize, ToSchema, utoipa::IntoParams)]
+pub struct ScriptReleaseGateQuery {
+    /// Immutable script version number to evaluate. Defaults to latest version when omitted.
+    pub version_number: Option<i64>,
+}
+
+/// Script release gate preview response.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct ScriptReleaseGateResponse {
+    /// Script identifier.
+    pub script_id: String,
+    /// Evaluated immutable version number.
+    pub version_number: i64,
+    /// Evaluated immutable version id.
+    pub version_id: String,
+    /// Evaluated content SHA-256 digest.
+    pub content_sha256: String,
+    /// Whether this version can pass current local release gates.
+    pub releasable: bool,
+    /// Human-readable blocking reasons.
+    pub blocking_reasons: Vec<String>,
+    /// Operator actions required before release can proceed.
+    pub required_actions: Vec<String>,
+    /// Whether real signature verification is enabled in this build/config.
+    pub signature_verification_enabled: bool,
+}
+
+/// Script release gate preview API envelope.
+pub type ScriptReleaseGateApiResponse = ApiResponse<ScriptReleaseGateResponse>;
+
 /// Job instance log summary DTO.
 #[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct JobInstanceLogSummary {

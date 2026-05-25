@@ -1103,3 +1103,15 @@ Verification evidence:
 
 - P0 服务使用 / 生产上线阻塞项全部完成：OIDC opaque session、HTTP/Worker Tunnel TLS/mTLS、Worker 身份与会话生命周期治理、部署运维 bootstrap、生产告警投递硬化均已落地并提交。
 - 按用户要求 P0 完成后停止，不自动进入 P1/P2。
+
+### 2026-05-25 — Module/file-size cleanup and script release-gate preview
+- Enforced the new single-source-file size rule by splitting oversized Rust files: `http/mod.rs` is now a module entry, HTTP state/router/server/health/tests live in focused modules, raft-rs tests moved out, migration identifiers/index/column helpers split out, and workflow repository types/conversions/validation/queue/events split by responsibility.
+- Added `GET /api/v1/scripts/{id}/release-gate` as a local, read-only script production-gate preview: it reports whether a version is currently releasable, blocking reasons, required operator actions, and that signature verification is not enabled yet.
+- Verified max source file line count is 1495 across `crates`, `src`, `sdks`, `web`, and `examples` for Rust/TS/TSX/Java/JS sources.
+Verification evidence:
+- `cargo fmt --all -- --check` passed.
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings` passed.
+- `cargo test --workspace --all-features` passed.
+- `cargo build --workspace --all-features` passed.
+- `cargo run -- --help >/tmp/tikee-help.out` passed.
+- Targeted release-gate tests passed: `cargo test -p tikee-server script_release_gate_preview --all-features`; `cargo test -p tikee-server script_publish_blocks_legacy_dangerous_policy_snapshot --all-features`.

@@ -1582,3 +1582,24 @@ Verification evidence:
 - Same logical worker registrations now replace old generations; stale heartbeat/log/result messages are fenced from writes; `/workers` shows latest online generation only.
 Verification evidence:
 - Server worker tests, Rust SDK tests/clippy, Java SDK tests, and full backend verification passed via RTK.
+
+## 2026-05-25 — HTTP/mod.rs cleanup and source-size gate
+
+Task:
+- User required splitting `crates/tikee-server/src/http/mod.rs` and enforcing that single source files stay under 1500 lines; module entry files such as `mod.rs` / `lib.rs` should not hold implementation bodies.
+
+Changes:
+- Split `http/mod.rs` into focused `state`, `router`, `server`, `health`, and test shard modules; `http/mod.rs` now only declares/re-exports module entry points.
+- Split oversized `cluster/raft_rs.rs` tests, storage migration identifiers/index/column helpers, and workflow repository types/conversions/validation/queue/events so all checked source files are <= 1500 lines.
+- Added script release-gate preview API: `GET /api/v1/scripts/{id}/release-gate`, including OpenAPI DTO/path and tests.
+
+Verification:
+- Max source line count check: 1495.
+- `cargo fmt --all -- --check` passed.
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings` passed.
+- `cargo test --workspace --all-features` passed.
+- `cargo build --workspace --all-features` passed.
+- `cargo run -- --help >/tmp/tikee-help.out` passed.
+
+Commit/push:
+- Pending at time of log entry.

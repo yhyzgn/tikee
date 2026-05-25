@@ -455,3 +455,9 @@ Constraint:
 - Decision: The Rust Worker SDK crate and path are `tikee` / `sdks/rust/tikee`, not the previous Rust Worker SDK name.
 - Decision: The Java core SDK Gradle module/artifact is `tikee`, not the previous Java core SDK name; companion modules remain `tikee-spring` and `tikee-spring-boot-starter`.
 - Constraint: The repository root binary crate is also named `tikee`; the Rust SDK is intentionally kept outside the root Cargo workspace so both packages can coexist.
+
+## 2026-05-25 — Source file size and module-entry rule
+
+- Decision: Source files must stay at or below 1500 lines. This applies to Rust, Web, SDK, and example source files in normal development paths.
+- Decision: `mod.rs`, `lib.rs`, and equivalent module-entry files should declare modules and re-export entry points only; they must not accumulate route handlers, tests, storage logic, migrations, or business implementation bodies.
+- Constraint: When a change would push a file near the limit, split by responsibility in the same change before adding more behavior.

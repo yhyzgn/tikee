@@ -1,0 +1,555 @@
+use sea_orm_migration::prelude::*;
+
+use super::iden::{
+    Apps, AuditLogs, AuthSessions, DispatchQueue, InstanceEvents, JobInstanceAttempts,
+    JobInstanceLogs, JobInstances, Jobs, Namespaces, OidcAuthStates, OidcIdentities, Permissions,
+    RaftAppliedCommands, RaftLogEntries, RaftMembers, RaftMembershipProposals, RaftMetadata,
+    RaftSnapshots, RolePermissions, Roles, ScriptVersions, Scripts, Users, WorkerLogicalInstances,
+    WorkerPools, WorkerSessionEvents, WorkerSessions, WorkflowEdges, WorkflowInstances,
+    WorkflowNodeInstances, WorkflowNodes, WorkflowShards, Workflows,
+};
+
+pub(super) async fn create_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    create_scope_indexes(manager).await?;
+    create_worker_lifecycle_indexes(manager).await?;
+    create_job_indexes(manager).await?;
+    create_auth_indexes(manager).await?;
+    create_script_indexes(manager).await?;
+    create_audit_log_indexes(manager).await?;
+    create_workflow_indexes(manager).await?;
+    create_dispatch_indexes(manager).await?;
+    create_raft_indexes(manager).await
+}
+
+async fn create_scope_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_namespaces_name")
+            .table(Namespaces::Table)
+            .col(Namespaces::Name)
+            .unique()
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_apps_namespace_name")
+            .table(Apps::Table)
+            .col(Apps::NamespaceId)
+            .col(Apps::Name)
+            .unique()
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_worker_pools_app_name")
+            .table(WorkerPools::Table)
+            .col(WorkerPools::AppId)
+            .col(WorkerPools::Name)
+            .unique()
+            .to_owned(),
+    )
+    .await
+}
+
+async fn create_job_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_jobs_app_name")
+            .table(Jobs::Table)
+            .col(Jobs::AppId)
+            .col(Jobs::Name)
+            .unique()
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_jobs_enabled")
+            .table(Jobs::Table)
+            .col(Jobs::Enabled)
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_job_instances_job_created")
+            .table(JobInstances::Table)
+            .col(JobInstances::JobId)
+            .col(JobInstances::CreatedAt)
+            .to_owned(),
+    )
+    .await?;
+    create_attempt_indexes(manager).await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_job_instance_logs_instance_seq")
+            .table(JobInstanceLogs::Table)
+            .col(JobInstanceLogs::InstanceId)
+            .col(JobInstanceLogs::Sequence)
+            .to_owned(),
+    )
+    .await
+}
+
+async fn create_auth_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_users_username")
+            .table(Users::Table)
+            .col(Users::Username)
+            .unique()
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_roles_name")
+            .table(Roles::Table)
+            .col(Roles::Name)
+            .unique()
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_permissions_resource_action")
+            .table(Permissions::Table)
+            .col(Permissions::Resource)
+            .col(Permissions::Action)
+            .unique()
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_role_permissions_role_permission")
+            .table(RolePermissions::Table)
+            .col(RolePermissions::RoleId)
+            .col(RolePermissions::PermissionId)
+            .unique()
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_auth_sessions_token_hash")
+            .table(AuthSessions::Table)
+            .col(AuthSessions::TokenHash)
+            .unique()
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_auth_sessions_user")
+            .table(AuthSessions::Table)
+            .col(AuthSessions::UserId)
+            .to_owned(),
+    )
+    .await?;
+    create_oidc_auth_state_indexes(manager).await?;
+    create_oidc_identity_indexes(manager).await
+}
+
+async fn create_script_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_scripts_status")
+            .table(Scripts::Table)
+            .col(Scripts::Status)
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_scripts_name")
+            .table(Scripts::Table)
+            .col(Scripts::Name)
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_script_versions_script_id")
+            .table(ScriptVersions::Table)
+            .col(ScriptVersions::ScriptId)
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_script_versions_script_version")
+            .table(ScriptVersions::Table)
+            .col(ScriptVersions::ScriptId)
+            .col(ScriptVersions::VersionNumber)
+            .unique()
+            .to_owned(),
+    )
+    .await
+}
+
+async fn create_audit_log_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_audit_logs_created_at")
+            .table(AuditLogs::Table)
+            .col(AuditLogs::CreatedAt)
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_audit_logs_actor")
+            .table(AuditLogs::Table)
+            .col(AuditLogs::Actor)
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_audit_logs_resource")
+            .table(AuditLogs::Table)
+            .col(AuditLogs::ResourceType)
+            .col(AuditLogs::ResourceId)
+            .to_owned(),
+    )
+    .await
+}
+
+async fn create_workflow_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_workflows_name")
+            .table(Workflows::Table)
+            .col(Workflows::Name)
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_workflow_nodes_workflow_key")
+            .table(WorkflowNodes::Table)
+            .col(WorkflowNodes::WorkflowId)
+            .col(WorkflowNodes::NodeKey)
+            .unique()
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_workflow_edges_workflow")
+            .table(WorkflowEdges::Table)
+            .col(WorkflowEdges::WorkflowId)
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_workflow_instances_workflow_created")
+            .table(WorkflowInstances::Table)
+            .col(WorkflowInstances::WorkflowId)
+            .col(WorkflowInstances::CreatedAt)
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_workflow_node_instances_instance")
+            .table(WorkflowNodeInstances::Table)
+            .col(WorkflowNodeInstances::WorkflowInstanceId)
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_workflow_shards_node")
+            .table(WorkflowShards::Table)
+            .col(WorkflowShards::WorkflowNodeInstanceId)
+            .to_owned(),
+    )
+    .await
+}
+
+async fn create_dispatch_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_dispatch_queue_status_run_after")
+            .table(DispatchQueue::Table)
+            .col(DispatchQueue::Status)
+            .col(DispatchQueue::RunAfter)
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_instance_events_instance_created")
+            .table(InstanceEvents::Table)
+            .col(InstanceEvents::InstanceId)
+            .col(InstanceEvents::CreatedAt)
+            .to_owned(),
+    )
+    .await
+}
+async fn create_raft_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_raft_metadata_node")
+            .table(RaftMetadata::Table)
+            .col(RaftMetadata::NodeId)
+            .unique()
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_raft_members_node")
+            .table(RaftMembers::Table)
+            .col(RaftMembers::NodeId)
+            .unique()
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_raft_members_status")
+            .table(RaftMembers::Table)
+            .col(RaftMembers::Status)
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_raft_log_entries_node_index")
+            .table(RaftLogEntries::Table)
+            .col(RaftLogEntries::NodeId)
+            .col(RaftLogEntries::LogIndex)
+            .unique()
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_raft_log_entries_node_term")
+            .table(RaftLogEntries::Table)
+            .col(RaftLogEntries::NodeId)
+            .col(RaftLogEntries::Term)
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_raft_snapshots_node_index")
+            .table(RaftSnapshots::Table)
+            .col(RaftSnapshots::NodeId)
+            .col(RaftSnapshots::SnapshotIndex)
+            .unique()
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_raft_applied_commands_node_index")
+            .table(RaftAppliedCommands::Table)
+            .col(RaftAppliedCommands::NodeId)
+            .col(RaftAppliedCommands::LogIndex)
+            .unique()
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_raft_applied_commands_command")
+            .table(RaftAppliedCommands::Table)
+            .col(RaftAppliedCommands::ClusterId)
+            .col(RaftAppliedCommands::CommandId)
+            .unique()
+            .to_owned(),
+    )
+    .await?;
+    create_raft_membership_proposal_indexes(manager).await
+}
+
+async fn create_raft_membership_proposal_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_raft_membership_proposals_proposal")
+            .table(RaftMembershipProposals::Table)
+            .col(RaftMembershipProposals::ClusterId)
+            .col(RaftMembershipProposals::ProposalId)
+            .unique()
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_raft_membership_proposals_node")
+            .table(RaftMembershipProposals::Table)
+            .col(RaftMembershipProposals::NodeId)
+            .col(RaftMembershipProposals::Status)
+            .to_owned(),
+    )
+    .await
+}
+
+async fn create_attempt_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_job_instance_attempts_instance_worker")
+            .table(JobInstanceAttempts::Table)
+            .col(JobInstanceAttempts::InstanceId)
+            .col(JobInstanceAttempts::WorkerId)
+            .unique()
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_job_instance_attempts_status")
+            .table(JobInstanceAttempts::Table)
+            .col(JobInstanceAttempts::Status)
+            .to_owned(),
+    )
+    .await
+}
+
+async fn create_index(
+    manager: &SchemaManager<'_>,
+    mut statement: IndexCreateStatement,
+) -> Result<(), DbErr> {
+    statement.if_not_exists();
+    manager.create_index(statement).await
+}
+
+async fn create_worker_lifecycle_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_worker_logical_instances_key")
+            .table(WorkerLogicalInstances::Table)
+            .col(WorkerLogicalInstances::NamespaceName)
+            .col(WorkerLogicalInstances::AppName)
+            .col(WorkerLogicalInstances::Cluster)
+            .col(WorkerLogicalInstances::Region)
+            .col(WorkerLogicalInstances::ClientInstanceId)
+            .unique()
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_worker_sessions_status_lease")
+            .table(WorkerSessions::Table)
+            .col(WorkerSessions::Status)
+            .col(WorkerSessions::LeaseExpiresAt)
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_worker_sessions_logical_generation")
+            .table(WorkerSessions::Table)
+            .col(WorkerSessions::LogicalInstanceId)
+            .col(WorkerSessions::Generation)
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_worker_session_events_worker_created")
+            .table(WorkerSessionEvents::Table)
+            .col(WorkerSessionEvents::WorkerId)
+            .col(WorkerSessionEvents::CreatedAt)
+            .to_owned(),
+    )
+    .await
+}
+
+async fn create_oidc_auth_state_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_oidc_auth_states_state_hash")
+            .table(OidcAuthStates::Table)
+            .col(OidcAuthStates::StateHash)
+            .unique()
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_oidc_auth_states_expires")
+            .table(OidcAuthStates::Table)
+            .col(OidcAuthStates::ExpiresAt)
+            .to_owned(),
+    )
+    .await
+}
+
+async fn create_oidc_identity_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_oidc_identities_issuer_subject")
+            .table(OidcIdentities::Table)
+            .col(OidcIdentities::Issuer)
+            .col(OidcIdentities::Subject)
+            .unique()
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_oidc_identities_username")
+            .table(OidcIdentities::Table)
+            .col(OidcIdentities::Username)
+            .to_owned(),
+    )
+    .await
+}

@@ -2309,10 +2309,16 @@ Phase 3 closeout 按“本地可验证 foundation 完成、生产级闭环明确
 **P1 — 生产治理增强 / 常见企业用法**
 
 - [ ] 完整脚本审批/签名/KMS 与 URL/File/Secret grant，生产发布门禁闭环。
+  - [x] 发布门禁只读预检基础：`GET /api/v1/scripts/{id}/release-gate` 返回版本是否可发布、阻断原因、所需动作，并明确真实签名验证尚未启用。
 - [ ] OIDC tenant/app/role 绑定策略与高级租户隔离 UI。
 - [ ] Prometheus/Grafana recording-rule 校验、运维 runbook 与真实 scrape 验证。
 - [ ] Go SDK + Python SDK（常见非 Java/Rust 业务接入）。
 - [ ] Node.js SDK（待 Worker 身份语义和 SDK 生命周期稳定后实现）。
+
+
+#### Source file hygiene checkpoint (2026-05-25)
+
+后续源码文件必须保持单文件 `<=1500` 行；`mod.rs` / `lib.rs` 等入口文件只做模块声明和 re-export，不堆实现或测试。当前已拆分 HTTP gateway、raft-rs 测试、storage migration、workflow repository 等超大文件，验证最大源文件行数为 1495。
 
 **P2 — 生态迁移 / 高级差异化（不阻塞服务先跑起来）**
 

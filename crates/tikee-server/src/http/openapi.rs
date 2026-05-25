@@ -39,6 +39,7 @@ use super::{auth, dto, routes};
         routes::scripts::create_script,
         routes::scripts::get_script,
         routes::scripts::update_script,
+        routes::scripts::preview_script_release_gate,
         routes::scripts::publish_script,
         routes::scripts::rollback_script,
         routes::scripts::delete_script,

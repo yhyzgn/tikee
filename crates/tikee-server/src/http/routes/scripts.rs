@@ -12,7 +12,8 @@ use crate::http::{
     AppState, auth,
     dto::{
         ApiResponse, CreateScriptRequest, ErrorResponse, PageQuery, ScriptPage,
-        ScriptPageApiResponse, ScriptReleaseRequest, UpdateScriptRequest,
+        ScriptPageApiResponse, ScriptReleaseGateApiResponse, ScriptReleaseGateQuery,
+        ScriptReleaseGateResponse, ScriptReleaseRequest, UpdateScriptRequest,
     },
     error::ApiError,
 };
@@ -267,6 +268,60 @@ pub async fn publish_script(
     Ok(Json(ApiResponse::success(published)))
 }
 
+/// Preview whether a script version would pass the current release gates.
+///
+/// # Errors
+///
+/// Returns authorization, not-found, bad request, or storage errors.
+#[utoipa::path(
+    get,
+    path = "/api/v1/scripts/{id}/release-gate",
+    tag = "scripts",
+    params(
+        ("id" = String, Path, description = "Script identifier"),
+        ScriptReleaseGateQuery
+    ),
+    responses(
+        (status = 200, description = "Script release gate preview", body = ScriptReleaseGateApiResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Forbidden", body = ErrorResponse),
+        (status = 404, description = "Not found", body = ErrorResponse),
+        (status = 500, description = "Storage error", body = ErrorResponse)
+    )
+)]
+pub async fn preview_script_release_gate(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Query(query): Query<ScriptReleaseGateQuery>,
+) -> Result<Json<ScriptReleaseGateApiResponse>, ApiError> {
+    auth::require_permission(&headers, &state, "scripts", "read").await?;
+    let version_number = resolve_release_version_number(&state, &id, query.version_number).await?;
+    let version = state
+        .scripts
+        .versions()
+        .get_version_by_number(&id, version_number)
+        .await
+        .map_err(|error| ApiError::storage(&error))?
+        .ok_or_else(|| {
+            ApiError::not_found(format!("script version not found: {id}@{version_number}"))
+        })?;
+    let blocking_reasons = release_policy_blocking_reasons(&version)
+        .map_err(|error| ApiError::bad_request(format!("invalid script policy: {error}")))?;
+    let required_actions = release_gate_required_actions(&blocking_reasons);
+
+    Ok(Json(ApiResponse::success(ScriptReleaseGateResponse {
+        script_id: id,
+        version_number,
+        version_id: version.id,
+        content_sha256: version.content_sha256,
+        releasable: blocking_reasons.is_empty(),
+        blocking_reasons,
+        required_actions,
+        signature_verification_enabled: false,
+    })))
+}
+
 async fn enforce_release_signature_gate(
     state: &AppState,
     actor: &str,
@@ -314,21 +369,14 @@ async fn enforce_release_policy_gate(
         .ok_or_else(|| {
             ApiError::not_found(format!("script version not found: {id}@{version_number}"))
         })?;
-    let policy: ScriptExecutionPolicy = serde_json::from_value(version.policy.clone())
+    let blocking_reasons = release_policy_blocking_reasons(&version)
         .map_err(|error| ApiError::bad_request(format!("invalid script policy: {error}")))?;
-    let policy_result = if version.allow_network && !policy.network.enabled {
-        Err("script release approval gate blocked legacy allow_network flag".to_owned())
-    } else {
-        policy
-            .validate_default_deny()
-            .map_err(|error| format!("script release approval gate blocked: {error}"))
-    };
-    if let Err(message) = policy_result {
+    if let Some(message) = blocking_reasons.first() {
         append_release_gate_audit(
             state,
             actor,
             id,
-            &message,
+            message,
             "script_policy_approval_required",
             headers,
         )
@@ -336,6 +384,31 @@ async fn enforce_release_policy_gate(
         return Err(ApiError::bad_request(message));
     }
     Ok(())
+}
+
+fn release_policy_blocking_reasons(
+    version: &tikee_storage::ScriptVersionSummary,
+) -> Result<Vec<String>, serde_json::Error> {
+    let policy: ScriptExecutionPolicy = serde_json::from_value(version.policy.clone())?;
+    let mut reasons = Vec::new();
+    if version.allow_network && !policy.network.enabled {
+        reasons.push("script release approval gate blocked legacy allow_network flag".to_owned());
+    }
+    if let Err(error) = policy.validate_default_deny() {
+        reasons.push(format!("script release approval gate blocked: {error}"));
+    }
+    Ok(reasons)
+}
+
+fn release_gate_required_actions(blocking_reasons: &[String]) -> Vec<String> {
+    if blocking_reasons.is_empty() {
+        return Vec::new();
+    }
+    vec![
+        "remove dangerous URL/File/Secret grants or wait for verified approval/signature support"
+            .to_owned(),
+        "publish a new safe script version before moving the release pointer".to_owned(),
+    ]
 }
 
 async fn append_release_gate_audit(

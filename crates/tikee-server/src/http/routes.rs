@@ -35,7 +35,7 @@ pub use scope::{
 };
 pub use scripts::{
     create_script, delete_script, diff_script_versions, get_script, list_script_versions,
-    list_scripts, publish_script, rollback_script, update_script,
+    list_scripts, preview_script_release_gate, publish_script, rollback_script, update_script,
 };
 pub use security::transport_security_status;
 pub use system::{cluster_diagnostics, cluster_status, system_info};
