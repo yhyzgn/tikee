@@ -1703,4 +1703,5 @@ Verification:
 - `cd web && bun run typecheck && bun run lint && bun test && bun run build` passed.
 
 Commit/push:
-- Pending at time of log entry.
+- Commit: `66a348a` (Persist script release grant evidence before enforcement)
+- Push: first attempt failed with GitHub connection timeout; retry succeeded to `origin/main` (`df35944..66a348a`).
