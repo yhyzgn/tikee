@@ -1658,3 +1658,25 @@ Verification:
 Commit/push:
 - Commit: `4395b77` (Make signed script releases auditable)
 - Push: succeeded to `origin/main` (`8c2ae07..4395b77`).
+
+## 2026-05-25 — P1 script release grant payload boundary
+
+Task:
+- Continue P1 script production governance by designing URL/File/Secret grant payloads that remain fail-closed until verified.
+
+Changes:
+- Added core `ScriptReleaseGrantSet` with explicit URL/File/Secret grant categories.
+- Added HTTP/OpenAPI `ScriptReleaseRequest.grants` DTO shape and Web API client types.
+- Publish/rollback reject any non-empty grant payload before release pointer movement because verified grant enforcement is not implemented yet.
+
+Verification:
+- Max source line count check excluding `web/node_modules` and `web/dist`: 1495.
+- `cargo fmt --all -- --check` passed.
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings` passed.
+- `cargo test --workspace --all-features` passed.
+- `cargo build --workspace --all-features` passed.
+- `cargo run -- --help >/tmp/tikee-help.out` passed.
+- `cd web && bun run typecheck && bun run lint && bun test && bun run build` passed.
+
+Commit/push:
+- Pending at time of log entry.

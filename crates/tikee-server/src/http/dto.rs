@@ -989,6 +989,36 @@ pub struct ScriptReleaseRequest {
     pub approval_ticket: Option<String>,
     /// Optional content/signature attestation. Rejected until signature verification is implemented.
     pub signature: Option<String>,
+    /// Optional URL/File/Secret grants requested for this release; fail-closed until verified.
+    pub grants: Option<ScriptReleaseGrants>,
+}
+
+/// URL/File/Secret grants requested for a script release.
+#[derive(Debug, Clone, Default, Deserialize, ToSchema)]
+pub struct ScriptReleaseGrants {
+    /// URL hosts or URL policy references approved for this release.
+    #[serde(default)]
+    pub url: Vec<String>,
+    /// Read-only file paths or file policy references approved for this release.
+    #[serde(default)]
+    pub file_read: Vec<String>,
+    /// Writable file paths or file policy references approved for this release.
+    #[serde(default)]
+    pub file_write: Vec<String>,
+    /// Secret references approved for this release.
+    #[serde(default)]
+    pub secret: Vec<String>,
+}
+
+impl From<ScriptReleaseGrants> for tikee_core::ScriptReleaseGrantSet {
+    fn from(value: ScriptReleaseGrants) -> Self {
+        Self {
+            url: value.url,
+            file_read: value.file_read,
+            file_write: value.file_write,
+            secret: value.secret,
+        }
+    }
 }
 
 /// Query for previewing script release gates.

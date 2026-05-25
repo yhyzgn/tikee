@@ -396,17 +396,39 @@ export async function updateScript(id: string, params: UpdateScriptRequest): Pro
   });
 }
 
-export async function publishScript(id: string, versionNumber?: number): Promise<ScriptSummary> {
+export interface ScriptReleaseGrants {
+  url: string[];
+  file_read: string[];
+  file_write: string[];
+  secret: string[];
+}
+
+export interface ScriptReleaseRequest {
+  version_number?: number | null;
+  approval_ticket?: string | null;
+  signature?: string | null;
+  grants?: ScriptReleaseGrants | null;
+}
+
+export async function publishScript(
+  id: string,
+  versionNumber?: number,
+  params: Omit<ScriptReleaseRequest, 'version_number'> = {},
+): Promise<ScriptSummary> {
   return request<ScriptSummary>(`/api/v1/scripts/${encodeURIComponent(id)}/publish`, {
     method: 'POST',
-    body: JSON.stringify({ version_number: versionNumber ?? null }),
+    body: JSON.stringify({ version_number: versionNumber ?? null, ...params }),
   });
 }
 
-export async function rollbackScript(id: string, versionNumber: number): Promise<ScriptSummary> {
+export async function rollbackScript(
+  id: string,
+  versionNumber: number,
+  params: Omit<ScriptReleaseRequest, 'version_number'> = {},
+): Promise<ScriptSummary> {
   return request<ScriptSummary>(`/api/v1/scripts/${encodeURIComponent(id)}/rollback`, {
     method: 'POST',
-    body: JSON.stringify({ version_number: versionNumber }),
+    body: JSON.stringify({ version_number: versionNumber, ...params }),
   });
 }
 

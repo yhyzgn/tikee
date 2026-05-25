@@ -5,8 +5,8 @@ Continue P1 production governance while preserving the source-size/module-entry 
 
 ## P1 — production hardening / common enterprise use
 1. Full script approval/signature/KMS plus URL/File/Secret grants and production release gates.
-   - Done foundation: fail-closed policy/signature gates, blocked audit materialization, read-only release-gate preview API, default-disabled local env-secret signature verification for approval tickets, and persisted/displayed successful signed release metadata.
-   - Next: design signed URL/File/Secret grant payloads that remain fail-closed until verified.
+   - Done foundation: fail-closed policy/signature gates, blocked audit materialization, read-only release-gate preview API, default-disabled local env-secret signature verification for approval tickets, persisted/displayed successful signed release metadata, and explicit URL/File/Secret grant request payloads that remain fail-closed.
+   - Next: persist signed grant evidence after verification, then wire concrete verifier/KMS policy before any Worker-side URL/File/Secret access is enabled.
 2. OIDC tenant/app/role binding and advanced tenant isolation UI.
 3. Prometheus/Grafana recording-rule validation and operational runbooks.
 4. Go/Python SDKs; Node.js SDK after Worker identity/lifecycle semantics stabilize.
@@ -22,3 +22,4 @@ Continue P1 production governance while preserving the source-size/module-entry 
 - Script release-gate preview endpoint was added for local production-gate visibility.
 - Script release signatures can be verified locally when `script_governance.release_signature_secret_ref` points at an env secret.
 - Verified script releases now persist and display approval ticket, signature, verification time, and verifier identity.
+- Script release requests now have explicit `grants.url/file_read/file_write/secret` payloads; non-empty grants fail closed until verified grant enforcement exists.

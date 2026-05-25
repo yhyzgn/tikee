@@ -127,6 +127,7 @@ use super::{auth, dto, routes};
         dto::CreateScriptRequest,
         dto::UpdateScriptRequest,
         dto::ScriptReleaseRequest,
+        dto::ScriptReleaseGrants,
         tikee_storage::ScriptVersionSummary,
         dto::ScriptDiffResult,
         dto::FieldChange,

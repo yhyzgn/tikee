@@ -8,7 +8,7 @@ use axum::{
     http::HeaderMap,
 };
 
-use tikee_core::ScriptExecutionPolicy;
+use tikee_core::{ScriptExecutionPolicy, ScriptReleaseGrantSet};
 use tikee_storage::VerifiedScriptReleaseSignature;
 
 use crate::http::{
@@ -247,6 +247,7 @@ pub async fn publish_script(
     let version_number =
         resolve_release_version_number(&state, &id, request.version_number).await?;
     let version = resolve_release_version(&state, &id, version_number).await?;
+    enforce_release_grants_fail_closed(&request)?;
     let release_signature = enforce_release_signature_gate(
         &state,
         &principal.username,
@@ -425,6 +426,16 @@ async fn enforce_release_signature_gate(
     }))
 }
 
+fn enforce_release_grants_fail_closed(request: &ScriptReleaseRequest) -> Result<(), ApiError> {
+    let Some(grants) = request.grants.clone() else {
+        return Ok(());
+    };
+    let grants: ScriptReleaseGrantSet = grants.into();
+    grants
+        .validate_fail_closed()
+        .map_err(|error| ApiError::bad_request(error.to_string()))
+}
+
 async fn enforce_release_policy_gate(
     state: &Arc<AppState>,
     actor: &str,
@@ -534,6 +545,7 @@ pub async fn rollback_script(
         .version_number
         .ok_or_else(|| ApiError::bad_request("version_number is required for rollback"))?;
     let version = resolve_release_version(&state, &id, version_number).await?;
+    enforce_release_grants_fail_closed(&request)?;
     let release_signature = enforce_release_signature_gate(
         &state,
         &principal.username,

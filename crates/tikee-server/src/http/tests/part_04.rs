@@ -269,6 +269,45 @@
     }
 
     #[tokio::test]
+    async fn script_release_grants_are_explicit_but_fail_closed() {
+        let app = router().await;
+        let created = post_json(
+            app.clone(),
+            "/api/v1/scripts",
+            r#"{"name":"grant-release","language":"python","version":"1.0.0","content":"print(1)","timeout_seconds":3,"max_memory_bytes":4096,"allow_network":false}"#,
+        )
+        .await;
+        let script_id = created["data"]["id"]
+            .as_str()
+            .unwrap_or_else(|| panic!("script id should exist"));
+
+        let response = app
+            .clone()
+            .oneshot(
+                admin_json_request_builder(
+                    app,
+                    "POST",
+                    format!("/api/v1/scripts/{script_id}/publish"),
+                    r#"{"version_number":1,"grants":{"url":["https://api.example.com"],"file_read":["/data/input"],"file_write":["/data/output"],"secret":["secret:db-readonly"]}}"#,
+                )
+                .await,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("publish route should respond: {error}"));
+        assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+        assert_ne!(json["code"], 0);
+        assert!(json["message"].as_str().is_some_and(|message| {
+            message.contains("URL/File/Secret grants require verified release grant enforcement")
+        }));
+        assert!(json.get("data").is_some());
+    }
+
+    #[tokio::test]
     async fn script_release_rejects_unverified_approval_or_signature_metadata() {
         let app = router().await;
         let created = post_json(
@@ -1022,4 +1061,3 @@
             labels: std::collections::HashMap::default(),
         }
     }
-

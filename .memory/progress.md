@@ -1141,3 +1141,17 @@ Verification evidence:
 - `cargo build --workspace --all-features` passed.
 - `cargo run -- --help >/tmp/tikee-help.out` passed.
 - `cd web && bun run typecheck && bun run lint && bun test && bun run build` passed.
+
+### 2026-05-25 — P1 script release grant payload boundary
+- Added `ScriptReleaseGrantSet` in core and `ScriptReleaseRequest.grants` in HTTP/OpenAPI for URL/File/Secret grant payloads.
+- Grant payload categories are explicit (`url`, `file_read`, `file_write`, `secret`) and validate malformed empty/untrimmed entries.
+- Any non-empty grant remains fail-closed with a business error until verified release grant enforcement is implemented; no Worker-side access is enabled.
+- Web API client types now include the same release grant request shape.
+- Preserved the source-size rule; max checked source file line count remains 1495.
+Verification evidence:
+- `cargo fmt --all -- --check` passed.
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings` passed.
+- `cargo test --workspace --all-features` passed.
+- `cargo build --workspace --all-features` passed.
+- `cargo run -- --help >/tmp/tikee-help.out` passed.
+- `cd web && bun run typecheck && bun run lint && bun test && bun run build` passed.

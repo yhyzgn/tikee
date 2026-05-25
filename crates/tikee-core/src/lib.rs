@@ -401,6 +401,95 @@ pub struct ScriptSecretPolicy {
     pub refs: Vec<String>,
 }
 
+/// URL/File/Secret grants supplied with a script release request.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScriptReleaseGrantSet {
+    /// URL hosts or URL policy references approved for this release.
+    #[serde(default)]
+    pub url: Vec<String>,
+    /// Read-only file paths or file policy references approved for this release.
+    #[serde(default)]
+    pub file_read: Vec<String>,
+    /// Writable file paths or file policy references approved for this release.
+    #[serde(default)]
+    pub file_write: Vec<String>,
+    /// Secret references approved for this release.
+    #[serde(default)]
+    pub secret: Vec<String>,
+}
+
+impl ScriptReleaseGrantSet {
+    /// Returns true when no grant category is populated.
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.url.is_empty()
+            && self.file_read.is_empty()
+            && self.file_write.is_empty()
+            && self.secret.is_empty()
+    }
+
+    /// Validate that a release grant set is well-formed and deny enabling it for now.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ScriptReleaseGrantError`] when grant values are malformed or when
+    /// any grant is requested before verified grant enforcement exists.
+    pub fn validate_fail_closed(&self) -> Result<(), ScriptReleaseGrantError> {
+        self.validate_values()?;
+        if self.is_empty() {
+            Ok(())
+        } else {
+            Err(ScriptReleaseGrantError::GrantVerificationUnavailable)
+        }
+    }
+
+    fn validate_values(&self) -> Result<(), ScriptReleaseGrantError> {
+        for value in self
+            .url
+            .iter()
+            .chain(self.file_read.iter())
+            .chain(self.file_write.iter())
+            .chain(self.secret.iter())
+        {
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                return Err(ScriptReleaseGrantError::EmptyGrantValue);
+            }
+            if trimmed != value {
+                return Err(ScriptReleaseGrantError::UntrimmedGrantValue);
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Script release grant validation error.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ScriptReleaseGrantError {
+    /// A grant value was empty or whitespace only.
+    EmptyGrantValue,
+    /// A grant value contained surrounding whitespace.
+    UntrimmedGrantValue,
+    /// Grant enforcement has not been wired to signature/KMS verification yet.
+    GrantVerificationUnavailable,
+}
+
+impl fmt::Display for ScriptReleaseGrantError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::EmptyGrantValue => formatter.write_str("script release grants cannot be empty"),
+            Self::UntrimmedGrantValue => {
+                formatter.write_str("script release grants must not contain surrounding whitespace")
+            }
+            Self::GrantVerificationUnavailable => formatter.write_str(
+                "script URL/File/Secret grants require verified release grant enforcement",
+            ),
+        }
+    }
+}
+
+impl std::error::Error for ScriptReleaseGrantError {}
+
 /// Resource policy shared by dynamic script runners.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ScriptResourcePolicy {
@@ -662,8 +751,8 @@ mod tests {
     use super::{
         ExecutionMode, HealthState, InstanceStatus, ScheduleType, ScriptExecutionPolicy,
         ScriptFilesystemPolicy, ScriptLanguage, ScriptNetworkPolicy, ScriptPolicyError,
-        ScriptSecretPolicy, ScriptStatus, TriggerType, WasmCapabilities, WasmProcessorSpec,
-        WasmRuntimeKind, WasmSpecError,
+        ScriptReleaseGrantError, ScriptReleaseGrantSet, ScriptSecretPolicy, ScriptStatus,
+        TriggerType, WasmCapabilities, WasmProcessorSpec, WasmRuntimeKind, WasmSpecError,
     };
 
     #[test]
@@ -740,6 +829,35 @@ mod tests {
         assert_eq!(
             with_secret.validate_default_deny(),
             Err(ScriptPolicyError::SecretsRequirePolicyGrant)
+        );
+    }
+
+    #[test]
+    fn script_release_grants_are_explicit_but_fail_closed_until_verified() {
+        assert!(
+            ScriptReleaseGrantSet::default()
+                .validate_fail_closed()
+                .is_ok()
+        );
+
+        let grants = ScriptReleaseGrantSet {
+            url: vec!["https://api.example.com".to_owned()],
+            file_read: vec!["/data/input".to_owned()],
+            file_write: vec!["/data/output".to_owned()],
+            secret: vec!["secret:db-readonly".to_owned()],
+        };
+        assert_eq!(
+            grants.validate_fail_closed(),
+            Err(ScriptReleaseGrantError::GrantVerificationUnavailable)
+        );
+
+        let malformed = ScriptReleaseGrantSet {
+            url: vec![" example.com".to_owned()],
+            ..ScriptReleaseGrantSet::default()
+        };
+        assert_eq!(
+            malformed.validate_fail_closed(),
+            Err(ScriptReleaseGrantError::UntrimmedGrantValue)
         );
     }
 
