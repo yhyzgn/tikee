@@ -7,8 +7,8 @@ use sea_orm::{
 use tikee_core::InstanceStatus;
 
 use crate::entities::{
-    dispatch_queue, instance_event, workflow, workflow_edge, workflow_instance, workflow_node,
-    workflow_node_instance, workflow_shard,
+    dispatch_queue, instance_event, job_instance, workflow, workflow_edge, workflow_instance,
+    workflow_node, workflow_node_instance, workflow_shard,
 };
 
 use super::util::{new_id, now_rfc3339, rfc3339_after_seconds};
@@ -1213,6 +1213,62 @@ impl WorkflowRepository {
             .exec(&self.db)
             .await?;
         Ok(result.rows_affected > 0)
+    }
+
+    pub async fn requeue_stale_running_job_dispatches(
+        &self,
+        stale_after_seconds: i64,
+    ) -> Result<u64, sea_orm::DbErr> {
+        let cutoff = rfc3339_after_seconds(-stale_after_seconds.max(1));
+        let now = now_rfc3339();
+        let txn = self.db.begin().await?;
+        let instance_ids = dispatch_queue::Entity::find()
+            .select_only()
+            .column(dispatch_queue::Column::JobInstanceId)
+            .filter(dispatch_queue::Column::Status.eq("running"))
+            .filter(dispatch_queue::Column::JobInstanceId.is_not_null())
+            .filter(dispatch_queue::Column::UpdatedAt.lt(cutoff))
+            .into_tuple::<(Option<String>,)>()
+            .all(&txn)
+            .await?
+            .into_iter()
+            .filter_map(|(id,)| id)
+            .collect::<Vec<_>>();
+        if instance_ids.is_empty() {
+            txn.commit().await?;
+            return Ok(0);
+        }
+        let queue_result = dispatch_queue::Entity::update_many()
+            .col_expr(dispatch_queue::Column::Status, Expr::value("pending"))
+            .col_expr(
+                dispatch_queue::Column::LeaseOwner,
+                Expr::value(Option::<String>::None),
+            )
+            .col_expr(
+                dispatch_queue::Column::LeaseUntil,
+                Expr::value(Option::<String>::None),
+            )
+            .col_expr(
+                dispatch_queue::Column::FencingToken,
+                Expr::value(Option::<String>::None),
+            )
+            .col_expr(dispatch_queue::Column::UpdatedAt, Expr::value(now.clone()))
+            .filter(dispatch_queue::Column::JobInstanceId.is_in(instance_ids.clone()))
+            .filter(dispatch_queue::Column::Status.eq("running"))
+            .exec(&txn)
+            .await?;
+        job_instance::Entity::update_many()
+            .col_expr(
+                job_instance::Column::Status,
+                Expr::value(InstanceStatus::Pending.to_string()),
+            )
+            .col_expr(job_instance::Column::UpdatedAt, Expr::value(now))
+            .filter(job_instance::Column::Id.is_in(instance_ids))
+            .filter(job_instance::Column::Status.eq(InstanceStatus::Running.to_string()))
+            .exec(&txn)
+            .await?;
+        txn.commit().await?;
+        Ok(queue_result.rows_affected)
     }
 
     pub async fn clear_expired_dispatch_queue_leases(&self) -> Result<u64, sea_orm::DbErr> {

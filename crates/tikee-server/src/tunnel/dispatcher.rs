@@ -24,6 +24,7 @@ const DISPATCH_INTERVAL: Duration = Duration::from_millis(500);
 const DISPATCH_BATCH_SIZE: u64 = 16;
 const DISPATCH_LEASE_SECONDS: i64 = 30;
 const DISPATCH_RETRY_BACKOFF_SECONDS: i64 = 2;
+const DISPATCH_STALE_RUNNING_SECONDS: i64 = 60;
 const DISPATCHER_LEASE_OWNER: &str = "tikee-dispatcher";
 
 fn dispatcher_fencing_token(node_id: &str, leader_fencing_token: Option<&str>) -> String {
@@ -104,6 +105,12 @@ async fn dispatch_once(
     registry: &WorkerRegistry,
     fencing_token: &str,
 ) -> Result<(), tikee_storage::DbErr> {
+    let recovered = workflows
+        .requeue_stale_running_job_dispatches(DISPATCH_STALE_RUNNING_SECONDS)
+        .await?;
+    if recovered > 0 {
+        warn!(recovered, "requeued stale running job dispatches");
+    }
     let _expired = workflows.clear_expired_dispatch_queue_leases().await?;
     let _ = workflows
         .materialize_next_queued_node_with_fencing(
