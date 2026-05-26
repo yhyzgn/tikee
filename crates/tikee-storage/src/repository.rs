@@ -346,10 +346,7 @@ mod tests {
 
     #[tokio::test]
     async fn migration_creates_metadata_tables() {
-        let db = Database::connect("sqlite::memory:")
-            .await
-            .unwrap_or_else(|error| panic!("sqlite memory db should connect: {error}"));
-        Migrator::up(&db, None)
+        let db = crate::connect_and_migrate("sqlite::memory:")
             .await
             .unwrap_or_else(|error| panic!("migration should run: {error}"));
 
@@ -866,10 +863,7 @@ mod tests {
 
     #[tokio::test]
     async fn repository_appends_and_lists_job_instance_logs() {
-        let db = Database::connect("sqlite::memory:")
-            .await
-            .unwrap_or_else(|error| panic!("sqlite memory db should connect: {error}"));
-        Migrator::up(&db, None)
+        let db = crate::connect_and_migrate("sqlite::memory:")
             .await
             .unwrap_or_else(|error| panic!("migration should run: {error}"));
         let jobs = JobRepository::new(db.clone());
@@ -903,7 +897,7 @@ mod tests {
             worker_id: "worker-1".to_owned(),
             level: "info".to_owned(),
             message: "hello".to_owned(),
-            sequence: 1,
+            sequence: 0,
         })
         .await
         .unwrap_or_else(|error| panic!("log should append: {error}"))

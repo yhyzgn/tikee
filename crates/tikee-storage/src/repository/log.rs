@@ -143,7 +143,7 @@ impl JobInstanceLogRepository {
         &self,
         instance_id: &str,
     ) -> Result<Vec<JobInstanceLogSummary>, sea_orm::DbErr> {
-        self.list_by_instance_after_sequence(instance_id, 0).await
+        self.list_by_instance_after_sequence(instance_id, -1).await
     }
 
     /// List logs for an instance after the provided sequence.

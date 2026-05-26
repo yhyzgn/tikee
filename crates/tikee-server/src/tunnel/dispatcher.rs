@@ -198,14 +198,10 @@ async fn dispatch_single_instances(
             DispatchTaskBuild::Rejected(failure) => {
                 append_script_governance_log(logs, audit, &instance.id, &failure).await?;
                 let _ = workflows
-                    .release_dispatch_queue_item_after(
-                        &claim.item.id,
-                        DISPATCHER_LEASE_OWNER,
-                        DISPATCH_RETRY_BACKOFF_SECONDS,
-                    )
+                    .mark_dispatch_queue_failed(&claim.item.id, DISPATCHER_LEASE_OWNER)
                     .await?;
                 instances
-                    .update_status(&instance.id, InstanceStatus::Pending)
+                    .update_status(&instance.id, InstanceStatus::Failed)
                     .await?;
                 continue;
             }
@@ -238,6 +234,13 @@ async fn dispatch_single_instances(
                     &ScriptGovernanceFailure::NoEligibleWorkerCapability(capability.to_owned()),
                 )
                 .await?;
+                let _ = workflows
+                    .mark_dispatch_queue_failed(&claim.item.id, DISPATCHER_LEASE_OWNER)
+                    .await?;
+                instances
+                    .update_status(&instance.id, InstanceStatus::Failed)
+                    .await?;
+                continue;
             }
             let _ = workflows
                 .release_dispatch_queue_item_after(
@@ -288,6 +291,13 @@ async fn dispatch_broadcast_attempts(
             DispatchTaskBuild::Built(task) => task,
             DispatchTaskBuild::Rejected(failure) => {
                 append_script_governance_log(logs, audit, &attempt.instance_id, &failure).await?;
+                attempts
+                    .update_status(
+                        &attempt.instance_id,
+                        &attempt.worker_id,
+                        InstanceStatus::Failed,
+                    )
+                    .await?;
                 continue;
             }
         };
@@ -305,6 +315,13 @@ async fn dispatch_broadcast_attempts(
                     &ScriptGovernanceFailure::NoEligibleWorkerCapability(capability.to_owned()),
                 )
                 .await?;
+                attempts
+                    .update_status(
+                        &attempt.instance_id,
+                        &attempt.worker_id,
+                        InstanceStatus::Failed,
+                    )
+                    .await?;
             }
             continue;
         }
@@ -375,7 +392,7 @@ impl ScriptGovernanceFailure {
                 format!("script governance rejected dispatch: policy rejected ({reason})")
             }
             Self::NoEligibleWorkerCapability(capability) => format!(
-                "script governance queued dispatch: no connected worker advertises required capability {capability}"
+                "script governance failed dispatch: no connected worker advertises required capability {capability}"
             ),
         }
     }
@@ -928,6 +945,109 @@ mod tests {
             .unwrap_or_else(|| panic!("blocked queue item should exist"));
         assert_eq!(blocked_queue.status, "pending");
         assert!(blocked_queue.run_after > blocked_queue.created_at);
+    }
+
+    #[tokio::test]
+    async fn dispatch_once_fails_script_instance_when_no_script_worker_capability_exists() {
+        let db = connect_and_migrate("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("test storage should initialize: {error}"));
+        let jobs = JobRepository::new(db.clone());
+        let instances = JobInstanceRepository::new(db.clone());
+        let attempts = JobInstanceAttemptRepository::new(db.clone());
+        let workflows = WorkflowRepository::new(db.clone());
+        let logs = tikee_storage::JobInstanceLogRepository::new(db.clone());
+        let audit = AuditLogRepository::new(db.clone());
+        let scripts = ScriptRepository::new(db);
+
+        let script = scripts
+            .create_script(tikee_storage::CreateScript {
+                name: "shell echo".to_owned(),
+                language: "shell".to_owned(),
+                version: "1.0.0".to_owned(),
+                content: "printf ok".to_owned(),
+                created_by: "tester".to_owned(),
+                timeout_seconds: Some(5),
+                max_memory_bytes: Some(1024 * 1024),
+                allow_network: false,
+                allowed_env_vars: None,
+                policy_json: None,
+            })
+            .await
+            .unwrap_or_else(|error| panic!("script should be created: {error}"));
+        let version = scripts
+            .versions()
+            .get_version_by_number(&script.id, 1)
+            .await
+            .unwrap_or_else(|error| panic!("script version should load: {error}"))
+            .unwrap_or_else(|| panic!("script version should exist"));
+        let script = scripts
+            .publish_version(&script.id, version.version_number, None, None)
+            .await
+            .unwrap_or_else(|error| panic!("script should publish: {error}"))
+            .unwrap_or_else(|| panic!("script should exist"));
+        let job = jobs
+            .create_job(CreateJob {
+                namespace: "default".to_owned(),
+                app: "billing".to_owned(),
+                name: "shell job".to_owned(),
+                schedule_type: "api".to_owned(),
+                schedule_expr: None,
+                processor_name: None,
+                script_id: Some(script.id),
+                enabled: true,
+            })
+            .await
+            .unwrap_or_else(|error| panic!("job should be created: {error}"));
+        let instance = instances
+            .create_pending(CreateJobInstance {
+                job_id: job.id,
+                trigger_type: TriggerType::Api,
+                execution_mode: ExecutionMode::Single,
+            })
+            .await
+            .unwrap_or_else(|error| panic!("instance should be created: {error}"))
+            .unwrap_or_else(|| panic!("job should exist"));
+
+        dispatch_once(
+            &jobs,
+            &instances,
+            &attempts,
+            &workflows,
+            &scripts,
+            &logs,
+            &audit,
+            &WorkerRegistry::default(),
+            "test-fence",
+        )
+        .await
+        .unwrap_or_else(|error| panic!("dispatch should run: {error}"));
+
+        let updated = instances
+            .get(&instance.id)
+            .await
+            .unwrap_or_else(|error| panic!("instance should load: {error}"))
+            .unwrap_or_else(|| panic!("instance should exist"));
+        assert_eq!(updated.status, InstanceStatus::Failed);
+        let overview = workflows
+            .queue_overview(10)
+            .await
+            .unwrap_or_else(|error| panic!("queue should load: {error}"));
+        let queue_item = overview
+            .items
+            .iter()
+            .find(|item| item.job_instance_id.as_deref() == Some(instance.id.as_str()))
+            .unwrap_or_else(|| panic!("queue item should exist"));
+        assert_eq!(queue_item.status, "failed");
+        let instance_logs = logs
+            .list_by_instance(&instance.id)
+            .await
+            .unwrap_or_else(|error| panic!("logs should load: {error}"));
+        assert!(
+            instance_logs
+                .iter()
+                .any(|log| { log.message.contains("script_no_eligible_worker_capability") })
+        );
     }
 
     #[tokio::test]
