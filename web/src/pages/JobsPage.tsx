@@ -2,7 +2,7 @@ import { Button, Card, Drawer, Form, Input, InputNumber, Popconfirm, Select, Spa
 import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { createJob, deleteJob, listJobs, listScripts, triggerJob, updateJob, type CreateJobRequest, type JobSummary, type ScriptSummary, type UpdateJobRequest } from '../api/client';
+import { createJob, deleteJob, listJobs, listScripts, listWorkers, triggerJob, updateJob, type CreateJobRequest, type JobSummary, type ScriptSummary, type UpdateJobRequest, type WorkerSummary } from '../api/client';
 import { PermissionGate, useCan } from '../components/Permission';
 import { useUrlQueryState } from '../hooks/useUrlQueryState';
 
@@ -12,9 +12,10 @@ export function JobsPage() {
   const { query, setQuery } = useUrlQueryState({ page: 1, page_size: 8, keyword: '', scheduleType: '' });
   const [jobs, setJobs] = useState<JobSummary[]>([]);
   const [scripts, setScripts] = useState<ScriptSummary[]>([]);
+  const [workers, setWorkers] = useState<WorkerSummary[]>([]);
   const [loading, setLoading] = useState(false);
-  const [form] = Form.useForm<CreateJobRequest & { executorKind?: 'sdk' | 'script'; fixedRateValue?: number; fixedRateUnit?: string }>();
-  const [editForm] = Form.useForm<UpdateJobRequest & { executorKind?: 'sdk' | 'script'; fixedRateValue?: number; fixedRateUnit?: string }>();
+  const [form] = Form.useForm<CreateJobRequest & { executorKind?: 'sdk' | 'script'; scriptExecutor?: string; fixedRateValue?: number; fixedRateUnit?: string }>();
+  const [editForm] = Form.useForm<UpdateJobRequest & { executorKind?: 'sdk' | 'script'; scriptExecutor?: string; fixedRateValue?: number; fixedRateUnit?: string }>();
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<JobSummary | null>(null);
   const [createProcessorSearch, setCreateProcessorSearch] = useState('');
@@ -23,9 +24,14 @@ export function JobsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [page, scriptPage] = await Promise.all([listJobs(), listScripts()]);
+      const [page, scriptPage, workerPage] = await Promise.all([
+        listJobs(),
+        listScripts(),
+        listWorkers().catch(() => ({ online: 0, items: [] })),
+      ]);
       setJobs(page.items);
       setScripts(scriptPage.items);
+      setWorkers(workerPage.items);
     } catch (err) {
       message.error(err instanceof Error ? err.message : '加载失败');
     } finally {
@@ -35,21 +41,47 @@ export function JobsPage() {
 
   useEffect(() => { void load(); }, [load]);
 
+  const capabilityValues = (prefix: string) => Array.from(new Set(
+    workers.flatMap((worker) => worker.capabilities)
+      .map((capability) => capability.trim())
+      .filter((capability) => capability.startsWith(prefix))
+  )).sort();
+  const isScriptCapability = (value?: string | null) => String(value ?? '').trim().startsWith('script:');
+  const processorNameFromCapability = (capability: string) => capability.slice('processor:'.length).trim();
   const sdkProcessorOptions = (search: string, currentValue?: string | null) => {
     const sdkValues = new Set<string>();
+    for (const capability of capabilityValues('processor:')) {
+      const value = processorNameFromCapability(capability);
+      if (value && !isScriptCapability(value)) sdkValues.add(value);
+    }
     for (const job of jobs) {
       const value = job.processorName?.trim() || (!job.scriptId ? job.name.trim() : '');
-      if (value) sdkValues.add(value);
+      if (value && !isScriptCapability(value)) sdkValues.add(value);
     }
     const trimmedSearch = search.trim();
-    if (trimmedSearch) sdkValues.add(trimmedSearch);
+    if (trimmedSearch && !isScriptCapability(trimmedSearch)) sdkValues.add(trimmedSearch);
     const current = currentValue?.trim();
-    if (current) sdkValues.add(current);
+    if (current && !isScriptCapability(current)) sdkValues.add(current);
     return Array.from(sdkValues).sort().map((value) => ({ value, label: value }));
   };
-  const scriptOptions = scripts
+  const scriptExecutorOptions = capabilityValues('script:').map((capability) => ({
+    value: capability,
+    label: capability === 'script:*' ? '任意脚本语言 · script:*' : `脚本执行器 · ${capability.slice('script:'.length)} · ${capability}`,
+  }));
+  const scriptMatchesExecutor = (script: ScriptSummary, executor?: string | null) => {
+    const value = String(executor ?? '').trim();
+    return !value || value === 'script:*' || value === `script:${script.language}`;
+  };
+  const scriptOptions = (executor?: string | null) => scripts
     .filter((script) => script.status === 'approved')
+    .filter((script) => scriptMatchesExecutor(script, executor))
     .map((script) => ({ value: script.id, label: `${script.name} · ${script.language} · ${script.id}` }));
+  const scriptExecutorForScript = (scriptId?: string | null) => {
+    const script = scripts.find((item) => item.id === scriptId);
+    if (!script) return scriptExecutorOptions[0]?.value;
+    const exact = `script:${script.language}`;
+    return scriptExecutorOptions.some((option) => option.value === exact) ? exact : scriptExecutorOptions[0]?.value;
+  };
   const fixedRateExpr = (value?: number | null, unit?: string | null) => value ? `${value}${unit || 's'}` : null;
   const parseFixedRate = (expr?: string | null) => {
     const match = String(expr ?? '').trim().match(/^(\d+(?:\.\d+)?)(ns|us|ms|s|m|h|d|w|month|year)$/);
@@ -63,7 +95,7 @@ export function JobsPage() {
   const openCreateDrawer = () => {
     form.resetFields();
     setCreateProcessorSearch('');
-    form.setFieldsValue({ namespace: 'default', app: 'default', scheduleType: 'api', enabled: true, fixedRateUnit: 's', executorKind: 'sdk' });
+    form.setFieldsValue({ namespace: 'default', app: 'default', scheduleType: 'api', enabled: true, fixedRateUnit: 's', executorKind: 'sdk', scriptExecutor: scriptExecutorOptions[0]?.value });
     setCreateDrawerOpen(true);
   };
 
@@ -78,19 +110,20 @@ export function JobsPage() {
       ...fixedRate,
       executorKind: job.scriptId ? 'script' : 'sdk',
       processorName: job.processorName ?? undefined,
+      scriptExecutor: job.scriptId ? scriptExecutorForScript(job.scriptId) : undefined,
       scriptId: job.scriptId ?? undefined,
       enabled: job.enabled,
     });
   };
 
-  const normalizeExecutor = <T extends { executorKind?: 'sdk' | 'script'; processorName?: string | null; scriptId?: string | null }>(values: T) => {
-    const { executorKind: _executorKind, ...rest } = values;
+  const normalizeExecutor = <T extends { executorKind?: 'sdk' | 'script'; scriptExecutor?: string; processorName?: string | null; scriptId?: string | null }>(values: T) => {
+    const { executorKind: _executorKind, scriptExecutor: _scriptExecutor, ...rest } = values;
     return values.executorKind === 'script'
       ? { ...rest, processorName: null }
       : { ...rest, scriptId: null };
   };
 
-  const handleEditSubmit = async (values: UpdateJobRequest & { executorKind?: 'sdk' | 'script'; fixedRateValue?: number; fixedRateUnit?: string }) => {
+  const handleEditSubmit = async (values: UpdateJobRequest & { executorKind?: 'sdk' | 'script'; scriptExecutor?: string; fixedRateValue?: number; fixedRateUnit?: string }) => {
     if (!editingJob) return;
     if (!canWriteJobs) { message.error('当前账号无权限编辑任务'); return; }
     try {
@@ -237,11 +270,14 @@ export function JobsPage() {
           <Form.Item name="app" label="App" rules={[{ required: true }]}><Input placeholder="default" /></Form.Item>
           <Form.Item name="name" label="任务名称" rules={[{ required: true }]}><Input placeholder="demo.echo" /></Form.Item>
           <Form.Item name="executorKind" label="执行方式" rules={[{ required: true }]}><Select options={[{ value: 'sdk', label: 'SDK Processor' }, { value: 'script', label: '脚本执行器（沙箱自动执行）' }]} /></Form.Item>
-          <Form.Item noStyle shouldUpdate={(prev, next) => prev.executorKind !== next.executorKind}>
-            {({ getFieldValue }) => getFieldValue('executorKind') === 'script' ? (
-              <Form.Item name="scriptId" label="具体脚本" extra="脚本执行器固定走沙箱 Worker；这里只选择脚本，不暴露内部绑定。" rules={[{ required: true, message: '请选择具体脚本' }]}><Select showSearch optionFilterProp="label" placeholder="选择已审批脚本" options={scriptOptions} /></Form.Item>
+          <Form.Item noStyle shouldUpdate={(prev, next) => prev.executorKind !== next.executorKind || prev.scriptExecutor !== next.scriptExecutor}>
+            {({ getFieldValue, setFieldsValue }) => getFieldValue('executorKind') === 'script' ? (
+              <>
+                <Form.Item name="scriptExecutor" label="脚本执行器" extra="来自在线 Worker 的 script:<language> 能力；脚本任务固定下发给沙箱脚本 Worker。" rules={[{ required: true, message: '请选择脚本执行器' }]}><Select showSearch optionFilterProp="label" placeholder="选择脚本执行器能力" options={scriptExecutorOptions} onChange={() => setFieldsValue({ scriptId: undefined })} /></Form.Item>
+                <Form.Item name="scriptId" label="具体脚本" extra="只展示与所选脚本执行器语言匹配的已审批脚本。" rules={[{ required: true, message: '请选择具体脚本' }]}><Select showSearch optionFilterProp="label" placeholder="选择已审批脚本" options={scriptOptions(getFieldValue('scriptExecutor'))} /></Form.Item>
+              </>
             ) : (
-              <Form.Item name="processorName" label="SDK Processor" extra="Java demo/Spring Worker 通过 @TikeeProcessor 注册，例如 shell.test；不填时默认使用任务名称作为 processor。"><Select allowClear showSearch placeholder="输入或选择 SDK Processor" options={sdkProcessorOptions(createProcessorSearch, form.getFieldValue('processorName'))} filterOption={(input, option) => String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())} onSearch={setCreateProcessorSearch} onChange={(value) => setCreateProcessorSearch(String(value ?? ''))} /></Form.Item>
+              <Form.Item name="processorName" label="SDK Processor" extra="只能选择普通 SDK processor；script:* 能力不会出现在这里。Java demo/Spring Worker 通过 @TikeeProcessor 注册，例如 shell.test。" rules={[{ validator: (_, value) => isScriptCapability(value) ? Promise.reject(new Error('SDK Processor 不能选择 script:* 执行器')) : Promise.resolve() }]}><Select allowClear showSearch placeholder="输入或选择 SDK Processor" options={sdkProcessorOptions(createProcessorSearch, form.getFieldValue('processorName'))} filterOption={(input, option) => String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())} onSearch={setCreateProcessorSearch} onChange={(value) => setCreateProcessorSearch(String(value ?? ''))} /></Form.Item>
             )}
           </Form.Item>
           <Form.Item name="scheduleType" label="调度类型"><Select options={[{ value: 'api', label: 'API 手动触发' }, { value: 'cron', label: 'Cron 定时' }, { value: 'fixed_rate', label: '固定频率' }]} /></Form.Item>
@@ -270,11 +306,14 @@ export function JobsPage() {
           <Form.Item label="Namespace / App"><Typography.Text code>{editingJob ? `${editingJob.namespace}/${editingJob.app}` : '-'}</Typography.Text></Form.Item>
           <Form.Item name="name" label="任务名称" rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item name="executorKind" label="执行方式" rules={[{ required: true }]}><Select options={[{ value: 'sdk', label: 'SDK Processor' }, { value: 'script', label: '脚本执行器（沙箱自动执行）' }]} /></Form.Item>
-          <Form.Item noStyle shouldUpdate={(prev, next) => prev.executorKind !== next.executorKind}>
-            {({ getFieldValue }) => getFieldValue('executorKind') === 'script' ? (
-              <Form.Item name="scriptId" label="具体脚本" extra="脚本执行器固定走沙箱 Worker；这里只选择脚本，不暴露内部绑定。" rules={[{ required: true, message: '请选择具体脚本' }]}><Select showSearch optionFilterProp="label" placeholder="选择已审批脚本" options={scriptOptions} /></Form.Item>
+          <Form.Item noStyle shouldUpdate={(prev, next) => prev.executorKind !== next.executorKind || prev.scriptExecutor !== next.scriptExecutor}>
+            {({ getFieldValue, setFieldsValue }) => getFieldValue('executorKind') === 'script' ? (
+              <>
+                <Form.Item name="scriptExecutor" label="脚本执行器" extra="来自在线 Worker 的 script:<language> 能力；脚本任务固定下发给沙箱脚本 Worker。" rules={[{ required: true, message: '请选择脚本执行器' }]}><Select showSearch optionFilterProp="label" placeholder="选择脚本执行器能力" options={scriptExecutorOptions} onChange={() => setFieldsValue({ scriptId: undefined })} /></Form.Item>
+                <Form.Item name="scriptId" label="具体脚本" extra="只展示与所选脚本执行器语言匹配的已审批脚本。" rules={[{ required: true, message: '请选择具体脚本' }]}><Select showSearch optionFilterProp="label" placeholder="选择已审批脚本" options={scriptOptions(getFieldValue('scriptExecutor'))} /></Form.Item>
+              </>
             ) : (
-              <Form.Item name="processorName" label="SDK Processor" extra="Java demo/Spring Worker 通过 @TikeeProcessor 注册，例如 shell.test；不填时默认使用任务名称作为 processor。"><Select allowClear showSearch placeholder="输入或选择 SDK Processor" options={sdkProcessorOptions(editProcessorSearch, editForm.getFieldValue('processorName'))} filterOption={(input, option) => String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())} onSearch={setEditProcessorSearch} onChange={(value) => setEditProcessorSearch(String(value ?? ''))} /></Form.Item>
+              <Form.Item name="processorName" label="SDK Processor" extra="只能选择普通 SDK processor；script:* 能力不会出现在这里。Java demo/Spring Worker 通过 @TikeeProcessor 注册，例如 shell.test。" rules={[{ validator: (_, value) => isScriptCapability(value) ? Promise.reject(new Error('SDK Processor 不能选择 script:* 执行器')) : Promise.resolve() }]}><Select allowClear showSearch placeholder="输入或选择 SDK Processor" options={sdkProcessorOptions(editProcessorSearch, editForm.getFieldValue('processorName'))} filterOption={(input, option) => String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())} onSearch={setEditProcessorSearch} onChange={(value) => setEditProcessorSearch(String(value ?? ''))} /></Form.Item>
             )}
           </Form.Item>
           <Form.Item name="scheduleType" label="调度类型"><Select options={[{ value: 'api', label: 'API 手动触发' }, { value: 'cron', label: 'Cron 定时' }, { value: 'fixed_rate', label: '固定频率' }]} /></Form.Item>

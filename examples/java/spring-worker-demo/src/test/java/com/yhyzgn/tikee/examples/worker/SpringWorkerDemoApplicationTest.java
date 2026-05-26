@@ -50,7 +50,7 @@ class SpringWorkerDemoApplicationTest {
         assertThat(noop.registration().app()).isEqualTo("demo-app");
         assertThat(noop.registration().cluster()).isEqualTo("demo-cluster");
         assertThat(noop.registration().region()).isEqualTo("demo-region");
-        assertThat(noop.registration().capabilities()).containsExactly("java", "spring-boot");
+        assertThat(noop.registration().capabilities()).contains("java", "spring-boot");
         assertThat(noop.registration().labels()).containsEntry("runtime", "java")
                 .containsEntry("demo", "spring-worker");
     }

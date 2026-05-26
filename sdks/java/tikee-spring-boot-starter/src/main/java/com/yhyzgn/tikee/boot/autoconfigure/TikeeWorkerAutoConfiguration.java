@@ -11,6 +11,9 @@ import com.yhyzgn.tikee.worker.WorkerRegistration;
 import com.yhyzgn.tikee.spring.processor.TikeeProcessorRegistry;
 import com.yhyzgn.tikee.spring.worker.SpringTikeeTaskProcessor;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -48,7 +51,7 @@ public class TikeeWorkerAutoConfiguration {
                 properties.getApp(),
                 properties.getCluster(),
                 properties.getRegion(),
-                properties.getCapabilities(),
+                workerCapabilities(properties, processorRegistry),
                 properties.getLabels());
         if (properties.isDryRun()) {
             return new NoopTikeeWorkerClient(registration);
@@ -65,6 +68,14 @@ public class TikeeWorkerAutoConfiguration {
     @ConditionalOnProperty(prefix = "tikee.worker", name = "enabled", havingValue = "true", matchIfMissing = true)
     TikeeWorkerLifecycle tikeeWorkerLifecycle(TikeeWorkerClient client, TikeeWorkerProperties properties) {
         return new TikeeWorkerLifecycle(client, properties);
+    }
+
+    private static List<String> workerCapabilities(
+            TikeeWorkerProperties properties, TikeeProcessorRegistry processorRegistry) {
+        var capabilities = new LinkedHashSet<String>();
+        capabilities.addAll(properties.getCapabilities());
+        capabilities.addAll(processorRegistry.processorCapabilities());
+        return new ArrayList<>(capabilities);
     }
 
     @Bean

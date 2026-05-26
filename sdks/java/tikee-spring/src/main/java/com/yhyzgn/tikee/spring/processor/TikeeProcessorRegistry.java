@@ -6,6 +6,7 @@ import com.yhyzgn.tikee.processor.TaskOutcome;
 import java.lang.reflect.Method;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.config.BeanPostProcessor;
@@ -33,6 +34,17 @@ public class TikeeProcessorRegistry implements BeanPostProcessor {
      */
     public Map<String, TikeeProcessorHandler> processors() {
         return handlers();
+    }
+
+    /**
+     * Registered SDK processor capabilities for Worker registration.
+     *
+     * @return immutable capability list using the processor:&lt;name&gt; convention
+     */
+    public List<String> processorCapabilities() {
+        return handlers.keySet().stream()
+                .map(name -> "processor:" + name)
+                .toList();
     }
 
     /**
@@ -75,6 +87,12 @@ public class TikeeProcessorRegistry implements BeanPostProcessor {
     }
 
     private void register(String processorName, TikeeProcessorHandler handler) {
+        if (processorName == null || processorName.isBlank()) {
+            throw new IllegalArgumentException("tikee processor name must not be blank");
+        }
+        if (processorName.startsWith("script:")) {
+            throw new IllegalArgumentException("@TikeeProcessor is reserved for SDK processors; use script runner capabilities for script executors");
+        }
         TikeeProcessorHandler existing = handlers.putIfAbsent(processorName, handler);
         if (existing != null) {
             throw new IllegalArgumentException("duplicate tikee processor name: " + processorName);

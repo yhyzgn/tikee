@@ -55,6 +55,23 @@ class TikeeProcessorRegistryTest {
     }
 
     @Test
+    void exposesOnlySdkProcessorCapabilities() {
+        TikeeProcessorRegistry registry = new TikeeProcessorRegistry();
+        registry.postProcessAfterInitialization(new StringBean(), "stringBean");
+
+        assertThat(registry.processorCapabilities()).containsExactly("processor:demo.string");
+    }
+
+    @Test
+    void rejectsScriptPrefixedProcessorAnnotations() {
+        TikeeProcessorRegistry registry = new TikeeProcessorRegistry();
+
+        assertThatThrownBy(() -> registry.postProcessAfterInitialization(new ScriptPrefixedBean(), "scriptBean"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("@TikeeProcessor is reserved for SDK processors");
+    }
+
+    @Test
     void routesThroughSpringTaskProcessorByJobId() throws Exception {
         TikeeProcessorRegistry registry = new TikeeProcessorRegistry();
         registry.postProcessAfterInitialization(new StringBean(), "stringBean");
@@ -90,5 +107,10 @@ class TikeeProcessorRegistryTest {
         public void run(TaskContext ignored) {
             throw new IllegalStateException("boom");
         }
+    }
+
+    static final class ScriptPrefixedBean {
+        @TikeeProcessor("script:shell")
+        public void run(String payload) {}
     }
 }

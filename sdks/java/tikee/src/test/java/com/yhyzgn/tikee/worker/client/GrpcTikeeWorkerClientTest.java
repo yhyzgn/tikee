@@ -4,8 +4,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.yhyzgn.tikee.processor.ProcessorCapabilityProvider;
 import com.yhyzgn.tikee.processor.TaskContext;
 import com.yhyzgn.tikee.processor.TaskOutcome;
+import com.yhyzgn.tikee.processor.TaskProcessor;
 import com.yhyzgn.tikee.worker.WorkerRegistration;
 
 import tikee.worker.v1.Worker;
@@ -45,11 +47,12 @@ class GrpcTikeeWorkerClientTest {
                     "local",
                     List.of("java"),
                     Map.of("runtime", "java"));
+            TaskProcessor processor = new CapabilityAwareProcessor();
             GrpcTikeeWorkerClient client = new GrpcTikeeWorkerClient(
                     channel,
                     false,
                     registration,
-                    context -> TaskOutcome.succeeded(),
+                    processor,
                     Duration.ofMillis(50),
                     Duration.ofSeconds(2),
                     ignored -> {});
@@ -64,6 +67,8 @@ class GrpcTikeeWorkerClientTest {
             client.close();
             Worker.RegisterWorker register = service.messages.get(0).getRegister();
             assertEquals("java-instance-1", register.getClientInstanceId());
+            assertTrue(register.getCapabilitiesList().contains("java"));
+            assertTrue(register.getCapabilitiesList().contains("processor:demo.echo"));
             assertTrue(service.messages.stream()
                     .filter(Worker.WorkerMessage::hasHeartbeat)
                     .anyMatch(message -> "assigned-java-worker".equals(message.getHeartbeat().getWorkerId())
@@ -80,6 +85,18 @@ class GrpcTikeeWorkerClientTest {
         } finally {
             channel.shutdownNow();
             server.shutdownNow();
+        }
+    }
+
+    private static final class CapabilityAwareProcessor implements TaskProcessor, ProcessorCapabilityProvider {
+        @Override
+        public TaskOutcome process(TaskContext context) {
+            return TaskOutcome.succeeded();
+        }
+
+        @Override
+        public List<String> capabilities() {
+            return List.of("processor:demo.echo");
         }
     }
 

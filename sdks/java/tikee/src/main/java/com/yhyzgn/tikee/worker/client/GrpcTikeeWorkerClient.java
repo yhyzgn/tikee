@@ -1,5 +1,6 @@
 package com.yhyzgn.tikee.worker.client;
 
+import com.yhyzgn.tikee.processor.ProcessorCapabilityProvider;
 import com.yhyzgn.tikee.processor.TaskContext;
 import com.yhyzgn.tikee.processor.TaskOutcome;
 import com.yhyzgn.tikee.processor.TaskProcessor;
@@ -11,6 +12,7 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
 import java.net.URI;
 import java.time.Duration;
+import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -287,9 +289,18 @@ public final class GrpcTikeeWorkerClient implements TikeeWorkerClient {
                 .setApp(registration.app())
                 .setCluster(registration.cluster())
                 .setRegion(registration.region())
-                .addAllCapabilities(registration.capabilities())
+                .addAllCapabilities(registrationCapabilities())
                 .putAllLabels(registration.labels());
         return Worker.WorkerMessage.newBuilder().setRegister(builder).build();
+    }
+
+    private java.util.List<String> registrationCapabilities() {
+        var capabilities = new LinkedHashSet<String>();
+        capabilities.addAll(registration.capabilities());
+        if (processor instanceof ProcessorCapabilityProvider provider) {
+            capabilities.addAll(provider.capabilities());
+        }
+        return java.util.List.copyOf(capabilities);
     }
 
     private void awaitRegistration() {
