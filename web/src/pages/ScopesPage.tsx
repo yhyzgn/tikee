@@ -25,6 +25,7 @@ import {
   type WorkerPoolSummary,
 } from '../api/client';
 import { GuardedButton, PermissionGate, useCan } from '../components/Permission';
+import { persistentPagination, usePersistentTablePageSize } from '../utils/pagination';
 
 export function ScopesPage() {
   const canManageScopes = useCan('tenants', 'manage');
@@ -33,6 +34,7 @@ export function ScopesPage() {
   const [workerPools, setWorkerPools] = useState<WorkerPoolSummary[]>([]);
   const [oidcIdentities, setOidcIdentities] = useState<OidcIdentitySummary[]>([]);
   const [loading, setLoading] = useState(false);
+  const [pageSize, setPageSize] = usePersistentTablePageSize();
   const [namespaceForm] = Form.useForm<CreateNamespaceRequest>();
   const [appForm] = Form.useForm<CreateAppScopeRequest>();
   const [poolForm] = Form.useForm<CreateWorkerPoolRequest>();
@@ -204,9 +206,9 @@ export function ScopesPage() {
       </Drawer>
 
       <Row gutter={[16, 16]}>
-        <Col xs={24} xl={8}><Card className="clean-card" title="命名空间"><Table rowKey="id" loading={loading} columns={namespaceColumns} dataSource={namespaces} pagination={{ pageSize: 6 }} size="small" /></Card></Col>
-        <Col xs={24} xl={8}><Card className="clean-card" title="应用"><Table rowKey="id" loading={loading} columns={appColumns} dataSource={apps} pagination={{ pageSize: 6 }} size="small" /></Card></Col>
-        <Col xs={24} xl={8}><Card className="clean-card" title="Worker Pool"><Table rowKey="id" loading={loading} columns={poolColumns} dataSource={workerPools} pagination={{ pageSize: 6 }} size="small" /></Card></Col>
+        <Col xs={24} xl={8}><Card className="clean-card" title="命名空间"><Table rowKey="id" loading={loading} columns={namespaceColumns} dataSource={namespaces} pagination={persistentPagination(pageSize, setPageSize)} size="small" /></Card></Col>
+        <Col xs={24} xl={8}><Card className="clean-card" title="应用"><Table rowKey="id" loading={loading} columns={appColumns} dataSource={apps} pagination={persistentPagination(pageSize, setPageSize)} size="small" /></Card></Col>
+        <Col xs={24} xl={8}><Card className="clean-card" title="Worker Pool"><Table rowKey="id" loading={loading} columns={poolColumns} dataSource={workerPools} pagination={persistentPagination(pageSize, setPageSize)} size="small" /></Card></Col>
       </Row>
 
       <Drawer title="保存 OIDC 映射" open={drawer === 'oidc'} onClose={() => { setDrawer(null); oidcForm.resetFields(); }} width={720} destroyOnClose>
@@ -227,7 +229,7 @@ export function ScopesPage() {
       <Card className="clean-card" title="OIDC tenant/app/role 绑定" extra={<PermissionGate resource="tenants" action="manage"><Space className="card-toolbar"><Button onClick={() => setDrawer('oidc')}>新建映射</Button></Space></PermissionGate>}>
         <Space direction="vertical" size="middle" style={{ width: '100%' }}>
           <Alert type="info" showIcon message="Fail-closed OIDC 映射" description="外部身份必须显式映射后才可换取本地 session；scope binding 会限制 namespace/app/Worker Pool。" />
-          <Table rowKey="id" loading={loading} columns={oidcColumns} dataSource={oidcIdentities} pagination={{ pageSize: 6 }} size="small" />
+          <Table rowKey="id" loading={loading} columns={oidcColumns} dataSource={oidcIdentities} pagination={persistentPagination(pageSize, setPageSize)} size="small" />
         </Space>
       </Card>
     </div>

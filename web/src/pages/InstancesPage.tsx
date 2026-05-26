@@ -12,6 +12,7 @@ import {
   type JobInstanceSummary,
   type JobSummary,
 } from '../api/client';
+import { persistentPagination, usePersistentTablePageSize } from '../utils/pagination';
 
 export function InstancesPage() {
   const [jobs, setJobs] = useState<JobSummary[]>([]);
@@ -35,6 +36,7 @@ export function InstancesPage() {
   const [logs, setLogs] = useState<JobInstanceLogSummary[]>([]);
   const [attempts, setAttempts] = useState<JobInstanceAttemptSummary[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
+  const [pageSize, setPageSize] = usePersistentTablePageSize();
 
   const loadLogs = useCallback(async (instance: JobInstanceSummary, showLoading = true) => {
     if (showLoading) {
@@ -149,7 +151,7 @@ export function InstancesPage() {
       ) : (
         <>
           <Typography.Paragraph type="secondary">实例详情 API 已可用：GET /api/v1/instances/&lt;instance&gt;</Typography.Paragraph>
-          <Table rowKey="id" columns={columns} dataSource={instances} pagination={{ pageSize: 8 }} />
+          <Table rowKey="id" columns={columns} dataSource={instances} pagination={persistentPagination(pageSize, setPageSize)} />
         </>
       )}
       <Drawer
@@ -193,7 +195,7 @@ export function InstancesPage() {
           loading={logsLoading}
           columns={logColumns}
           dataSource={logs}
-          pagination={{ pageSize: 10 }}
+          pagination={persistentPagination(pageSize, setPageSize)}
           locale={{ emptyText: '暂无日志' }}
         />
       </Drawer>

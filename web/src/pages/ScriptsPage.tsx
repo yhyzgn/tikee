@@ -17,6 +17,7 @@ import {
 } from '../api/client';
 import { CodeEditor } from '../components/CodeEditor';
 import { useUrlQueryState } from '../hooks/useUrlQueryState';
+import { TABLE_PAGE_SIZE_OPTIONS, usePersistentTablePageSize } from '../utils/pagination';
 
 const LANGUAGE_OPTIONS = [
   { value: 'shell', label: 'Shell' },
@@ -209,7 +210,9 @@ function PolicyDiffTable({ changes }: { changes: ScriptDiffResult['policy_diff']
 export function ScriptsPage() {
   const navigate = useNavigate();
   const canManageScripts = useCan('scripts', 'manage');
-  const { query, setQuery } = useUrlQueryState({ page: 1, page_size: 10, keyword: '', language: '', status: '' });
+  const [pageSize, setPageSize] = usePersistentTablePageSize();
+  const queryDefaults = useMemo(() => ({ page: 1, page_size: pageSize, keyword: '', language: '', status: '' }), [pageSize]);
+  const { query, setQuery } = useUrlQueryState(queryDefaults);
   const [scripts, setScripts] = useState<ScriptSummary[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -532,7 +535,7 @@ export function ScriptsPage() {
           <Select allowClear placeholder="状态" value={query.status || undefined} onChange={(value) => setQuery({ status: value ?? '', page: 1 })} style={{ width: 130 }} options={Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label }))} />
         </Space>
       </div>
-      <Table rowKey="id" dataSource={filteredScripts} columns={columns} loading={loading} pagination={{ pageSize: Number(query.page_size) || 10, current: Number(query.page) || 1, onChange: (page, pageSize) => setQuery({ page, page_size: pageSize }) }} />
+      <Table rowKey="id" dataSource={filteredScripts} columns={columns} loading={loading} pagination={{ pageSize: Number(query.page_size) || pageSize, current: Number(query.page) || 1, showSizeChanger: true, pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS.map(String), onChange: (page, nextPageSize) => { setPageSize(nextPageSize); setQuery({ page, page_size: nextPageSize }); } }} />
 
       {/* Create Drawer */}
       <Drawer

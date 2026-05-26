@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { AuditLogQuery, AuditLogSummary } from '../api/client';
 import { exportAuditLogs, listAuditLogs } from '../api/client';
 import { useUrlQueryState } from '../hooks/useUrlQueryState';
+import { DEFAULT_TABLE_PAGE_SIZE, TABLE_PAGE_SIZE_OPTIONS, persistTablePageSize, usePersistentTablePageSize } from '../utils/pagination';
 
 const ACTION_COLORS: Record<string, string> = {
   create: 'green',
@@ -18,9 +19,8 @@ const ACTION_COLORS: Record<string, string> = {
   recover: 'orange',
 };
 
-const PAGE_SIZE = 20;
 const AUDIT_QUERY_DEFAULTS = {
-  page_size: PAGE_SIZE,
+  page_size: DEFAULT_TABLE_PAGE_SIZE,
   page_token: '',
   actor: '',
   action: '',
@@ -34,21 +34,24 @@ export function AuditLogsPage() {
   const [logs, setLogs] = useState<AuditLogSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
+  const [pageSize, setPageSize] = usePersistentTablePageSize();
   const { query: urlQuery, setQuery: setUrlQuery, resetQuery } = useUrlQueryState(AUDIT_QUERY_DEFAULTS);
   const query = useMemo<AuditLogQuery>(() => ({
-    page_size: Number(urlQuery.page_size) || PAGE_SIZE,
+    page_size: Number(urlQuery.page_size) || pageSize,
     page_token: urlQuery.page_token || undefined,
     actor: urlQuery.actor || undefined,
     action: urlQuery.action || undefined,
     resource_type: urlQuery.resource_type || undefined,
     resource_id: urlQuery.resource_id || undefined,
     failure_reason: urlQuery.failure_reason || undefined,
-  }), [urlQuery]);
+  }), [pageSize, urlQuery]);
+
+  const effectivePageSize = query.page_size ?? pageSize;
 
   const fetchLogs = useCallback(async (nextQuery: AuditLogQuery = query) => {
     setLoading(true);
     try {
-      const page = await listAuditLogs({ ...nextQuery, page_size: nextQuery.page_size ?? PAGE_SIZE });
+      const page = await listAuditLogs({ ...nextQuery, page_size: nextQuery.page_size ?? pageSize });
       setLogs(page.items ?? []);
       setTotal(page.total ?? page.items?.length ?? 0);
     } finally {
@@ -103,7 +106,7 @@ export function AuditLogsPage() {
   }, [form, query]);
 
   const applyFilters = (values: AuditLogQuery) => {
-    setUrlQuery({ ...values, page_size: PAGE_SIZE, page_token: '' });
+    setUrlQuery({ ...values, page_size: pageSize, page_token: '' });
   };
 
   const resetFilters = () => {
@@ -180,11 +183,19 @@ export function AuditLogsPage() {
           columns={columns}
           loading={loading}
           pagination={{
-            pageSize: PAGE_SIZE,
+            pageSize: effectivePageSize,
             total,
-            showSizeChanger: false,
-            current: query.page_token ? Math.floor(Number(query.page_token) / PAGE_SIZE) + 1 : 1,
-            onChange: (page) => setUrlQuery({ page_token: page > 1 ? String((page - 1) * PAGE_SIZE) : '' }),
+            showSizeChanger: true,
+            pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS.map(String),
+            current: query.page_token ? Math.floor(Number(query.page_token) / effectivePageSize) + 1 : 1,
+            onChange: (page, nextPageSize) => {
+              setPageSize(nextPageSize);
+              persistTablePageSize(nextPageSize);
+              setUrlQuery({
+                page_size: nextPageSize,
+                page_token: page > 1 ? String((page - 1) * nextPageSize) : '',
+              });
+            },
           }}
           size="small"
         />

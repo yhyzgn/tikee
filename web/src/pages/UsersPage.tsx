@@ -11,6 +11,7 @@ import {
   type UserSummary,
 } from '../api/client';
 import { GuardedButton, PermissionGate, useCan } from '../components/Permission';
+import { persistentPagination, usePersistentTablePageSize } from '../utils/pagination';
 
 export function UsersPage() {
   const canManageUsers = useCan('users', 'manage');
@@ -19,6 +20,7 @@ export function UsersPage() {
   const [form] = Form.useForm<CreateUserRequest>();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [pageSize, setPageSize] = usePersistentTablePageSize();
 
   const fetchUsersList = async () => {
     setLoading(true);
@@ -172,7 +174,7 @@ export function UsersPage() {
           loading={loading}
           columns={columns}
           dataSource={users}
-          pagination={{ pageSize: 8 }}
+          pagination={persistentPagination(pageSize, setPageSize)}
           size="middle"
         />
       </Card>

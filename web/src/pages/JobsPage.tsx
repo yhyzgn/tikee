@@ -5,11 +5,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createJob, deleteJob, listJobs, listScripts, listWorkers, triggerJob, updateJob, type CreateJobRequest, type JobSummary, type ScriptSummary, type UpdateJobRequest, type WorkerSummary } from '../api/client';
 import { PermissionGate, useCan } from '../components/Permission';
 import { useUrlQueryState } from '../hooks/useUrlQueryState';
+import { TABLE_PAGE_SIZE_OPTIONS, usePersistentTablePageSize } from '../utils/pagination';
 
 export function JobsPage() {
   const canWriteJobs = useCan('jobs', 'write');
   const canExecuteInstances = useCan('instances', 'execute');
-  const { query, setQuery } = useUrlQueryState({ page: 1, page_size: 8, keyword: '', scheduleType: '' });
+  const [pageSize, setPageSize] = usePersistentTablePageSize();
+  const queryDefaults = useMemo(() => ({ page: 1, page_size: pageSize, keyword: '', scheduleType: '' }), [pageSize]);
+  const { query, setQuery } = useUrlQueryState(queryDefaults);
   const [jobs, setJobs] = useState<JobSummary[]>([]);
   const [scripts, setScripts] = useState<ScriptSummary[]>([]);
   const [workers, setWorkers] = useState<WorkerSummary[]>([]);
@@ -313,7 +316,7 @@ export function JobsPage() {
         title="任务列表"
         extra={<Space wrap className="card-toolbar"><PermissionGate resource="jobs" action="write"><Button type="primary" onClick={openCreateDrawer}>新建任务</Button></PermissionGate><Input allowClear placeholder="搜索任务/Namespace/App" value={String(query.keyword ?? '')} onChange={(event) => setQuery({ keyword: event.target.value, page: 1 })} style={{ width: 220 }} /><Select allowClear placeholder="调度类型" value={query.scheduleType || undefined} onChange={(value) => setQuery({ scheduleType: value ?? '', page: 1 })} style={{ width: 130 }} options={[{ value: 'api' }, { value: 'cron' }, { value: 'fixed_rate' }]} /><Button onClick={load}>刷新</Button></Space>}
       >
-        <Table rowKey="id" loading={loading} columns={columns} dataSource={filteredJobs} pagination={{ pageSize: Number(query.page_size) || 8, current: Number(query.page) || 1, onChange: (page, pageSize) => setQuery({ page, page_size: pageSize }) }} size="middle" />
+        <Table rowKey="id" loading={loading} columns={columns} dataSource={filteredJobs} pagination={{ pageSize: Number(query.page_size) || pageSize, current: Number(query.page) || 1, showSizeChanger: true, pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS.map(String), onChange: (page, nextPageSize) => { setPageSize(nextPageSize); setQuery({ page, page_size: nextPageSize }); } }} size="middle" />
       </Card>
     </div>
   );

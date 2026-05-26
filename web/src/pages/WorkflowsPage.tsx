@@ -30,6 +30,7 @@ import {
 } from '../api/client';
 import { PermissionGate, useCan } from '../components/Permission';
 import { useUrlQueryState } from '../hooks/useUrlQueryState';
+import { TABLE_PAGE_SIZE_OPTIONS, usePersistentTablePageSize } from '../utils/pagination';
 import { useNavigate, useParams } from 'react-router-dom';
 
 const DEFAULT_WORKFLOW: WorkflowDefinition = {
@@ -657,7 +658,9 @@ function DagPreview({ definition, instance, jobs = [], workflows = [], currentWo
 export function WorkflowsPage() {
   const canManageWorkflows = useCan('workflows', 'manage');
   const canExecuteWorkflows = useCan('workflows', 'execute');
-  const { query, setQuery } = useUrlQueryState({ page: 1, page_size: 8, keyword: '', status: '' });
+  const [pageSize, setPageSize] = usePersistentTablePageSize();
+  const queryDefaults = useMemo(() => ({ page: 1, page_size: pageSize, keyword: '', status: '' }), [pageSize]);
+  const { query, setQuery } = useUrlQueryState(queryDefaults);
   const [items, setItems] = useState<WorkflowSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeWorkflow, setActiveWorkflow] = useState<WorkflowSummary | null>(null);
@@ -677,9 +680,9 @@ export function WorkflowsPage() {
 
   const pagedItems = useMemo(() => {
     const page = Number(query.page) || 1;
-    const pageSize = Number(query.page_size) || 8;
-    return filteredItems.slice((page - 1) * pageSize, page * pageSize);
-  }, [filteredItems, query.page, query.page_size]);
+    const currentPageSize = Number(query.page_size) || pageSize;
+    return filteredItems.slice((page - 1) * currentPageSize, page * currentPageSize);
+  }, [filteredItems, pageSize, query.page, query.page_size]);
 
   const fetchItems = async () => {
     setLoading(true);
@@ -799,7 +802,7 @@ export function WorkflowsPage() {
         <List
           loading={loading}
           dataSource={pagedItems}
-          pagination={{ pageSize: Number(query.page_size) || 8, current: Number(query.page) || 1, total: filteredItems.length, onChange: (page, pageSize) => setQuery({ page, page_size: pageSize }) }}
+          pagination={{ pageSize: Number(query.page_size) || pageSize, current: Number(query.page) || 1, total: filteredItems.length, showSizeChanger: true, pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS.map(String), onChange: (page, nextPageSize) => { setPageSize(nextPageSize); setQuery({ page, page_size: nextPageSize }); } }}
           locale={{ emptyText: '暂无工作流' }}
           renderItem={(item) => (
             <div className="workflow-list-entry">

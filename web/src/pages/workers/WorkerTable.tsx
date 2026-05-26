@@ -3,7 +3,16 @@ import { Card, Input, Select, Space, Table, Tag, Typography } from 'antd';
 import { useMemo, useState } from 'react';
 
 import type { WorkerListResponse, WorkerSummary } from '../../api/client';
+import { persistentPagination, usePersistentTablePageSize } from '../../utils/pagination';
 import { filterWorkers, uniqueSorted } from './workerPageModel';
+
+function displayCapability(capability: string) {
+  return !capability.startsWith('processor:');
+}
+
+function processorName(capability: string) {
+  return capability.startsWith('processor:') ? capability.slice('processor:'.length) : null;
+}
 
 interface WorkerTableProps {
   workers: WorkerListResponse;
@@ -14,9 +23,13 @@ export function WorkerTable({ workers, loading }: WorkerTableProps) {
   const [query, setQuery] = useState('');
   const [namespace, setNamespace] = useState('');
   const [capability, setCapability] = useState('');
+  const [pageSize, setPageSize] = usePersistentTablePageSize();
 
   const namespaces = useMemo(() => uniqueSorted(workers.items.map((worker) => worker.namespace)), [workers.items]);
-  const capabilities = useMemo(() => uniqueSorted(workers.items.flatMap((worker) => worker.capabilities)), [workers.items]);
+  const capabilities = useMemo(
+    () => uniqueSorted(workers.items.flatMap((worker) => worker.capabilities.filter(displayCapability))),
+    [workers.items],
+  );
   const filteredWorkers = useMemo(
     () => filterWorkers(workers.items, { query, namespace, capability }),
     [workers.items, query, namespace, capability],
@@ -29,7 +42,7 @@ export function WorkerTable({ workers, loading }: WorkerTableProps) {
       extra={<Tag color="blue">{filteredWorkers.length}/{workers.items.length}</Tag>}
     >
       <div className="worker-toolbar">
-        <Input prefix={<SearchOutlined />} allowClear placeholder="搜索 worker / app / region / capability" value={query} onChange={(event) => setQuery(event.target.value)} />
+        <Input prefix={<SearchOutlined />} allowClear placeholder="搜索 worker / app / region / capability / processor" value={query} onChange={(event) => setQuery(event.target.value)} />
         <Select allowClear placeholder="Namespace" value={namespace || undefined} onChange={(value) => setNamespace(value ?? '')} options={namespaces.map((value) => ({ label: value, value }))} />
         <Select allowClear placeholder="Capability" value={capability || undefined} onChange={(value) => setCapability(value ?? '')} options={capabilities.map((value) => ({ label: value, value }))} />
       </div>
@@ -38,7 +51,7 @@ export function WorkerTable({ workers, loading }: WorkerTableProps) {
         size="middle"
         loading={loading}
         dataSource={filteredWorkers}
-        pagination={{ pageSize: 8 }}
+        pagination={persistentPagination(pageSize, setPageSize)}
         columns={[
           {
             title: 'Worker',
@@ -64,7 +77,22 @@ export function WorkerTable({ workers, loading }: WorkerTableProps) {
           {
             title: 'Capabilities',
             dataIndex: 'capabilities',
-            render: (items: string[]) => <Space size={[4, 4]} wrap>{items.map((item) => <Tag key={item}>{item}</Tag>)}</Space>,
+            render: (items: string[]) => {
+              const visible = items.filter(displayCapability);
+              return visible.length > 0
+                ? <Space size={[4, 4]} wrap>{visible.map((item) => <Tag key={item}>{item}</Tag>)}</Space>
+                : <Typography.Text type="secondary">-</Typography.Text>;
+            },
+          },
+          {
+            title: 'Processors',
+            dataIndex: 'capabilities',
+            render: (items: string[]) => {
+              const processors = items.map(processorName).filter((item): item is string => item !== null);
+              return processors.length > 0
+                ? <Space size={[4, 4]} wrap>{processors.map((item) => <Tag key={item} color="purple">{item}</Tag>)}</Space>
+                : <Typography.Text type="secondary">-</Typography.Text>;
+            },
           },
         ]}
         locale={{ emptyText: '没有匹配的在线 Worker' }}
