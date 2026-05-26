@@ -42,22 +42,16 @@ public class TikeeWorkerProperties {
     private List<String> capabilities = new ArrayList<>();
     /** Labels reported during registration. */
     private Map<String, String> labels = new LinkedHashMap<>();
-    /** WASM sandbox runner configuration. */
+    /** WASM sandbox runtime installation configuration. */
     private WasmProperties wasm = new WasmProperties();
-    /** Container-backed non-WASM script runner configuration. */
+    /** Dynamic script execution configuration. */
     private ScriptRunnerProperties scripts = new ScriptRunnerProperties();
 
-    /** Wasmtime-backed WASM sandbox settings. */
+    /** Wasmtime installation settings for the default WASM sandbox. */
     @Getter
     @Setter
     public static class WasmProperties {
-        /** Enable WASM sandbox execution for this worker. */
-        private boolean enabled = true;
-        /** Probe Wasmtime before advertising script:wasm. */
-        private boolean availabilityCheck = true;
-        /** Wasmtime-compatible runtime command. */
-        private String runtimeCommand = "wasmtime";
-        /** Automatically install Wasmtime when the runtime command is unavailable. */
+        /** Automatically install Wasmtime when it is unavailable. */
         private boolean autoInstall = true;
         /** Version passed to the official installer, for example latest or v45.0.0. */
         private String installVersion = "latest";
@@ -67,17 +61,17 @@ public class TikeeWorkerProperties {
         private String installerUrl = "https://wasmtime.dev/install.sh";
         /** Installer timeout in milliseconds. */
         private long installTimeoutMillis = 120_000;
-        /** Extra runtime arguments appended before module path. */
-        private List<String> runtimeArgs = new ArrayList<>();
     }
 
-    /** Container-backed sandbox script runners. */
+    /** Dynamic script and optional container-backed non-WASM runner settings. */
     @Getter
     @Setter
     public static class ScriptRunnerProperties {
-        /** Enable sandboxed script execution for this worker. */
-        private boolean enabled = false;
-        /** Probe the container runtime before advertising script capabilities. */
+        /** Enable dynamic script execution through the default WASM sandbox. */
+        private boolean enabled = true;
+        /** Enable optional container-backed shell/python/node/powershell runners. */
+        private boolean containerEnabled = false;
+        /** Probe the container runtime before advertising non-WASM script capabilities. */
         private boolean availabilityCheck = true;
         /** Explicit Docker-compatible container runtime command for non-WASM scripts. */
         private String runtimeCommand = "";

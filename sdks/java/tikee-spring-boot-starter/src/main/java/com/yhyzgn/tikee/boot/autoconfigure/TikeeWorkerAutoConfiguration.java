@@ -104,21 +104,22 @@ public class TikeeWorkerAutoConfiguration {
     @ConditionalOnProperty(prefix = "tikee.worker", name = "enabled", havingValue = "true", matchIfMissing = true)
     WasmRunnerRegistry tikeeWasmRunnerRegistry(TikeeWorkerProperties properties) {
         WasmRunnerRegistry registry = new WasmRunnerRegistry();
-        TikeeWorkerProperties.WasmProperties wasm = properties.getWasm();
-        if (!wasm.isEnabled()) {
+        if (!properties.getScripts().isEnabled()) {
             return registry;
         }
-        String runtimeCommand = wasm.getRuntimeCommand();
-        if (wasm.isAvailabilityCheck() && !runtimeAvailable(runtimeCommand, "--version")) {
+        String runtimeCommand = "wasmtime";
+        if (!runtimeAvailable(runtimeCommand, "--version")) {
+            runtimeCommand = localWasmtimeCommand(properties);
+        }
+        if (!runtimeAvailable(runtimeCommand, "--version")) {
             runtimeCommand = installWasmtimeIfAllowed(properties);
         }
-        if (!wasm.isAvailabilityCheck() || runtimeAvailable(runtimeCommand, "--version")) {
-            registry.register(new CliWasmtimeRunner(runtimeCommand, wasm.getRuntimeArgs()));
+        if (runtimeAvailable(runtimeCommand, "--version")) {
+            registry.register(new CliWasmtimeRunner(runtimeCommand, List.of()));
         } else {
             log.warn(
-                    "tikee WASM sandbox is enabled but runtime '{}' is unavailable; "
-                            + "script:wasm capability will not be advertised",
-                    wasm.getRuntimeCommand());
+                    "tikee default WASM sandbox runtime is unavailable; "
+                            + "script:wasm capability will not be advertised");
         }
         return registry;
     }
@@ -129,7 +130,7 @@ public class TikeeWorkerAutoConfiguration {
     ScriptRunnerRegistry tikeeScriptRunnerRegistry(TikeeWorkerProperties properties) {
         ScriptRunnerRegistry registry = new ScriptRunnerRegistry();
         TikeeWorkerProperties.ScriptRunnerProperties scripts = properties.getScripts();
-        if (scripts.isEnabled()) {
+        if (scripts.isEnabled() && scripts.isContainerEnabled()) {
             if (scripts.getRuntimeCommand() == null || scripts.getRuntimeCommand().isBlank()) {
                 log.warn(
                         "tikee non-WASM script runners are enabled but no container runtime command is configured; "
@@ -200,6 +201,11 @@ public class TikeeWorkerAutoConfiguration {
         }
     }
 
+    private static String localWasmtimeCommand(TikeeWorkerProperties properties) {
+        Path binary = WasmtimeInstaller.binaryPath(wasmtimeInstallDir(properties));
+        return binary.toString();
+    }
+
     private static WasmtimeInstaller.Options wasmtimeInstallOptions(TikeeWorkerProperties properties) {
         TikeeWorkerProperties.WasmProperties wasm = properties.getWasm();
         return new WasmtimeInstaller.Options(
@@ -223,26 +229,24 @@ public class TikeeWorkerAutoConfiguration {
     private static String installWasmtimeIfAllowed(TikeeWorkerProperties properties) {
         TikeeWorkerProperties.WasmProperties wasm = properties.getWasm();
         if (!wasm.isAutoInstall()) {
-            return wasm.getRuntimeCommand();
+            return "wasmtime";
         }
         if (!WasmtimeInstaller.canUseOfficialInstaller()) {
             log.warn(
-                    "tikee WASM sandbox runtime '{}' is unavailable and the official installer cannot run on {}; "
+                    "tikee default WASM sandbox runtime is unavailable and the official installer cannot run on {}; "
                             + "script:wasm capability will not be advertised",
-                    wasm.getRuntimeCommand(),
                     WasmtimeInstaller.runtimePlatform());
-            return wasm.getRuntimeCommand();
+            return "wasmtime";
         }
         try {
             log.info(
-                    "tikee WASM sandbox runtime '{}' is unavailable; installing Wasmtime {} for {}",
-                    wasm.getRuntimeCommand(),
+                    "tikee default WASM sandbox runtime is unavailable; installing Wasmtime {} for {}",
                     wasm.getInstallVersion(),
                     WasmtimeInstaller.runtimePlatform());
             return WasmtimeInstaller.install(wasmtimeInstallOptions(properties)).toString();
         } catch (IllegalStateException error) {
             log.warn("failed to auto-install Wasmtime; script:wasm capability will not be advertised", error);
-            return wasm.getRuntimeCommand();
+            return "wasmtime";
         }
     }
 
