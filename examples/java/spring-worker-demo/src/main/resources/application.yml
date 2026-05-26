@@ -31,13 +31,13 @@ tikee:
       install-dir: ${TIKEE_WORKER_WASM_INSTALL_DIR:}
     scripts:
       enabled: ${TIKEE_WORKER_SCRIPTS_ENABLED:false}
-      runtime-command: ${TIKEE_WORKER_CONTAINER_RUNTIME:docker}
+      runtime-command: ${TIKEE_WORKER_CONTAINER_RUNTIME:}
       availability-check: ${TIKEE_WORKER_SCRIPT_RUNTIME_CHECK:true}
       images:
-        shell: ${TIKEE_WORKER_SCRIPT_SHELL_IMAGE:alpine:3.20}
-        python: ${TIKEE_WORKER_SCRIPT_PYTHON_IMAGE:python:3.13-alpine}
-        node: ${TIKEE_WORKER_SCRIPT_NODE_IMAGE:node:24-alpine}
-        powershell: ${TIKEE_WORKER_SCRIPT_POWERSHELL_IMAGE:mcr.microsoft.com/powershell:7.5-alpine-3.20}
+        shell: ${TIKEE_WORKER_SCRIPT_SHELL_IMAGE:}
+        python: ${TIKEE_WORKER_SCRIPT_PYTHON_IMAGE:}
+        node: ${TIKEE_WORKER_SCRIPT_NODE_IMAGE:}
+        powershell: ${TIKEE_WORKER_SCRIPT_POWERSHELL_IMAGE:}
 
   management:
     enabled: ${TIKEE_MANAGEMENT_ENABLED:false}

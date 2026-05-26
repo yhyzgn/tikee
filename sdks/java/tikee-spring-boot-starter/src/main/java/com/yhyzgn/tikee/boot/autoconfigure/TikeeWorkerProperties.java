@@ -79,8 +79,8 @@ public class TikeeWorkerProperties {
         private boolean enabled = false;
         /** Probe the container runtime before advertising script capabilities. */
         private boolean availabilityCheck = true;
-        /** Docker-compatible container runtime command. */
-        private String runtimeCommand = "docker";
+        /** Explicit Docker-compatible container runtime command for non-WASM scripts. */
+        private String runtimeCommand = "";
         /** Extra runtime arguments appended before image. */
         private List<String> runtimeArgs = new ArrayList<>();
         /** Per-language runtime images used inside the sandbox. */
@@ -91,13 +91,13 @@ public class TikeeWorkerProperties {
     @Getter
     @Setter
     public static class ScriptRunnerImages {
-        /** POSIX shell image. */
-        private String shell = "alpine:3.20";
-        /** Python image. */
-        private String python = "python:3.13-alpine";
-        /** Node.js image. */
-        private String node = "node:24-alpine";
-        /** PowerShell image. */
-        private String powershell = "mcr.microsoft.com/powershell:7.5-alpine-3.20";
+        /** POSIX shell image. Blank disables shell scripts. */
+        private String shell = "";
+        /** Python image. Blank disables Python scripts. */
+        private String python = "";
+        /** Node.js image. Blank disables Node.js scripts. */
+        private String node = "";
+        /** PowerShell image. Blank disables PowerShell scripts. */
+        private String powershell = "";
     }
 }

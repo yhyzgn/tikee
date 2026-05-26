@@ -84,11 +84,28 @@ class TikeeWorkerAutoConfigurationTest {
                 "tikee.worker.state-dir=" + stateDir,
                 "tikee.worker.scripts.enabled=true",
                 "tikee.worker.scripts.availability-check=false",
-                "tikee.worker.scripts.images.shell=alpine:3.20")
+                "tikee.worker.scripts.runtime-command=test-container-runtime",
+                "tikee.worker.scripts.images.shell=alpine:3.20",
+                "tikee.worker.scripts.images.python=python:3.13-alpine",
+                "tikee.worker.scripts.images.node=node:24-alpine",
+                "tikee.worker.scripts.images.powershell=mcr.microsoft.com/powershell:7.5-alpine-3.20")
                 .run(context -> {
                     NoopTikeeWorkerClient noop = context.getBean(NoopTikeeWorkerClient.class);
                     assertThat(noop.registration().capabilities())
                             .contains("script:shell", "script:python", "script:node", "script:powershell");
+                });
+    }
+
+    @Test
+    void sandboxScriptsRequireExplicitContainerRuntimeCommand() {
+        contextRunner.withPropertyValues(
+                "tikee.worker.state-dir=" + stateDir,
+                "tikee.worker.scripts.enabled=true",
+                "tikee.worker.scripts.availability-check=false",
+                "tikee.worker.scripts.images.shell=alpine:3.20")
+                .run(context -> {
+                    NoopTikeeWorkerClient noop = context.getBean(NoopTikeeWorkerClient.class);
+                    assertThat(noop.registration().capabilities()).doesNotContain("script:shell");
                 });
     }
 

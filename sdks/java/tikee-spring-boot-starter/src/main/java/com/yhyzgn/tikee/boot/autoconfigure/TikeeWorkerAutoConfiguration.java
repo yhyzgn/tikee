@@ -130,7 +130,12 @@ public class TikeeWorkerAutoConfiguration {
         ScriptRunnerRegistry registry = new ScriptRunnerRegistry();
         TikeeWorkerProperties.ScriptRunnerProperties scripts = properties.getScripts();
         if (scripts.isEnabled()) {
-            if (!scripts.isAvailabilityCheck() || runtimeAvailable(scripts.getRuntimeCommand(), "info", "--format", "{{.ServerVersion}}")) {
+            if (scripts.getRuntimeCommand() == null || scripts.getRuntimeCommand().isBlank()) {
+                log.warn(
+                        "tikee non-WASM script runners are enabled but no container runtime command is configured; "
+                                + "script:shell/python/node/powershell capabilities will not be advertised");
+            } else if (!scripts.isAvailabilityCheck()
+                    || runtimeAvailable(scripts.getRuntimeCommand(), "info", "--format", "{{.ServerVersion}}")) {
                 registerContainerRunner(
                         registry,
                         ScriptRunnerKind.SHELL,
