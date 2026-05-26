@@ -3,7 +3,7 @@ use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, Qu
 use crate::entities::{app, job, namespace};
 
 use super::{
-    job::{CreateJob, JobSummary},
+    job::{CreateJob, JobSummary, UpdateJob},
     util::{new_id, now_rfc3339},
 };
 /// Job repository.
@@ -94,6 +94,59 @@ impl JobRepository {
             processor_name: model.processor_name,
             enabled: model.enabled,
         })
+    }
+
+    /// Update a job by id.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when database access fails.
+    pub async fn update_job(
+        &self,
+        job_id: &str,
+        input: UpdateJob,
+    ) -> Result<Option<JobSummary>, sea_orm::DbErr> {
+        let Some(model) = job::Entity::find_by_id(job_id.to_owned())
+            .one(&self.db)
+            .await?
+        else {
+            return Ok(None);
+        };
+        let mut active: job::ActiveModel = model.into();
+        if let Some(name) = input.name {
+            active.name = Set(name);
+        }
+        if let Some(schedule_type) = input.schedule_type {
+            active.schedule_type = Set(schedule_type);
+        }
+        if let Some(schedule_expr) = input.schedule_expr {
+            active.schedule_expr = Set(schedule_expr);
+        }
+        if let Some(processor_name) = input.processor_name {
+            active.processor_name = Set(normalize_processor_name(processor_name));
+        }
+        if let Some(enabled) = input.enabled {
+            active.enabled = Set(enabled);
+        }
+        active.updated_at = Set(now_rfc3339());
+        let updated = active.update(&self.db).await?;
+        Ok(self
+            .hydrate_job_summaries(vec![updated])
+            .await?
+            .into_iter()
+            .next())
+    }
+
+    /// Delete a job by id.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when database access fails.
+    pub async fn delete_job(&self, job_id: &str) -> Result<bool, sea_orm::DbErr> {
+        let result = job::Entity::delete_by_id(job_id.to_owned())
+            .exec(&self.db)
+            .await?;
+        Ok(result.rows_affected > 0)
     }
 
     async fn hydrate_job_summaries(

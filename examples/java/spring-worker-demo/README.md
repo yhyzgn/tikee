@@ -22,3 +22,19 @@ The demo does not configure `client-instance-id`; the SDK creates and reuses a s
 ```bash
 (cd examples/java/spring-worker-demo && TIKEE_WORKER_DRY_RUN=false TIKEE_WORKER_ENDPOINT=http://127.0.0.1:9998 TIKEE_DEMO_SERVER_PORT=18080 ./gradlew bootRun)
 ```
+
+
+## API-type task management example
+
+In tikee, `schedule_type: api` means the job is created as an explicit API/SDK/UI-triggered task. It does **not** mean the worker executes an HTTP API call. The Java SDK management client can create, enable/disable, and manually trigger these jobs.
+
+When the demo has a management token, enable the optional control-plane endpoints:
+
+```bash
+(cd examples/java/spring-worker-demo &&   TIKEE_MANAGEMENT_ENABLED=true   TIKEE_MANAGEMENT_ENDPOINT=http://127.0.0.1:9999   TIKEE_MANAGEMENT_TOKEN=<bearer-token>   ./gradlew bootRun)
+```
+
+Then call:
+
+- `GET /demo/jobs` — list jobs in the configured namespace/app scope.
+- `POST /demo/jobs/echo` — create an `api` schedule job for `demo.echo`, disable/enable it, then trigger it through the SDK.

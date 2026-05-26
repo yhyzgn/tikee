@@ -34,7 +34,7 @@ pub use repository::{
     RecordRaftMembershipProposal, RecoverWorkflowNodeInput, RecoverWorkflowNodeResult,
     RegisterWorkerSession, ScopeRepository, ScriptReleaseGrantEvidenceSummary,
     ScriptReleaseSignatureSummary, ScriptRepository, ScriptSummary, ScriptVersionRepository,
-    ScriptVersionSummary, UpdateScript, UpdateUser, UpdateWorkflow, UpsertOidcIdentity,
+    ScriptVersionSummary, UpdateJob, UpdateScript, UpdateUser, UpdateWorkflow, UpsertOidcIdentity,
     UpsertRaftLogEntry, UpsertRaftMember, UpsertRaftMetadata, UpsertRaftSnapshot, UserRepository,
     UserSummary, VerifiedScriptReleaseGrants, VerifiedScriptReleaseSignature, WorkerHeartbeat,
     WorkerLifecycleRepository, WorkerPoolSummary, WorkerSessionEventSummary, WorkerSessionSummary,

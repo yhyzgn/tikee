@@ -87,6 +87,9 @@ pub type JobPageApiResponse = ApiResponse<Page>;
 /// Created job API envelope.
 pub type JobApiResponse = ApiResponse<JobSummary>;
 
+/// Deleted job API envelope.
+pub type DeleteJobApiResponse = ApiResponse<EmptyData>;
+
 /// DTO for creating a new user via API.
 #[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct CreateUserRequest {
@@ -822,7 +825,7 @@ pub struct JobSummary {
     pub app: String,
     /// Display name.
     pub name: String,
-    /// Schedule type, for example `api`, `cron`, or `fixed_rate`.
+    /// Schedule type, for example `api`, `cron`, or `fixed_rate`; `api` means explicit API/SDK/UI trigger, not an HTTP-calling task.
     pub schedule_type: String,
     /// Optional schedule expression.
     pub schedule_expr: Option<String>,
@@ -841,7 +844,7 @@ pub struct CreateJobRequest {
     pub app: Option<String>,
     /// Display name.
     pub name: String,
-    /// Schedule type. Defaults to `api` when omitted.
+    /// Schedule type. Defaults to `api` when omitted; `api` means explicit API/SDK/UI trigger.
     pub schedule_type: Option<String>,
     /// Optional schedule expression for CRON/fixed-rate modes.
     pub schedule_expr: Option<String>,
@@ -851,10 +854,25 @@ pub struct CreateJobRequest {
     pub enabled: Option<bool>,
 }
 
+/// Update job request. Omitted fields remain unchanged.
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+pub struct UpdateJobRequest {
+    /// Optional display name update.
+    pub name: Option<String>,
+    /// Optional schedule type update. `api` means explicit API/SDK/UI trigger.
+    pub schedule_type: Option<String>,
+    /// Optional schedule expression update. Use null to clear it.
+    pub schedule_expr: Option<Option<String>>,
+    /// Optional worker processor binding update. Use null to clear it.
+    pub processor_name: Option<Option<String>>,
+    /// Optional enabled flag update.
+    pub enabled: Option<bool>,
+}
+
 /// Trigger job request.
 #[derive(Debug, Clone, Default, Deserialize, ToSchema)]
 pub struct TriggerJobRequest {
-    /// Optional trigger source. Defaults to `api`.
+    /// Optional trigger source. Defaults to `api`; `api` means explicit API/SDK/UI trigger.
     pub trigger_type: Option<String>,
     /// Optional execution mode. Defaults to `single`; `broadcast` fans out to all online workers.
     pub execution_mode: Option<String>,

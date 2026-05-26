@@ -245,7 +245,9 @@ pub(super) fn api_router() -> Router<Arc<AppState>> {
         .route("/jobs", get(routes::list_jobs).post(routes::create_job))
         .route(
             "/jobs/{job_action}",
-            axum::routing::post(routes::trigger_job),
+            axum::routing::post(routes::trigger_job)
+                .patch(routes::update_job)
+                .delete(routes::delete_job),
         )
         .route("/jobs/{job}/instances", get(routes::list_job_instances))
         .route("/instances/{instance}", get(routes::get_job_instance))

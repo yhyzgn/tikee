@@ -38,7 +38,7 @@ pub use auth::{
     AuthSessionRepository, AuthSessionSummary, CreateAuthSession, PermissionSummary, RbacRepository,
 };
 pub use instance::{CreateJobInstance, JobInstanceRepository, JobInstanceSummary};
-pub use job::{CreateJob, JobSummary};
+pub use job::{CreateJob, JobSummary, UpdateJob};
 pub use job_repo::JobRepository;
 pub use log::{AppendJobInstanceLog, JobInstanceLogRepository, JobInstanceLogSummary};
 pub use oidc::{CreateOidcAuthState, OidcAuthStateRepository, OidcAuthStateSummary};

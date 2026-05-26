@@ -990,6 +990,63 @@
         assert_eq!(json["data"]["processor_name"], "billing.invoice-sync");
     }
 
+
+    #[tokio::test]
+    async fn job_management_updates_disables_and_deletes_jobs() {
+        let app = router().await;
+        let created = post_json(
+            app.clone(),
+            "/api/v1/jobs",
+            r#"{"namespace":"default","app":"billing","name":"manage-me","schedule_type":"api","processor_name":"demo.echo"}"#,
+        )
+        .await;
+        let job_id = created["data"]["id"]
+            .as_str()
+            .unwrap_or_else(|| panic!("created job should contain id"));
+        assert_eq!(created["data"]["schedule_type"], "api");
+
+        let update = app
+            .clone()
+            .oneshot(
+                admin_json_request_builder(
+                    app.clone(),
+                    "PATCH",
+                    format!("/api/v1/jobs/{job_id}"),
+                    r#"{"name":"managed","enabled":false,"schedule_type":"api","processor_name":"demo.report"}"#,
+                )
+                .await,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("router should respond: {error}"));
+        assert!(update.status().is_success());
+        let body = axum::body::to_bytes(update.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+        assert_eq!(json["data"]["name"], "managed");
+        assert_eq!(json["data"]["enabled"], false);
+        assert_eq!(json["data"]["processor_name"], "demo.report");
+
+        let delete = app
+            .clone()
+            .oneshot(admin_request_builder(app.clone(), "DELETE", format!("/api/v1/jobs/{job_id}")).await)
+            .await
+            .unwrap_or_else(|error| panic!("router should respond: {error}"));
+        assert!(delete.status().is_success());
+
+        let list = request_with(app, "/api/v1/jobs").await;
+        let body = axum::body::to_bytes(list.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+        let items = json["data"]["items"]
+            .as_array()
+            .unwrap_or_else(|| panic!("items should be an array"));
+        assert!(items.iter().all(|item| item["id"] != job_id));
+    }
+
     async fn post_json(app: axum::Router, uri: &str, body: &str) -> Value {
         post_json_with_auth(app, uri, body, true).await
     }

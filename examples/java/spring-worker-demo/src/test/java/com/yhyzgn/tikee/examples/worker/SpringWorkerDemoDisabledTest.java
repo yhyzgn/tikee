@@ -9,7 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
 
-@SpringBootTest(properties = {"tikee.worker.enabled=false"})
+@SpringBootTest(properties = {"tikee.worker.enabled=false", "spring.main.web-application-type=none"})
 class SpringWorkerDemoDisabledTest {
     @Autowired
     private ApplicationContext context;

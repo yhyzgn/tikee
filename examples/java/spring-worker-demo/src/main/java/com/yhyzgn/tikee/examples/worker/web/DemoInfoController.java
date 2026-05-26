@@ -4,7 +4,7 @@ import com.yhyzgn.tikee.spring.processor.TikeeProcessorRegistry;
 import com.yhyzgn.tikee.worker.client.TikeeWorkerClient;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -13,15 +13,15 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/demo")
 @RequiredArgsConstructor
+@ConditionalOnProperty(prefix = "tikee.worker", name = "enabled", havingValue = "true", matchIfMissing = true)
 public final class DemoInfoController {
     private final TikeeProcessorRegistry registry;
-    private final ObjectProvider<TikeeWorkerClient> workerClient;
+    private final TikeeWorkerClient workerClient;
 
     @GetMapping("/health")
     public DemoHealth health() {
-        TikeeWorkerClient client = workerClient.getIfAvailable();
-        boolean connected = client != null && client.connected();
-        return new DemoHealth(connected ? "ok" : "disconnected", client == null ? null : client.workerId(), connected, processors());
+        boolean connected = workerClient.connected();
+        return new DemoHealth(connected ? "ok" : "disconnected", workerClient.workerId(), connected, processors());
     }
 
     @GetMapping("/processors")

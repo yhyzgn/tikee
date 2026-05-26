@@ -10,8 +10,8 @@ spring:
 
 tikee:
   worker:
-    dry-run: false
-    endpoint: http://127.0.0.1:9998
+    dry-run: ${TIKEE_WORKER_DRY_RUN:true}
+    endpoint: ${TIKEE_WORKER_ENDPOINT:http://127.0.0.1:9998}
     namespace: default
     app: default
     cluster: local
@@ -22,3 +22,10 @@ tikee:
     labels:
       runtime: java
       demo: spring-worker
+
+  management:
+    enabled: ${TIKEE_MANAGEMENT_ENABLED:false}
+    endpoint: ${TIKEE_MANAGEMENT_ENDPOINT:http://127.0.0.1:9999}
+    token: ${TIKEE_MANAGEMENT_TOKEN:}
+    namespace: ${TIKEE_MANAGEMENT_NAMESPACE:default}
+    app: ${TIKEE_MANAGEMENT_APP:default}

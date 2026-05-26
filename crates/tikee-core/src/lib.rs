@@ -28,7 +28,7 @@ impl HealthState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ScheduleType {
-    /// Job is triggered only through an explicit API call.
+    /// Job is triggered only through an explicit API/SDK/UI management call; it does not mean an HTTP-calling task.
     Api,
     /// Job is triggered by a CRON expression.
     Cron,
@@ -114,7 +114,7 @@ impl FromStr for ExecutionMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TriggerType {
-    /// Explicit management API trigger.
+    /// Explicit management API/SDK/UI trigger; it does not mean an HTTP-calling task.
     Api,
     /// CRON tikee trigger.
     Cron,

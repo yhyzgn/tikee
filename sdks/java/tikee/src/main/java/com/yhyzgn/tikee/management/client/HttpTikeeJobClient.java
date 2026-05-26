@@ -1,0 +1,154 @@
+package com.yhyzgn.tikee.management.client;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.yhyzgn.tikee.management.model.ApiEnvelope;
+import com.yhyzgn.tikee.management.model.CreateJobRequest;
+import com.yhyzgn.tikee.management.model.JobDefinition;
+import com.yhyzgn.tikee.management.model.JobInstance;
+import com.yhyzgn.tikee.management.model.Page;
+import com.yhyzgn.tikee.management.model.TriggerJobRequest;
+import com.yhyzgn.tikee.management.model.UpdateJobRequest;
+import java.io.IOException;
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.List;
+import java.util.Objects;
+
+/** HTTP implementation of {@link TikeeJobClient}. */
+public final class HttpTikeeJobClient implements TikeeJobClient {
+    private static final TypeReference<ApiEnvelope<JobDefinition>> JOB_ENVELOPE = new TypeReference<>() {};
+    private static final TypeReference<ApiEnvelope<JobInstance>> INSTANCE_ENVELOPE = new TypeReference<>() {};
+
+    private final HttpClient http;
+    private final ObjectMapper mapper;
+    private final URI endpoint;
+    private final String bearerToken;
+    private final String namespace;
+    private final String app;
+
+    public HttpTikeeJobClient(String endpoint, String bearerToken, String namespace, String app) {
+        this(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build(), new ObjectMapper(), endpoint, bearerToken, namespace, app);
+    }
+
+    HttpTikeeJobClient(
+            HttpClient http,
+            ObjectMapper mapper,
+            String endpoint,
+            String bearerToken,
+            String namespace,
+            String app) {
+        this.http = Objects.requireNonNull(http, "http");
+        this.mapper = Objects.requireNonNull(mapper, "mapper");
+        this.endpoint = URI.create(trimTrailingSlash(Objects.requireNonNull(endpoint, "endpoint")) + "/");
+        this.bearerToken = Objects.requireNonNull(bearerToken, "bearerToken");
+        this.namespace = namespace == null || namespace.isBlank() ? "default" : namespace;
+        this.app = app == null || app.isBlank() ? "default" : app;
+    }
+
+    @Override
+    public List<JobDefinition> listJobs() {
+        ApiEnvelope<Page<JobDefinition>> envelope = send(
+                "GET",
+                "/jobs",
+                null,
+                mapper.getTypeFactory().constructParametricType(ApiEnvelope.class,
+                        mapper.getTypeFactory().constructParametricType(Page.class, JobDefinition.class)));
+        return envelope.data().items().stream()
+                .filter(job -> namespace.equals(job.namespace()) && app.equals(job.app()))
+                .toList();
+    }
+
+    @Override
+    public JobDefinition createJob(CreateJobRequest request) {
+        return send("POST", "/jobs", scopedCreate(request), JOB_ENVELOPE).data();
+    }
+
+    @Override
+    public JobDefinition updateJob(String jobId, UpdateJobRequest request) {
+        return send("PATCH", "/jobs/" + encode(jobId), request, JOB_ENVELOPE).data();
+    }
+
+    @Override
+    public void deleteJob(String jobId) {
+        send("DELETE", "/jobs/" + encode(jobId), null, new TypeReference<ApiEnvelope<Object>>() {});
+    }
+
+    @Override
+    public JobInstance triggerJob(String jobId, TriggerJobRequest request) {
+        return send("POST", "/jobs/" + encode(jobId) + ":trigger", request, INSTANCE_ENVELOPE).data();
+    }
+
+    private CreateJobPayload scopedCreate(CreateJobRequest request) {
+        Objects.requireNonNull(request, "request");
+        return new CreateJobPayload(
+                namespace,
+                app,
+                request.name(),
+                request.scheduleType(),
+                request.scheduleExpr(),
+                request.processorName(),
+                request.enabled());
+    }
+
+    private <T> T send(String method, String path, Object body, TypeReference<T> type) {
+        JavaType javaType = mapper.getTypeFactory().constructType(type);
+        return send(method, path, body, javaType);
+    }
+
+    private <T> T send(String method, String path, Object body, JavaType type) {
+        try {
+            HttpRequest.Builder builder = HttpRequest.newBuilder(endpoint.resolve("api/v1" + path))
+                    .timeout(Duration.ofSeconds(30))
+                    .header("authorization", "Bearer " + bearerToken)
+                    .header("accept", "application/json");
+            if (body == null) {
+                builder.method(method, HttpRequest.BodyPublishers.noBody());
+            } else {
+                builder.header("content-type", "application/json")
+                        .method(method, HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(body)));
+            }
+            HttpResponse<String> response = http.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() / 100 != 2) {
+                throw new TikeeManagementException("tikee management request failed: status=" + response.statusCode() + " body=" + response.body());
+            }
+            T envelope = mapper.readValue(response.body(), type);
+            if (envelope instanceof ApiEnvelope<?> apiEnvelope && apiEnvelope.code() != 0) {
+                throw new TikeeManagementException("tikee management request failed: " + apiEnvelope.message());
+            }
+            return envelope;
+        } catch (IOException error) {
+            throw new TikeeManagementException("tikee management request failed", error);
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            throw new TikeeManagementException("tikee management request interrupted", error);
+        }
+    }
+
+    private static String encode(String value) {
+        return URLEncoder.encode(Objects.requireNonNull(value, "value"), StandardCharsets.UTF_8);
+    }
+
+    private static String trimTrailingSlash(String value) {
+        String trimmed = value.trim();
+        while (trimmed.endsWith("/")) {
+            trimmed = trimmed.substring(0, trimmed.length() - 1);
+        }
+        return trimmed;
+    }
+
+    private record CreateJobPayload(
+            String namespace,
+            String app,
+            String name,
+            @com.fasterxml.jackson.annotation.JsonProperty("schedule_type") String scheduleType,
+            @com.fasterxml.jackson.annotation.JsonProperty("schedule_expr") String scheduleExpr,
+            @com.fasterxml.jackson.annotation.JsonProperty("processor_name") String processorName,
+            Boolean enabled) {}
+}

@@ -64,6 +64,7 @@ project(":tikee") {
         "api"("io.grpc:grpc-protobuf")
         "api"("io.grpc:grpc-netty-shaded")
         "api"("com.google.protobuf:protobuf-java:$protobufVersion")
+        "api"("com.fasterxml.jackson.core:jackson-databind:2.20.1")
         "compileOnly"("javax.annotation:javax.annotation-api:1.3.2")
         "testImplementation"("io.grpc:grpc-inprocess")
     }

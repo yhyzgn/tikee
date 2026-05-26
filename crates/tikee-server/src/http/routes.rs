@@ -24,8 +24,8 @@ pub use alerts::{
 };
 pub use audit::{export_audit_logs, list_audit_logs};
 pub use jobs::{
-    create_job, get_job_instance, list_instance_attempts, list_instance_logs, list_job_instances,
-    list_jobs, trigger_job,
+    create_job, delete_job, get_job_instance, list_instance_attempts, list_instance_logs,
+    list_job_instances, list_jobs, trigger_job, update_job,
 };
 pub use metrics::metrics_summary;
 pub use observability::observability_status;

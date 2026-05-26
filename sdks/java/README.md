@@ -39,3 +39,10 @@ tikee:
 ```
 
 The Spring Boot starter creates a `TikeeWorkerLifecycle` bean so the worker client follows the application lifecycle. Set `tikee.worker.auto-startup=false` when an application wants to start the client manually, or `tikee.worker.enabled=false` to disable Worker Tunnel beans while keeping processor scanning available.
+
+
+Job management client:
+
+- `TikeeJobClient` manages jobs in a configured namespace/app scope.
+- `CreateJobRequest.api(...)` creates an `api` schedule job, meaning explicit API/SDK/UI-triggered. It does **not** mean the task performs an HTTP API call.
+- `enableJob`, `disableJob`, `updateJob`, `deleteJob`, and `triggerJob(..., TriggerJobRequest.api())` cover the common control-plane lifecycle.

@@ -6,16 +6,17 @@ use axum::{
     http::HeaderMap,
 };
 use tikee_core::ExecutionMode;
-use tikee_storage::{CreateJob, CreateJobInstance};
+use tikee_storage::{CreateJob, CreateJobInstance, UpdateJob};
 
 use crate::http::{
     AppState, auth,
     dto::{
-        ApiResponse, CreateJobRequest, ErrorResponse, JobApiResponse, JobInstanceApiResponse,
-        JobInstanceAttemptPage, JobInstanceAttemptPageApiResponse, JobInstanceAttemptSummary,
-        JobInstanceLogPage, JobInstanceLogPageApiResponse, JobInstanceLogSummary, JobInstancePage,
+        ApiResponse, CreateJobRequest, DeleteJobApiResponse, EmptyData, ErrorResponse,
+        JobApiResponse, JobInstanceApiResponse, JobInstanceAttemptPage,
+        JobInstanceAttemptPageApiResponse, JobInstanceAttemptSummary, JobInstanceLogPage,
+        JobInstanceLogPageApiResponse, JobInstanceLogSummary, JobInstancePage,
         JobInstancePageApiResponse, JobInstanceSummary, JobPageApiResponse, JobSummary, Page,
-        PageQuery, TriggerJobRequest,
+        PageQuery, TriggerJobRequest, UpdateJobRequest,
     },
     error::ApiError,
 };
@@ -233,6 +234,144 @@ pub async fn trigger_job(
     Ok(Json(ApiResponse::success(
         instance_summary_with_latest_log(&state, instance).await?,
     )))
+}
+
+/// Update a job.
+///
+/// # Errors
+///
+/// Returns validation, authorization, not-found, or storage errors.
+#[utoipa::path(
+    patch,
+    path = "/api/v1/jobs/{job}",
+    tag = "jobs",
+    params(("job" = String, Path, description = "Job identifier")),
+    request_body = UpdateJobRequest,
+    responses(
+        (status = 200, description = "Updated job", body = JobApiResponse),
+        (status = 400, description = "Invalid schedule type", body = ErrorResponse),
+        (status = 404, description = "Job not found", body = ErrorResponse),
+        (status = 500, description = "Storage error", body = ErrorResponse)
+    )
+)]
+pub async fn update_job(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(job): Path<String>,
+    Json(request): Json<UpdateJobRequest>,
+) -> Result<Json<JobApiResponse>, ApiError> {
+    let principal = auth::require_permission(&headers, &state, "jobs", "write").await?;
+    let current = state
+        .jobs
+        .get(&job)
+        .await
+        .map_err(|error| ApiError::storage(&error))?
+        .ok_or_else(|| ApiError::not_found(format!("job not found: {job}")))?;
+    if !crate::http::access_scope::allows_resource(
+        &principal.scope_bindings,
+        &current.namespace,
+        &current.app,
+        None,
+    ) {
+        return Err(ApiError::forbidden(
+            "api token scope binding does not allow this namespace/app",
+        ));
+    }
+    let schedule_type = request
+        .schedule_type
+        .as_deref()
+        .map(parse_schedule_type)
+        .transpose()?
+        .map(|value| value.to_string());
+    let updated = state
+        .jobs
+        .update_job(
+            &job,
+            UpdateJob {
+                name: request.name.clone(),
+                schedule_type,
+                schedule_expr: request.schedule_expr.clone(),
+                processor_name: request.processor_name.clone(),
+                enabled: request.enabled,
+            },
+        )
+        .await
+        .map_err(|error| ApiError::storage(&error))?
+        .ok_or_else(|| ApiError::not_found(format!("job not found: {job}")))?;
+
+    audit(
+        &state,
+        &principal.username,
+        "update",
+        "job",
+        &job,
+        Some(format!("name={}", updated.name)),
+        &headers,
+    )
+    .await;
+
+    Ok(Json(ApiResponse::success(JobSummary::from(updated))))
+}
+
+/// Delete a job.
+///
+/// # Errors
+///
+/// Returns authorization, not-found, or storage errors.
+#[utoipa::path(
+    delete,
+    path = "/api/v1/jobs/{job}",
+    tag = "jobs",
+    params(("job" = String, Path, description = "Job identifier")),
+    responses(
+        (status = 200, description = "Deleted job", body = DeleteJobApiResponse),
+        (status = 404, description = "Job not found", body = ErrorResponse),
+        (status = 500, description = "Storage error", body = ErrorResponse)
+    )
+)]
+pub async fn delete_job(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(job): Path<String>,
+) -> Result<Json<DeleteJobApiResponse>, ApiError> {
+    let principal = auth::require_permission(&headers, &state, "jobs", "write").await?;
+    let current = state
+        .jobs
+        .get(&job)
+        .await
+        .map_err(|error| ApiError::storage(&error))?
+        .ok_or_else(|| ApiError::not_found(format!("job not found: {job}")))?;
+    if !crate::http::access_scope::allows_resource(
+        &principal.scope_bindings,
+        &current.namespace,
+        &current.app,
+        None,
+    ) {
+        return Err(ApiError::forbidden(
+            "api token scope binding does not allow this namespace/app",
+        ));
+    }
+    let deleted = state
+        .jobs
+        .delete_job(&job)
+        .await
+        .map_err(|error| ApiError::storage(&error))?;
+    if !deleted {
+        return Err(ApiError::not_found(format!("job not found: {job}")));
+    }
+
+    audit(
+        &state,
+        &principal.username,
+        "delete",
+        "job",
+        &job,
+        Some(format!("name={}", current.name)),
+        &headers,
+    )
+    .await;
+
+    Ok(Json(ApiResponse::success(EmptyData {})))
 }
 
 fn has_auth_header(headers: &HeaderMap) -> bool {
