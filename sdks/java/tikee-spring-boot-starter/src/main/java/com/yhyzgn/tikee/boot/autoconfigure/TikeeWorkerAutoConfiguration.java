@@ -1,6 +1,8 @@
 package com.yhyzgn.tikee.boot.autoconfigure;
 
 import com.yhyzgn.tikee.boot.lifecycle.TikeeWorkerLifecycle;
+import com.yhyzgn.tikee.management.client.HttpTikeeJobClient;
+import com.yhyzgn.tikee.management.client.TikeeJobClient;
 import com.yhyzgn.tikee.worker.identity.ClientInstanceIds;
 import com.yhyzgn.tikee.worker.client.GrpcTikeeWorkerClient;
 import com.yhyzgn.tikee.worker.client.NoopTikeeWorkerClient;
@@ -19,7 +21,7 @@ import org.springframework.context.annotation.Bean;
  * Auto-configuration for the tikee Spring Boot Starter.
  */
 @AutoConfiguration
-@EnableConfigurationProperties(TikeeWorkerProperties.class)
+@EnableConfigurationProperties({TikeeWorkerProperties.class, TikeeManagementProperties.class})
 public class TikeeWorkerAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
@@ -63,6 +65,17 @@ public class TikeeWorkerAutoConfiguration {
     @ConditionalOnProperty(prefix = "tikee.worker", name = "enabled", havingValue = "true", matchIfMissing = true)
     TikeeWorkerLifecycle tikeeWorkerLifecycle(TikeeWorkerClient client, TikeeWorkerProperties properties) {
         return new TikeeWorkerLifecycle(client, properties);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnProperty(prefix = "tikee.management", name = "enabled", havingValue = "true")
+    TikeeJobClient tikeeJobClient(TikeeManagementProperties properties) {
+        return new HttpTikeeJobClient(
+                properties.getEndpoint(),
+                properties.getToken(),
+                properties.getNamespace(),
+                properties.getApp());
     }
 
     @Bean

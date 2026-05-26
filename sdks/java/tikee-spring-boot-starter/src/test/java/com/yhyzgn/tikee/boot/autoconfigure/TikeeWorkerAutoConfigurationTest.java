@@ -3,6 +3,7 @@ package com.yhyzgn.tikee.boot.autoconfigure;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.yhyzgn.tikee.boot.lifecycle.TikeeWorkerLifecycle;
+import com.yhyzgn.tikee.management.client.TikeeJobClient;
 import com.yhyzgn.tikee.processor.TikeeProcessor;
 import com.yhyzgn.tikee.spring.processor.TikeeProcessorRegistry;
 import com.yhyzgn.tikee.worker.client.NoopTikeeWorkerClient;
@@ -45,6 +46,27 @@ class TikeeWorkerAutoConfigurationTest {
                 "tikee.worker.client-instance-id=test-instance").run(context -> {
             NoopTikeeWorkerClient noop = context.getBean(NoopTikeeWorkerClient.class);
             assertThat(noop.registration().clientInstanceId()).isEqualTo("test-instance");
+        });
+    }
+
+
+    @Test
+    void managementClientIsConditionalOnManagementFlag() {
+        contextRunner.withPropertyValues(
+                "tikee.worker.state-dir=" + stateDir,
+                "tikee.management.enabled=true",
+                "tikee.management.endpoint=http://127.0.0.1:19999",
+                "tikee.management.token=test-token",
+                "tikee.management.namespace=demo-ns",
+                "tikee.management.app=demo-app").run(context -> {
+            assertThat(context).hasSingleBean(TikeeJobClient.class);
+        });
+    }
+
+    @Test
+    void managementClientIsDisabledByDefault() {
+        contextRunner.withPropertyValues("tikee.worker.state-dir=" + stateDir).run(context -> {
+            assertThat(context).doesNotHaveBean(TikeeJobClient.class);
         });
     }
 
