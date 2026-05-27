@@ -19,7 +19,15 @@ public final class ScriptRunnerRegistry {
     }
 
     public List<String> capabilities() {
-        return runners.keySet().stream().map(ScriptRunnerKind::capability).sorted().toList();
+        if (runners.isEmpty()) {
+            return List.of();
+        }
+        return java.util.stream.Stream.concat(
+                        java.util.stream.Stream.of("script"),
+                        runners.keySet().stream().map(ScriptRunnerKind::capability))
+                .distinct()
+                .sorted()
+                .toList();
     }
 
     public boolean isEmpty() {

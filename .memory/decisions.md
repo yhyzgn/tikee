@@ -431,7 +431,7 @@ Constraint:
 
 ## 2026-05-22 — Non-WASM script dispatch requires worker runtime capabilities
 
-- Decision: Dynamic scripts dispatched over Worker Tunnel must target workers advertising `script:<language>`; WASM uses `script:wasm`; controlled pools may opt into `script:*` or `*` wildcard capability.
+- Decision: Dynamic scripts dispatched over Worker Tunnel target workers advertising unified `script`; worker-side runtime selection uses binding language plus sandbox.backend. Legacy `script:<language>`, `script:wasm`, `script:*`, and `*` remain accepted for compatibility.
 - Server remains a metadata dispatcher only. It sends released immutable `script_versions` bytes, hash, version metadata, and policy fields, but never runs user code.
 - Rust SDK workers must explicitly register a matching `ScriptRunner`; missing runner support is a task failure, not a fallback to normal task processors.
 - Java SDK intentionally rejects script bindings until Java-side runner abstractions are designed.

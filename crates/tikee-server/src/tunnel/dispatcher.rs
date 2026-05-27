@@ -526,7 +526,7 @@ fn required_task_capability(task: &DispatchTask) -> Option<String> {
     let binding = task.processor_binding.as_ref()?;
     match binding.kind.as_ref()? {
         task_processor_binding::Kind::Wasm(_) => Some("script:wasm".to_owned()),
-        task_processor_binding::Kind::Script(script) => Some(format!("script:{}", script.language)),
+        task_processor_binding::Kind::Script(_) => Some("script".to_owned()),
     }
 }
 
@@ -1070,6 +1070,126 @@ mod tests {
                 .iter()
                 .any(|log| { log.message.contains("script_no_eligible_worker_capability") })
         );
+    }
+
+    #[tokio::test]
+    async fn dispatch_script_uses_unified_script_worker_capability() {
+        let db = connect_and_migrate("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("test storage should initialize: {error}"));
+        let jobs = JobRepository::new(db.clone());
+        let instances = JobInstanceRepository::new(db.clone());
+        let attempts = JobInstanceAttemptRepository::new(db.clone());
+        let workflows = WorkflowRepository::new(db.clone());
+        let logs = tikee_storage::JobInstanceLogRepository::new(db.clone());
+        let audit = AuditLogRepository::new(db.clone());
+        let scripts = ScriptRepository::new(db);
+
+        let script = scripts
+            .create_script(tikee_storage::CreateScript {
+                name: "python example".to_owned(),
+                language: "python".to_owned(),
+                version: "1.0.0".to_owned(),
+                content: "print('ok')".to_owned(),
+                created_by: "tester".to_owned(),
+                timeout_seconds: Some(5),
+                max_memory_bytes: Some(1024 * 1024),
+                allow_network: false,
+                allowed_env_vars: None,
+                policy_json: None,
+            })
+            .await
+            .unwrap_or_else(|error| panic!("script should be created: {error}"));
+        let version = scripts
+            .versions()
+            .get_version_by_number(&script.id, 1)
+            .await
+            .unwrap_or_else(|error| panic!("script version should load: {error}"))
+            .unwrap_or_else(|| panic!("script version should exist"));
+        let script = scripts
+            .publish_version(&script.id, version.version_number, None, None)
+            .await
+            .unwrap_or_else(|error| panic!("script should publish: {error}"))
+            .unwrap_or_else(|| panic!("script should exist"));
+        let job = jobs
+            .create_job(CreateJob {
+                namespace: "default".to_owned(),
+                app: "billing".to_owned(),
+                name: "python job".to_owned(),
+                schedule_type: "api".to_owned(),
+                schedule_expr: None,
+                processor_name: None,
+                script_id: Some(script.id.clone()),
+                enabled: true,
+            })
+            .await
+            .unwrap_or_else(|error| panic!("job should be created: {error}"));
+        let instance = instances
+            .create_pending(CreateJobInstance {
+                job_id: job.id,
+                trigger_type: TriggerType::Api,
+                execution_mode: ExecutionMode::Single,
+            })
+            .await
+            .unwrap_or_else(|error| panic!("instance should be created: {error}"))
+            .unwrap_or_else(|| panic!("job should exist"));
+        let registry = WorkerRegistry::default();
+        let (tx, mut rx) = mpsc::channel(1);
+        registry
+            .register(
+                RegisterWorker {
+                    client_instance_id: "script-worker".to_owned(),
+                    app: "billing".to_owned(),
+                    namespace: "default".to_owned(),
+                    cluster: "local".to_owned(),
+                    region: "local".to_owned(),
+                    capabilities: vec!["script".to_owned()],
+                    labels: HashMap::default(),
+                },
+                tx,
+            )
+            .await;
+
+        dispatch_once(
+            &jobs,
+            &instances,
+            &attempts,
+            &workflows,
+            &scripts,
+            &logs,
+            &audit,
+            &registry,
+            "test-fence",
+        )
+        .await
+        .unwrap_or_else(|error| panic!("dispatch should run: {error}"));
+
+        let message = rx
+            .recv()
+            .await
+            .unwrap_or_else(|| panic!("script worker should receive dispatch"))
+            .unwrap_or_else(|error| panic!("dispatch should be ok: {error}"));
+        match message.kind {
+            Some(server_message::Kind::DispatchTask(task)) => {
+                let binding = task
+                    .processor_binding
+                    .unwrap_or_else(|| panic!("script binding expected"));
+                match binding.kind {
+                    Some(task_processor_binding::Kind::Script(script_binding)) => {
+                        assert_eq!(script_binding.script_id, script.id);
+                        assert_eq!(script_binding.language, "python");
+                    }
+                    other => panic!("unexpected binding: {other:?}"),
+                }
+            }
+            other => panic!("unexpected server message: {other:?}"),
+        }
+        let updated = instances
+            .get(&instance.id)
+            .await
+            .unwrap_or_else(|error| panic!("instance should load: {error}"))
+            .unwrap_or_else(|| panic!("instance should exist"));
+        assert_eq!(updated.status, InstanceStatus::Running);
     }
 
     #[tokio::test]

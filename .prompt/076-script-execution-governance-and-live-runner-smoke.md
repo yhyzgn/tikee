@@ -7,7 +7,7 @@ Phase 075 added Rust SDK `ContainerScriptRunner` as an explicit Worker-side opt-
 1. Add script-bound execution governance visibility for failure classes: no eligible worker capability, missing worker runner, policy rejection, digest mismatch, timeout, output limit, and runtime unavailable.
 2. Surface governance in audit/result data where the current schema supports it, without adding database foreign keys.
 3. Add optional live smoke tooling for `ContainerScriptRunner` when Docker/compatible runtime is available; deterministic unit tests must still pass without Docker.
-4. Document how operators should deploy script-capable worker pools in Docker/K8s and which capabilities (`script:<language>`, `script:*`) they should advertise.
+4. Document how operators should deploy script-capable worker pools in Docker/K8s and which capabilities (`script`, with legacy `script:<language>` / `script:*` compatibility) they should advertise.
 
 ## Constraints
 - Server must never execute user scripts or require Docker/K8s privileges.

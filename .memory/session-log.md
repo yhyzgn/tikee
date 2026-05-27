@@ -1120,7 +1120,7 @@ Git:
 ### 2026-05-22 — Phase 074 non-WASM script protocol binding
 - Finished the handoff slice for non-WASM dynamic script dispatch.
 - Added protocol-level `ScriptProcessorBinding` and synchronized server/root/Rust SDK/Java SDK proto files.
-- Dispatcher binds only approved released immutable script snapshots, validates the released snapshot policy, and routes only to workers advertising `script:<language>`, `script:*`, or `*` capability.
+- Dispatcher binds only approved released immutable script snapshots, validates the released snapshot policy, and routes to workers advertising unified `script`, while remaining compatible with `script:<language>`, `script:wasm`, `script:*`, or `*` capability.
 - Rust SDK now has explicit runner registry routing for script bindings; Java SDK refuses script bindings until Java runner support is intentionally designed.
 - Updated architecture roadmap and prepared `.prompt/075-script-runner-container-and-execution-governance.md`.
 - Verification passed across Rust workspace, tikee-proto, dispatcher tests, Rust SDK native+wasm+clippy, Web typecheck/test/build, and Java Gradle tests.
@@ -1786,3 +1786,5 @@ Commit/push:
 - 2026-05-27 09:51: Removed raw WASM from Web script create/edit language options. Direct language=wasm remains documented as a historical/low-level compatibility path, while normal scripts use sandbox.backend auto/wasmtime/wasmedge/srt/deno/v8/docker/podman/custom instead of WASM as a script type.
 
 - 2026-05-27 09:54: Added local dev seed script examples and API jobs for every Web script language enum: shell, python, javascript, typescript, powershell, and rhai. Applied scripts/dev-seed.sh to tikee-dev.db and verified six script_language_examples plus six script_jobs.
+
+- 2026-05-27 12:55: Changed script dispatch matching to unified worker capability `script` so Python/JavaScript/TypeScript/etc. are dispatched to script-capable workers instead of being blocked by missing `script:<language>` capability. Legacy `script:<language>`, `script:*`, and `*` remain compatible for normal scripts; direct WASM modules still require `script:wasm`. Worker-side sandbox selection remains based on binding language plus sandbox.backend.

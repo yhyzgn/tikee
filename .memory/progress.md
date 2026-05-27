@@ -517,7 +517,7 @@
 - Continued `.prompt/074-script-runner-protocol-and-ui-binding.md` after the local subprocess runner foundation.
 - Extended Worker Tunnel protocol with `ScriptProcessorBinding` for Shell/Python/Node/PowerShell/Rhai released snapshot payloads while preserving WASM bindings.
 - Dispatcher now fails closed unless a script is approved, has a release pointer, resolves to an immutable released `script_versions` row, and the released snapshot itself passes default-deny policy validation.
-- Worker selection now honors dynamic script capabilities: `script:wasm` for WASM, `script:<language>` for non-WASM, with explicit `script:*` / `*` wildcards only for controlled pools.
+- Worker selection now honors unified dynamic script capability `script`; legacy `script:wasm`, `script:<language>`, `script:*`, and `*` remain compatible for controlled or older workers.
 - Rust Worker SDK added `ScriptRunnerRegistry` and executes non-WASM bindings only when the worker explicitly registers a matching runner; missing runners produce a clear failure result.
 - Java SDK now explicitly reports unsupported script processor bindings and does not call the normal task processor for them.
 - Web script detail drawer now documents required worker capabilities and runtime support for WASM and non-WASM scripts.
@@ -548,7 +548,7 @@
 - Full rename verification passed: `cargo fmt --all -- --check`; `cargo clippy --workspace --all-targets --all-features -- -D warnings`; `cargo test --workspace --all-features`; `cargo build --workspace --all-features`; `cargo run -- --help`; `cd web && bun run typecheck && bun test && bun run build`; `cargo test --manifest-path sdks/rust/tikee/Cargo.toml`; `cargo test --manifest-path sdks/rust/tikee/Cargo.toml --features wasm`; `cargo clippy --manifest-path sdks/rust/tikee/Cargo.toml --all-targets --all-features -- -D warnings`; `cd sdks/java && ./gradlew test --warning-mode all --no-daemon`.
 ### 2026-05-23 Phase3 script execution governance visibility
 - Continued `.prompt/077-script-execution-governance-after-tikee-rename.md`.
-- Added dispatcher-side script governance instance logs for fail-closed dispatch cases and worker capability misses: missing script, not approved, missing release pointer/version, unsupported language, policy rejection, and no eligible `script:<language>`/`script:wasm` worker capability.
+- Added dispatcher-side script governance instance logs for fail-closed dispatch cases and worker capability misses: missing script, not approved, missing release pointer/version, unsupported language, policy rejection, and no eligible unified `script` worker capability.
 - Added Rust SDK script failure classification via `TaskOutcome::failure_class()` and JSON result messages for missing runner, policy rejection, digest mismatch, timeout, output limit, and runtime unavailable; Server persists these Worker result classes as `script_execution_governance` instance logs.
 - Documented script-capable Worker Pool deployment for Docker/K8s and `ContainerScriptRunner` opt-in constraints in design and Rust SDK README.
 - Updated design roadmap and created `.prompt/078-script-governance-audit-alerting.md` for first-class audit/alert follow-up.
@@ -1221,3 +1221,5 @@ Verification evidence:
 - 2026-05-27 09:51: Removed raw WASM from Web script create/edit language options. Direct language=wasm remains documented as a historical/low-level compatibility path, while normal scripts use sandbox.backend auto/wasmtime/wasmedge/srt/deno/v8/docker/podman/custom instead of WASM as a script type.
 
 - 2026-05-27 09:54: Added local dev seed script examples and API jobs for every Web script language enum: shell, python, javascript, typescript, powershell, and rhai. Applied scripts/dev-seed.sh to tikee-dev.db and verified six script_language_examples plus six script_jobs.
+
+- 2026-05-27 12:55: Changed script dispatch matching to unified worker capability `script` so Python/JavaScript/TypeScript/etc. are dispatched to script-capable workers instead of being blocked by missing `script:<language>` capability. Legacy `script:<language>`, `script:*`, and `*` remain compatible for normal scripts; direct WASM modules still require `script:wasm`. Worker-side sandbox selection remains based on binding language plus sandbox.backend.

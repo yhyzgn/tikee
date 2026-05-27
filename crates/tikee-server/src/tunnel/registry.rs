@@ -514,7 +514,9 @@ fn worker_has_capability(worker: &RegisteredWorker, required: &str) -> bool {
     worker.capabilities.iter().any(|capability| {
         capability == required
             || capability == "*"
-            || capability == "script:*" && required.starts_with("script:")
+            || capability == "script" && required.starts_with("script:")
+            || capability == "script:*" && (required == "script" || required.starts_with("script:"))
+            || capability.starts_with("script:") && required == "script"
     })
 }
 
@@ -714,6 +716,38 @@ mod tests {
                 .accepts_worker_assignment(&worker.worker_id, "wrong-token")
                 .await
         );
+    }
+
+    #[tokio::test]
+    async fn registry_matches_unified_and_legacy_script_capabilities() {
+        let registry = WorkerRegistry::default();
+        registry
+            .register(
+                RegisterWorker {
+                    capabilities: vec!["script".to_owned()],
+                    ..register_worker("pod-script")
+                },
+                mpsc::channel(1).0,
+            )
+            .await;
+        registry
+            .register(
+                RegisterWorker {
+                    capabilities: vec!["script:python".to_owned()],
+                    ..register_worker("pod-python")
+                },
+                mpsc::channel(1).0,
+            )
+            .await;
+
+        let script_workers = registry
+            .find_eligible_workers_with_capability("finance", "billing", Some("script"))
+            .await;
+        assert_eq!(script_workers.len(), 2);
+        let python_workers = registry
+            .find_eligible_workers_with_capability("finance", "billing", Some("script:python"))
+            .await;
+        assert_eq!(python_workers.len(), 2);
     }
 
     #[tokio::test]

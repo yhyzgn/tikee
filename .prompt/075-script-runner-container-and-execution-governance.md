@@ -1,7 +1,7 @@
 # 075 — Containerized script runner and execution governance
 
 ## Context
-Phase 074 completed non-WASM script protocol binding. The Server now binds approved released immutable `script_versions` snapshots into Worker Tunnel `ScriptProcessorBinding`, filters workers by `script:<language>` / `script:*` / `*`, and never executes user code. Rust SDK execution is explicit opt-in through `ScriptRunnerRegistry`; Java SDK rejects script bindings for now.
+Phase 074 completed non-WASM script protocol binding. The Server now binds approved released immutable `script_versions` snapshots into Worker Tunnel `ScriptProcessorBinding`, filters workers by unified `script` capability with compatibility for `script:<language>` / `script:wasm` / `script:*` / `*`, and never executes user code. Rust SDK execution is explicit opt-in through `ScriptRunnerRegistry`; Java SDK rejects script bindings for now.
 
 ## Objectives
 1. Add a safer Worker-side containerized runner option for non-WASM scripts as the next boundary after local subprocess execution.
