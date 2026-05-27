@@ -1,22 +1,33 @@
-use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set,
+    TransactionTrait,
+};
 
 use crate::entities::{app, job, namespace};
 
 use super::{
     job::{CreateJob, JobSummary, UpdateJob},
+    job_version::{JobVersionRepository, latest_version_number_in},
     util::{new_id, now_rfc3339},
 };
 /// Job repository.
 #[derive(Debug, Clone)]
 pub struct JobRepository {
     db: DatabaseConnection,
+    versions: JobVersionRepository,
 }
 
 impl JobRepository {
     /// Create a repository using the provided database connection.
     #[must_use]
-    pub const fn new(db: DatabaseConnection) -> Self {
-        Self { db }
+    pub fn new(db: DatabaseConnection) -> Self {
+        let versions = JobVersionRepository::new(db.clone());
+        Self { db, versions }
+    }
+
+    #[must_use]
+    pub const fn versions(&self) -> &JobVersionRepository {
+        &self.versions
     }
 
     /// List jobs ordered by creation order.
@@ -75,7 +86,7 @@ impl JobRepository {
             normalize_processor_name(input.processor_name)
         };
 
-        let model = job::ActiveModel {
+        let active = job::ActiveModel {
             id: Set(id.clone()),
             namespace_id: Set(namespace.id.clone()),
             app_id: Set(app.id.clone()),
@@ -85,13 +96,21 @@ impl JobRepository {
             processor_name: Set(processor_name),
             script_id: Set(script_id),
             enabled: Set(input.enabled),
+            canary_job_id: Set(normalize_processor_name(input.canary_job_id)),
+            canary_percent: Set(input.canary_percent.clamp(0, 100)),
             created_at: Set(now.clone()),
             updated_at: Set(now),
-        }
-        .insert(&self.db)
-        .await?;
+        };
+        let txn = self.db.begin().await?;
+        let model = active.insert(&txn).await?;
+        let version = self
+            .versions
+            .create_version_in(&txn, &model, input.created_by.as_deref(), "create", None)
+            .await?;
+        txn.commit().await?;
 
         Ok(JobSummary {
+            version_number: version.version_number,
             id,
             namespace: namespace.name,
             app: app.name,
@@ -101,6 +120,8 @@ impl JobRepository {
             processor_name: model.processor_name,
             script_id: model.script_id,
             enabled: model.enabled,
+            canary_job_id: model.canary_job_id,
+            canary_percent: model.canary_percent,
         })
     }
 
@@ -120,6 +141,7 @@ impl JobRepository {
         else {
             return Ok(None);
         };
+        let before = model.clone();
         let mut active: job::ActiveModel = model.into();
         if let Some(name) = input.name {
             active.name = Set(name);
@@ -145,8 +167,77 @@ impl JobRepository {
         if let Some(enabled) = input.enabled {
             active.enabled = Set(enabled);
         }
+        if let Some(canary_job_id) = input.canary_job_id {
+            active.canary_job_id = Set(normalize_processor_name(canary_job_id));
+        }
+        if let Some(canary_percent) = input.canary_percent {
+            active.canary_percent = Set(canary_percent.clamp(0, 100));
+        }
+        if !job_changed(&before, &active) {
+            return Ok(self
+                .hydrate_job_summaries(vec![before])
+                .await?
+                .into_iter()
+                .next());
+        }
         active.updated_at = Set(now_rfc3339());
-        let updated = active.update(&self.db).await?;
+        let txn = self.db.begin().await?;
+        let updated = active.update(&txn).await?;
+        self.versions
+            .create_version_in(&txn, &updated, input.updated_by.as_deref(), "update", None)
+            .await?;
+        txn.commit().await?;
+        Ok(self
+            .hydrate_job_summaries(vec![updated])
+            .await?
+            .into_iter()
+            .next())
+    }
+
+    /// Roll back a job to a previous immutable version by creating a new latest snapshot.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when database access fails.
+    pub async fn rollback_job(
+        &self,
+        job_id: &str,
+        version_number: i64,
+        actor: Option<String>,
+    ) -> Result<Option<JobSummary>, sea_orm::DbErr> {
+        let Some(version) = self
+            .versions
+            .get_version_by_number(job_id, version_number)
+            .await?
+        else {
+            return Ok(None);
+        };
+        let Some(existing) = job::Entity::find_by_id(job_id.to_owned())
+            .one(&self.db)
+            .await?
+        else {
+            return Ok(None);
+        };
+        let mut active: job::ActiveModel = existing.into();
+        active.name = Set(version.name);
+        active.schedule_type = Set(version.schedule_type);
+        active.schedule_expr = Set(version.schedule_expr);
+        active.processor_name = Set(version.processor_name);
+        active.script_id = Set(version.script_id);
+        active.enabled = Set(version.enabled);
+        active.updated_at = Set(now_rfc3339());
+        let txn = self.db.begin().await?;
+        let updated = active.update(&txn).await?;
+        self.versions
+            .create_version_in(
+                &txn,
+                &updated,
+                actor.as_deref(),
+                "rollback",
+                Some(version_number),
+            )
+            .await?;
+        txn.commit().await?;
         Ok(self
             .hydrate_job_summaries(vec![updated])
             .await?
@@ -179,7 +270,9 @@ impl JobRepository {
             let ns = namespace::Entity::find_by_id(job.namespace_id.clone())
                 .one(&self.db)
                 .await?;
+            let version_number = latest_version_number_in(&self.db, &job.id).await?;
             jobs.push(JobSummary {
+                version_number,
                 id: job.id,
                 namespace: ns.map_or_else(|| "unknown".to_owned(), |namespace| namespace.name),
                 app: app.map_or_else(|| "unknown".to_owned(), |app| app.name),
@@ -189,6 +282,8 @@ impl JobRepository {
                 processor_name: job.processor_name,
                 script_id: job.script_id,
                 enabled: job.enabled,
+                canary_job_id: job.canary_job_id,
+                canary_percent: job.canary_percent,
             });
         }
 
@@ -254,4 +349,15 @@ fn normalize_processor_name(value: Option<String>) -> Option<String> {
             Some(trimmed.to_owned())
         }
     })
+}
+
+fn job_changed(before: &job::Model, active: &job::ActiveModel) -> bool {
+    active.name.as_ref() != &before.name
+        || active.schedule_type.as_ref() != &before.schedule_type
+        || active.schedule_expr.as_ref() != &before.schedule_expr
+        || active.processor_name.as_ref() != &before.processor_name
+        || active.script_id.as_ref() != &before.script_id
+        || active.enabled.as_ref() != &before.enabled
+        || active.canary_job_id.as_ref() != &before.canary_job_id
+        || active.canary_percent.as_ref() != &before.canary_percent
 }

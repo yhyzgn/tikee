@@ -4,15 +4,18 @@
 pub(crate) mod alerts;
 pub(crate) mod audit;
 pub(crate) mod common;
+pub(crate) mod event_sources;
 pub(crate) mod jobs;
 pub(crate) mod metrics;
 pub(crate) mod observability;
 pub(crate) mod oidc_identity;
 pub(crate) mod raft;
+pub(crate) mod scheduling;
 pub(crate) mod scope;
 pub(crate) mod scripts;
 pub(crate) mod security;
 pub(crate) mod system;
+pub(crate) mod topology;
 pub(crate) mod users;
 pub(crate) mod workers;
 pub(crate) mod workflows;
@@ -23,14 +26,16 @@ pub use alerts::{
     resolve_alert_event, retry_due_alert_delivery_attempts,
 };
 pub use audit::{export_audit_logs, list_audit_logs};
+pub use event_sources::trigger_inbound_webhook;
 pub use jobs::{
     create_job, delete_job, get_job_instance, list_instance_attempts, list_instance_logs,
-    list_job_instances, list_jobs, trigger_job, update_job,
+    list_job_instances, list_job_versions, list_jobs, rollback_job, trigger_job, update_job,
 };
 pub use metrics::metrics_summary;
 pub use observability::observability_status;
 pub use oidc_identity::{delete_oidc_identity, list_oidc_identities, upsert_oidc_identity};
 pub use raft::{append_entries, propose_member_change};
+pub use scheduling::job_scheduling_advice;
 pub use scope::{
     create_app, create_namespace, create_worker_pool, delete_app, delete_namespace,
     delete_worker_pool, list_apps, list_namespaces, list_worker_pools,
@@ -41,6 +46,7 @@ pub use scripts::{
 };
 pub use security::transport_security_status;
 pub use system::{cluster_diagnostics, cluster_status, system_info};
+pub use topology::{job_impact, job_topology, workflow_replay};
 pub use users::{create_user, delete_user, list_users, update_user};
 pub use workers::{claim_dispatch_queue, dispatch_queue, list_workers, worker_lifecycle_history};
 pub use workflows::{

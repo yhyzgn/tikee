@@ -13,12 +13,12 @@ use self::{
     },
     iden::{
         AlertDeliveryAttempts, AlertEvents, AlertRules, Apps, AuditLogs, AuthSessions,
-        DispatchQueue, InstanceEvents, JobInstanceAttempts, JobInstanceLogs, JobInstances, Jobs,
-        Namespaces, OidcAuthStates, OidcIdentities, Permissions, RaftAppliedCommands,
-        RaftLogEntries, RaftMembers, RaftMembershipProposals, RaftMetadata, RaftSnapshots,
-        RolePermissions, Roles, ScriptVersions, Scripts, SdkApiKeys, Users, WorkerLogicalInstances,
-        WorkerPools, WorkerSessionEvents, WorkerSessions, WorkflowEdges, WorkflowInstances,
-        WorkflowNodeInstances, WorkflowNodes, WorkflowShards, Workflows,
+        DispatchQueue, InstanceEvents, JobInstanceAttempts, JobInstanceLogs, JobInstances,
+        JobVersions, Jobs, Namespaces, OidcAuthStates, OidcIdentities, Permissions,
+        RaftAppliedCommands, RaftLogEntries, RaftMembers, RaftMembershipProposals, RaftMetadata,
+        RaftSnapshots, RolePermissions, Roles, ScriptVersions, Scripts, SdkApiKeys, Users,
+        WorkerLogicalInstances, WorkerPools, WorkerSessionEvents, WorkerSessions, WorkflowEdges,
+        WorkflowInstances, WorkflowNodeInstances, WorkflowNodes, WorkflowShards, Workflows,
     },
     indexes::create_indexes,
 };
@@ -44,6 +44,7 @@ impl MigrationTrait for CreateMetadataTables {
         create_worker_pools(manager).await?;
         create_worker_lifecycle_tables(manager).await?;
         create_jobs(manager).await?;
+        create_job_versions(manager).await?;
         create_job_instances(manager).await?;
         create_job_instance_attempts(manager).await?;
         create_job_instance_logs(manager).await?;
@@ -115,6 +116,7 @@ async fn drop_metadata_tables(manager: &SchemaManager<'_>) -> Result<(), DbErr> 
             JobInstanceLogs::Table.into_iden(),
             JobInstanceAttempts::Table.into_iden(),
             JobInstances::Table.into_iden(),
+            JobVersions::Table.into_iden(),
             Jobs::Table.into_iden(),
             Apps::Table.into_iden(),
             WorkerSessionEvents::Table.into_iden(),
@@ -1050,8 +1052,34 @@ async fn create_jobs(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
                 .col(string_null(Jobs::ProcessorName))
                 .col(string_null(Jobs::ScriptId))
                 .col(boolean_col(Jobs::Enabled))
+                .col(string_null(Jobs::CanaryJobId))
+                .col(integer_col(Jobs::CanaryPercent))
                 .col(string_col(Jobs::CreatedAt))
                 .col(string_col(Jobs::UpdatedAt))
+                .to_owned(),
+        )
+        .await
+}
+
+async fn create_job_versions(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    manager
+        .create_table(
+            Table::create()
+                .table(JobVersions::Table)
+                .if_not_exists()
+                .col(string_pk(JobVersions::Id))
+                .col(string_col(JobVersions::JobId))
+                .col(big_integer_col(JobVersions::VersionNumber))
+                .col(string_col(JobVersions::Name))
+                .col(string_col(JobVersions::ScheduleType))
+                .col(string_null(JobVersions::ScheduleExpr))
+                .col(string_null(JobVersions::ProcessorName))
+                .col(string_null(JobVersions::ScriptId))
+                .col(boolean_col(JobVersions::Enabled))
+                .col(string_col(JobVersions::CreatedBy))
+                .col(string_col(JobVersions::ChangeReason))
+                .col(big_integer_null(JobVersions::RolledBackFromVersion))
+                .col(string_col(JobVersions::CreatedAt))
                 .to_owned(),
         )
         .await

@@ -12,6 +12,7 @@ pub mod job;
 pub mod job_instance;
 pub mod job_instance_attempt;
 pub mod job_instance_log;
+pub mod job_version;
 pub mod namespace;
 pub mod oidc_auth_state;
 pub mod oidc_identity;

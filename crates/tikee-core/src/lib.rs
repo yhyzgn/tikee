@@ -124,6 +124,8 @@ pub enum TriggerType {
     Manual,
     /// Workflow shard fan-out trigger.
     WorkflowShard,
+    /// Inbound webhook/event-source trigger.
+    Webhook,
 }
 
 impl TriggerType {
@@ -136,6 +138,7 @@ impl TriggerType {
             Self::FixedRate => "fixed_rate",
             Self::Manual => "manual",
             Self::WorkflowShard => "workflow_shard",
+            Self::Webhook => "webhook",
         }
     }
 }
@@ -156,6 +159,7 @@ impl FromStr for TriggerType {
             "fixed_rate" | "fixed-rate" | "fixedrate" => Ok(Self::FixedRate),
             "manual" => Ok(Self::Manual),
             "workflow_shard" | "workflow-shard" | "workflowshard" => Ok(Self::WorkflowShard),
+            "webhook" | "event_webhook" | "event-webhook" => Ok(Self::Webhook),
             _ => Err(ParseEnumError::new("trigger_type", value)),
         }
     }

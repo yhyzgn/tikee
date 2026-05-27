@@ -1216,3 +1216,57 @@ body {
     max-width: 100%;
   }
 }
+
+.topology-canvas-card--fullscreen {
+  position: fixed;
+  inset: 16px;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  border-radius: 22px !important;
+  background: #f8fbff !important;
+  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.32) !important;
+}
+
+.topology-canvas-card--fullscreen .ant-card-body {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.topology-edge .topology-flow-line {
+  animation: topology-flow 1.8s linear infinite;
+  filter: drop-shadow(0 2px 4px rgba(37, 99, 235, 0.16));
+}
+
+.topology-edge .topology-flow-pulse {
+  opacity: 0.72;
+  animation: topology-flow 1.15s linear infinite;
+}
+
+.topology-node {
+  filter: drop-shadow(0 8px 14px rgba(15, 23, 42, 0.1));
+}
+
+@keyframes topology-flow {
+  from {
+    stroke-dashoffset: 72;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.workflow-edge__line {
+  animation: workflow-edge-flow 2.2s linear infinite;
+  filter: drop-shadow(0 2px 5px rgba(37, 99, 235, 0.14));
+}
+
+.workflow-edge__flow-dot {
+  opacity: 0.95;
+  pointer-events: none;
+  filter: drop-shadow(0 0 6px rgba(14, 165, 233, 0.88));
+}
+
+.workflow-edge__flow-dot--secondary {
+  opacity: 0.64;
+}

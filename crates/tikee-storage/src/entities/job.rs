@@ -25,6 +25,10 @@ pub struct Model {
     pub script_id: Option<String>,
     /// Enabled flag.
     pub enabled: bool,
+    /// Optional canary target job id for explicit trigger routing.
+    pub canary_job_id: Option<String>,
+    /// Canary traffic percentage in 0..=100.
+    pub canary_percent: i32,
     /// Creation timestamp in RFC3339 format.
     pub created_at: String,
     /// Last update timestamp in RFC3339 format.

@@ -19,6 +19,112 @@ export interface JobSummary {
   processorName: string | null;
   scriptId: string | null;
   enabled: boolean;
+  canaryJobId: string | null;
+  canaryPercent: number;
+  versionNumber: number;
+}
+
+
+export interface JobVersionSummary {
+  id: string;
+  job_id: string;
+  version_number: number;
+  name: string;
+  schedule_type: string;
+  schedule_expr: string | null;
+  processor_name: string | null;
+  script_id: string | null;
+  enabled: boolean;
+  created_by: string;
+  change_reason: string;
+  rolled_back_from_version: number | null;
+  created_at: string;
+}
+
+export interface JobSchedulingAdvice {
+  ready: boolean;
+  severity: 'ok' | 'warning' | 'error' | string;
+  reason: string;
+  requiredCapability: string | null;
+  eligibleWorkers: string[];
+  recentInstances: number;
+  recentFailures: number;
+}
+
+export interface JobTopologyResponse {
+  nodes: JobTopologyNode[];
+  edges: JobTopologyEdge[];
+  unresolved: JobTopologyUnresolvedRef[];
+}
+
+export interface JobTopologyPosition {
+  x: number;
+  y: number;
+}
+
+export interface JobTopologyMetadata {
+  layer?: number;
+  position?: JobTopologyPosition;
+  [key: string]: unknown;
+}
+
+export interface JobTopologyNode {
+  id: string;
+  type: 'job' | 'workflow' | 'workflow_node' | string;
+  label: string;
+  namespace: string | null;
+  app: string | null;
+  metadata: JobTopologyMetadata;
+}
+
+export interface JobTopologyEdge {
+  id: string;
+  from: string;
+  to: string;
+  type: 'workflow_job_ref' | 'workflow_job_dependency' | string;
+  label: string | null;
+  workflowId: string | null;
+  workflowName: string | null;
+  condition: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface JobTopologyUnresolvedRef {
+  workflowId: string;
+  workflowName: string;
+  nodeKey: string;
+  missingJobId: string;
+  reason: string;
+}
+
+export interface JobImpactJobRef {
+  id: string;
+  name: string;
+  namespace?: string;
+  app?: string;
+}
+
+export interface JobImpactWorkflowRef {
+  id: string;
+  name: string;
+  nodeKeys?: string[];
+}
+
+export interface JobImpactRiskSummary {
+  workflowCount: number;
+  upstreamCount: number;
+  downstreamCount: number;
+  unresolvedCount: number;
+  riskLevel: string;
+  reasons: string[];
+}
+
+export interface JobImpactResponse {
+  targetJob: JobImpactJobRef;
+  referencingWorkflows: JobImpactWorkflowRef[];
+  upstreamJobs: JobImpactJobRef[];
+  downstreamJobs: JobImpactJobRef[];
+  riskSummary: JobImpactRiskSummary;
 }
 
 export interface CreateJobRequest {
@@ -30,6 +136,8 @@ export interface CreateJobRequest {
   processorName?: string | null;
   scriptId?: string | null;
   enabled?: boolean;
+  canaryJobId?: string | null;
+  canaryPercent?: number;
 }
 
 export interface UpdateJobRequest {
@@ -39,11 +147,35 @@ export interface UpdateJobRequest {
   processorName?: string | null;
   scriptId?: string | null;
   enabled?: boolean;
+  canaryJobId?: string | null;
+  canaryPercent?: number;
+}
+
+export interface InboundWebhookTriggerRequest {
+  source?: string;
+  eventType?: string;
+  payload?: unknown;
+}
+
+export interface InboundWebhookTriggerResponse {
+  accepted: boolean;
+  instanceId: string;
+  jobId: string;
+  status: string;
+  triggerType: string;
 }
 
 export interface TriggerJobRequest {
   triggerType?: string;
   executionMode?: 'single' | 'broadcast';
+}
+
+export interface CanaryRoutingSummary {
+  enabled: boolean;
+  routed: boolean;
+  originalJobId: string;
+  routedJobId: string;
+  percent: number;
 }
 
 export interface JobInstanceSummary {
@@ -57,6 +189,7 @@ export interface JobInstanceSummary {
   logCount: number;
   latestLog?: JobInstanceLogSummary | null;
   workerId?: string | null;
+  canaryRouting?: CanaryRoutingSummary | null;
 }
 
 export interface JobInstanceAttemptSummary {
@@ -325,6 +458,18 @@ export async function listJobs(): Promise<Page<JobSummary>> {
   return request<Page<JobSummary>>('/api/v1/jobs');
 }
 
+export async function getJobSchedulingAdvice(jobId: string): Promise<JobSchedulingAdvice> {
+  return request<JobSchedulingAdvice>(`/api/v1/jobs/${encodeURIComponent(jobId)}/scheduling-advice`);
+}
+
+export async function getJobTopology(): Promise<JobTopologyResponse> {
+  return request<JobTopologyResponse>('/api/v1/jobs/topology');
+}
+
+export async function getJobImpact(jobId: string): Promise<JobImpactResponse> {
+  return request<JobImpactResponse>(`/api/v1/jobs/${encodeURIComponent(jobId)}/impact`);
+}
+
 export async function createJob(payload: CreateJobRequest): Promise<JobSummary> {
   return request<JobSummary>('/api/v1/jobs', {
     method: 'POST',
@@ -339,12 +484,30 @@ export async function updateJob(jobId: string, payload: UpdateJobRequest): Promi
   });
 }
 
+export async function listJobVersions(jobId: string): Promise<Page<JobVersionSummary>> {
+  return request<Page<JobVersionSummary>>(`/api/v1/jobs/${encodeURIComponent(jobId)}/versions`);
+}
+
+export async function rollbackJob(jobId: string, versionNumber: number): Promise<JobSummary> {
+  return request<JobSummary>(`/api/v1/jobs/${encodeURIComponent(jobId)}/rollback`, {
+    method: 'POST',
+    body: JSON.stringify({ versionNumber }),
+  });
+}
+
 export async function deleteJob(jobId: string): Promise<void> {
   await request<void>(`/api/v1/jobs/${encodeURIComponent(jobId)}`, { method: 'DELETE', allowNullData: true });
 }
 
 export async function triggerJob(jobId: string, payload: TriggerJobRequest = {}): Promise<JobInstanceSummary> {
   return request<JobInstanceSummary>(`/api/v1/jobs/${encodeURIComponent(jobId)}:trigger`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function triggerJobWebhookEvent(jobId: string, payload: InboundWebhookTriggerRequest): Promise<InboundWebhookTriggerResponse> {
+  return request<InboundWebhookTriggerResponse>(`/api/v1/events/webhooks/${encodeURIComponent(jobId)}:trigger`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -940,6 +1103,13 @@ export interface InstanceEventSummary {
   createdAt: string;
 }
 
+export interface WorkflowReplayResponse {
+  instance: WorkflowInstanceSummary;
+  workflow: WorkflowSummary;
+  events: InstanceEventSummary[];
+  graph: JobTopologyResponse;
+}
+
 function normalizeWorkflowEdgeCondition(condition: unknown): WorkflowEdgeSpec['condition'] {
   if (condition === null || condition === undefined) {
     return condition as null | undefined;
@@ -1001,6 +1171,10 @@ export async function runWorkflow(id: string): Promise<WorkflowInstanceSummary> 
 
 export async function getWorkflowInstance(instanceId: string): Promise<WorkflowInstanceSummary> {
   return request<WorkflowInstanceSummary>(`/api/v1/workflow-instances/${encodeURIComponent(instanceId)}`);
+}
+
+export async function getWorkflowReplay(instanceId: string): Promise<WorkflowReplayResponse> {
+  return request<WorkflowReplayResponse>(`/api/v1/workflow-instances/${encodeURIComponent(instanceId)}/replay`);
 }
 
 export async function advanceWorkflowInstance(instanceId: string, payload: { nodeKey: string; status: string; message?: string }): Promise<WorkflowAdvanceResult> {

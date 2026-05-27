@@ -768,6 +768,7 @@ mod tests {
         let scripts = ScriptRepository::new(db);
         let job = jobs
             .create_job(CreateJob {
+                created_by: None,
                 namespace: "default".to_owned(),
                 app: "billing".to_owned(),
                 name: "manual".to_owned(),
@@ -776,6 +777,8 @@ mod tests {
                 processor_name: Some("billing.manual".to_owned()),
                 script_id: None,
                 enabled: true,
+                canary_job_id: None,
+                canary_percent: 0,
             })
             .await
             .unwrap_or_else(|error| panic!("job should be created: {error}"));
@@ -855,6 +858,7 @@ mod tests {
 
         let blocked_job = jobs
             .create_job(CreateJob {
+                created_by: None,
                 namespace: "default".to_owned(),
                 app: "offline".to_owned(),
                 name: "blocked".to_owned(),
@@ -863,6 +867,8 @@ mod tests {
                 processor_name: Some("demo.blocked".to_owned()),
                 script_id: None,
                 enabled: true,
+                canary_job_id: None,
+                canary_percent: 0,
             })
             .await
             .unwrap_or_else(|error| panic!("blocked job should be created: {error}"));
@@ -878,6 +884,7 @@ mod tests {
 
         let valid_job = jobs
             .create_job(CreateJob {
+                created_by: None,
                 namespace: "default".to_owned(),
                 app: "billing".to_owned(),
                 name: "manual".to_owned(),
@@ -886,6 +893,8 @@ mod tests {
                 processor_name: Some("demo.echo".to_owned()),
                 script_id: None,
                 enabled: true,
+                canary_job_id: None,
+                canary_percent: 0,
             })
             .await
             .unwrap_or_else(|error| panic!("valid job should be created: {error}"));
@@ -1010,6 +1019,7 @@ mod tests {
             .unwrap_or_else(|| panic!("script should exist"));
         let job = jobs
             .create_job(CreateJob {
+                created_by: None,
                 namespace: "default".to_owned(),
                 app: "billing".to_owned(),
                 name: "shell job".to_owned(),
@@ -1018,6 +1028,8 @@ mod tests {
                 processor_name: None,
                 script_id: Some(script.id),
                 enabled: true,
+                canary_job_id: None,
+                canary_percent: 0,
             })
             .await
             .unwrap_or_else(|error| panic!("job should be created: {error}"));
@@ -1113,6 +1125,7 @@ mod tests {
             .unwrap_or_else(|| panic!("script should exist"));
         let job = jobs
             .create_job(CreateJob {
+                created_by: None,
                 namespace: "default".to_owned(),
                 app: "billing".to_owned(),
                 name: "python job".to_owned(),
@@ -1121,6 +1134,8 @@ mod tests {
                 processor_name: None,
                 script_id: Some(script.id.clone()),
                 enabled: true,
+                canary_job_id: None,
+                canary_percent: 0,
             })
             .await
             .unwrap_or_else(|error| panic!("job should be created: {error}"));
@@ -1206,6 +1221,7 @@ mod tests {
         let scripts = ScriptRepository::new(db);
         let job = jobs
             .create_job(CreateJob {
+                created_by: None,
                 namespace: "default".to_owned(),
                 app: "billing".to_owned(),
                 name: "manual".to_owned(),
@@ -1214,6 +1230,8 @@ mod tests {
                 processor_name: None,
                 script_id: None,
                 enabled: true,
+                canary_job_id: None,
+                canary_percent: 0,
             })
             .await
             .unwrap_or_else(|error| panic!("job should be created: {error}"));
@@ -1311,6 +1329,7 @@ mod tests {
         let scripts = ScriptRepository::new(db);
         let job = jobs
             .create_job(CreateJob {
+                created_by: None,
                 namespace: "default".to_owned(),
                 app: "billing".to_owned(),
                 name: "already-done".to_owned(),
@@ -1319,6 +1338,8 @@ mod tests {
                 processor_name: None,
                 script_id: None,
                 enabled: true,
+                canary_job_id: None,
+                canary_percent: 0,
             })
             .await
             .unwrap_or_else(|error| panic!("job should be created: {error}"));
@@ -1378,6 +1399,7 @@ mod tests {
         let scripts = ScriptRepository::new(db);
         let job = jobs
             .create_job(CreateJob {
+                created_by: None,
                 namespace: "default".to_owned(),
                 app: "billing".to_owned(),
                 name: "follower-dispatch".to_owned(),
@@ -1386,6 +1408,8 @@ mod tests {
                 processor_name: None,
                 script_id: None,
                 enabled: true,
+                canary_job_id: None,
+                canary_percent: 0,
             })
             .await
             .unwrap_or_else(|error| panic!("job should be created: {error}"));
@@ -1438,6 +1462,7 @@ mod tests {
         let scripts = ScriptRepository::new(db);
         let job = jobs
             .create_job(CreateJob {
+                created_by: None,
                 namespace: "default".to_owned(),
                 app: "billing".to_owned(),
                 name: "manual".to_owned(),
@@ -1446,6 +1471,8 @@ mod tests {
                 processor_name: Some("job.default".to_owned()),
                 script_id: None,
                 enabled: true,
+                canary_job_id: None,
+                canary_percent: 0,
             })
             .await
             .unwrap_or_else(|error| panic!("job should be created: {error}"));
@@ -1570,6 +1597,7 @@ mod tests {
 
         let job = jobs
             .create_job(CreateJob {
+                created_by: None,
                 namespace: "default".to_owned(),
                 app: "billing".to_owned(),
                 name: "wasm job".to_owned(),
@@ -1578,6 +1606,8 @@ mod tests {
                 processor_name: None,
                 script_id: Some(script.id.clone()),
                 enabled: true,
+                canary_job_id: None,
+                canary_percent: 0,
             })
             .await
             .unwrap_or_else(|error| panic!("job should be created: {error}"));

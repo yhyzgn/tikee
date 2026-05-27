@@ -214,6 +214,10 @@ pub(super) fn api_router() -> Router<Arc<AppState>> {
             get(routes::get_workflow_instance_route),
         )
         .route(
+            "/workflow-instances/{id}/replay",
+            get(routes::workflow_replay),
+        )
+        .route(
             "/workflow-instances/{id}/advance",
             axum::routing::post(routes::advance_workflow_instance),
         )
@@ -234,6 +238,10 @@ pub(super) fn api_router() -> Router<Arc<AppState>> {
             get(routes::stream_instance_events),
         )
         .route(
+            "/events/webhooks/{job}",
+            axum::routing::post(routes::trigger_inbound_webhook),
+        )
+        .route(
             "/namespaces",
             get(routes::list_namespaces).post(routes::create_namespace),
         )
@@ -252,11 +260,22 @@ pub(super) fn api_router() -> Router<Arc<AppState>> {
             axum::routing::delete(routes::delete_worker_pool),
         )
         .route("/jobs", get(routes::list_jobs).post(routes::create_job))
+        .route("/jobs/topology", get(routes::job_topology))
+        .route("/jobs/{job}/impact", get(routes::job_impact))
         .route(
             "/jobs/{job_action}",
             axum::routing::post(routes::trigger_job)
                 .patch(routes::update_job)
                 .delete(routes::delete_job),
+        )
+        .route(
+            "/jobs/{job}/scheduling-advice",
+            get(routes::job_scheduling_advice),
+        )
+        .route("/jobs/{job}/versions", get(routes::list_job_versions))
+        .route(
+            "/jobs/{job}/rollback",
+            axum::routing::post(routes::rollback_job),
         )
         .route("/jobs/{job}/instances", get(routes::list_job_instances))
         .route("/instances/{instance}", get(routes::get_job_instance))

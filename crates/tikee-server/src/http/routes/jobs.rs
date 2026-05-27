@@ -11,12 +11,13 @@ use tikee_storage::{CreateJob, CreateJobInstance, UpdateJob};
 use crate::http::{
     AppState, auth,
     dto::{
-        ApiResponse, CreateJobRequest, DeleteJobApiResponse, EmptyData, ErrorResponse,
-        JobApiResponse, JobInstanceApiResponse, JobInstanceAttemptPage,
+        ApiResponse, CanaryRoutingSummary, CreateJobRequest, DeleteJobApiResponse, EmptyData,
+        ErrorResponse, JobApiResponse, JobInstanceApiResponse, JobInstanceAttemptPage,
         JobInstanceAttemptPageApiResponse, JobInstanceAttemptSummary, JobInstanceLogPage,
         JobInstanceLogPageApiResponse, JobInstanceLogSummary, JobInstancePage,
-        JobInstancePageApiResponse, JobInstanceSummary, JobPageApiResponse, JobSummary, Page,
-        PageQuery, TriggerJobRequest, UpdateJobRequest,
+        JobInstancePageApiResponse, JobInstanceSummary, JobPageApiResponse, JobSummary,
+        JobVersionPage, JobVersionPageApiResponse, Page, PageQuery, RollbackJobRequest,
+        TriggerJobRequest, UpdateJobRequest,
     },
     error::ApiError,
 };
@@ -129,6 +130,9 @@ pub async fn create_job(
             processor_name: request.processor_name.clone(),
             script_id: request.script_id.clone(),
             enabled: request.enabled.unwrap_or(true),
+            canary_job_id: None,
+            canary_percent: 0,
+            created_by: Some(principal.username.clone()),
         })
         .await
         .map_err(|error| ApiError::storage(&error))?;
@@ -194,10 +198,25 @@ pub async fn trigger_job(
     let trigger_type = parse_trigger_type(request.trigger_type.as_deref().unwrap_or("api"))?;
     let execution_mode =
         parse_execution_mode(request.execution_mode.as_deref().unwrap_or("single"))?;
+    let canary_routing = resolve_canary_routing(&state, &job_summary).await?;
+    let target_job = canary_routing
+        .as_ref()
+        .filter(|routing| routing.routed)
+        .map_or_else(|| job.clone(), |routing| routing.routed_job_id.clone());
+    let target_summary = if target_job == job_summary.id {
+        job_summary.clone()
+    } else {
+        state
+            .jobs
+            .get(&target_job)
+            .await
+            .map_err(|error| ApiError::storage(&error))?
+            .ok_or_else(|| ApiError::not_found(format!("job not found: {target_job}")))?
+    };
     let broadcast_worker_ids = if execution_mode == ExecutionMode::Broadcast {
         let worker_ids = state
             .registry
-            .find_eligible_workers(&job_summary.namespace, &job_summary.app)
+            .find_eligible_workers(&target_summary.namespace, &target_summary.app)
             .await;
         if worker_ids.is_empty() {
             return Err(ApiError::bad_request(
@@ -212,13 +231,13 @@ pub async fn trigger_job(
     let instance = state
         .instances
         .create_pending(CreateJobInstance {
-            job_id: job.clone(),
+            job_id: target_job.clone(),
             trigger_type,
             execution_mode,
         })
         .await
         .map_err(|error| ApiError::storage(&error))?
-        .ok_or_else(|| ApiError::not_found(format!("job not found: {job}")))?;
+        .ok_or_else(|| ApiError::not_found(format!("job not found: {target_job}")))?;
 
     if let Some(worker_ids) = broadcast_worker_ids {
         state
@@ -239,9 +258,9 @@ pub async fn trigger_job(
     )
     .await;
 
-    Ok(Json(ApiResponse::success(
-        instance_summary_with_latest_log(&state, instance).await?,
-    )))
+    let mut summary = instance_summary_with_latest_log(&state, instance).await?;
+    summary.canary_routing = canary_routing;
+    Ok(Json(ApiResponse::success(summary)))
 }
 
 /// Update a job.
@@ -317,6 +336,9 @@ pub async fn update_job(
                 processor_name: request.processor_name.clone(),
                 script_id: request.script_id.clone(),
                 enabled: request.enabled,
+                canary_job_id: request.canary_job_id.clone(),
+                canary_percent: request.canary_percent,
+                updated_by: Some(principal.username.clone()),
             },
         )
         .await
@@ -334,6 +356,121 @@ pub async fn update_job(
     )
     .await;
 
+    Ok(Json(ApiResponse::success(JobSummary::from(updated))))
+}
+
+/// List immutable job versions, newest first.
+///
+/// # Errors
+///
+/// Returns authorization, not-found, or storage errors.
+#[utoipa::path(
+    get,
+    path = "/api/v1/jobs/{job}/versions",
+    tag = "jobs",
+    params(("job" = String, Path, description = "Job identifier")),
+    responses((status = 200, description = "Job version page", body = JobVersionPageApiResponse))
+)]
+pub async fn list_job_versions(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(job_action): Path<String>,
+) -> Result<Json<JobVersionPageApiResponse>, ApiError> {
+    let job = job_action;
+    let principal = auth::require_permission(&headers, &state, "jobs", "read").await?;
+    let current = state
+        .jobs
+        .get(&job)
+        .await
+        .map_err(|error| ApiError::storage(&error))?
+        .ok_or_else(|| ApiError::not_found(format!("job not found: {job}")))?;
+    if !crate::http::access_scope::allows_resource(
+        &principal.scope_bindings,
+        &current.namespace,
+        &current.app,
+        None,
+    ) {
+        return Err(ApiError::forbidden(
+            "api token scope binding does not allow this namespace/app",
+        ));
+    }
+    let items = state
+        .jobs
+        .versions()
+        .list_versions(&job)
+        .await
+        .map_err(|error| ApiError::storage(&error))?;
+    Ok(Json(ApiResponse::success(JobVersionPage {
+        items,
+        next_page_token: None,
+    })))
+}
+
+/// Roll back a job to one immutable version and create a new latest version.
+///
+/// # Errors
+///
+/// Returns validation, authorization, not-found, or storage errors.
+#[utoipa::path(
+    post,
+    path = "/api/v1/jobs/{job}/rollback",
+    tag = "jobs",
+    params(("job" = String, Path, description = "Job identifier")),
+    request_body = RollbackJobRequest,
+    responses((status = 200, description = "Rolled back job", body = JobApiResponse))
+)]
+pub async fn rollback_job(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(job_action): Path<String>,
+    Json(request): Json<RollbackJobRequest>,
+) -> Result<Json<JobApiResponse>, ApiError> {
+    let job = job_action;
+    if request.version_number < 1 {
+        return Err(ApiError::bad_request("versionNumber must be positive"));
+    }
+    let principal = auth::require_permission(&headers, &state, "jobs", "write").await?;
+    let current = state
+        .jobs
+        .get(&job)
+        .await
+        .map_err(|error| ApiError::storage(&error))?
+        .ok_or_else(|| ApiError::not_found(format!("job not found: {job}")))?;
+    if !crate::http::access_scope::allows_resource(
+        &principal.scope_bindings,
+        &current.namespace,
+        &current.app,
+        None,
+    ) {
+        return Err(ApiError::forbidden(
+            "api token scope binding does not allow this namespace/app",
+        ));
+    }
+    let updated = state
+        .jobs
+        .rollback_job(
+            &job,
+            request.version_number,
+            Some(principal.username.clone()),
+        )
+        .await
+        .map_err(|error| ApiError::storage(&error))?
+        .ok_or_else(|| {
+            ApiError::not_found(format!(
+                "job version not found: {job}#{}",
+                request.version_number
+            ))
+        })?;
+    audit(
+        &state,
+        &principal.username,
+        "rollback",
+        "job",
+        &job,
+        Some(format!("version={}", request.version_number)),
+        &headers,
+    )
+    .await;
     Ok(Json(ApiResponse::success(JobSummary::from(updated))))
 }
 
@@ -396,6 +533,60 @@ pub async fn delete_job(
     .await;
 
     Ok(Json(ApiResponse::success(EmptyData {})))
+}
+
+async fn resolve_canary_routing(
+    state: &AppState,
+    job: &tikee_storage::JobSummary,
+) -> Result<Option<CanaryRoutingSummary>, ApiError> {
+    let percent = job.canary_percent.clamp(0, 100);
+    let Some(canary_job_id) = job
+        .canary_job_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(None);
+    };
+    if percent <= 0 {
+        return Ok(Some(CanaryRoutingSummary {
+            enabled: false,
+            routed: false,
+            original_job_id: job.id.clone(),
+            routed_job_id: job.id.clone(),
+            percent,
+        }));
+    }
+    let canary = state
+        .jobs
+        .get(canary_job_id)
+        .await
+        .map_err(|error| ApiError::storage(&error))?
+        .ok_or_else(|| ApiError::not_found(format!("canary job not found: {canary_job_id}")))?;
+    if job.namespace != canary.namespace || job.app != canary.app {
+        return Err(ApiError::bad_request(
+            "canary job must belong to the same namespace/app",
+        ));
+    }
+    let routed = canary_sample(&job.id, percent);
+    Ok(Some(CanaryRoutingSummary {
+        enabled: true,
+        routed,
+        original_job_id: job.id.clone(),
+        routed_job_id: if routed { canary.id } else { job.id.clone() },
+        percent,
+    }))
+}
+
+fn canary_sample(_job_id: &str, percent: i32) -> bool {
+    if percent >= 100 {
+        return true;
+    }
+    if percent <= 0 {
+        return false;
+    }
+    let bucket = rand::random::<u8>() % 100;
+    bucket < u8::try_from(percent).unwrap_or(0)
 }
 
 fn has_auth_header(headers: &HeaderMap) -> bool {
@@ -570,7 +761,10 @@ impl From<tikee_storage::JobSummary> for JobSummary {
             schedule_expr: value.schedule_expr,
             processor_name: value.processor_name,
             script_id: value.script_id,
+            version_number: value.version_number,
             enabled: value.enabled,
+            canary_job_id: value.canary_job_id,
+            canary_percent: value.canary_percent,
         }
     }
 }
@@ -606,6 +800,7 @@ async fn instance_summary_with_latest_log(
         log_count,
         latest_log,
         worker_id,
+        canary_routing: None,
     })
 }
 

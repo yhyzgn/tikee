@@ -26,11 +26,11 @@ pub use repository::{
     DispatchQueueSloSummary, DispatchQueueSummary, InstanceEventSummary,
     JobInstanceAttemptRepository, JobInstanceAttemptSummary, JobInstanceLogRepository,
     JobInstanceLogSummary, JobInstanceRepository, JobInstanceSummary, JobRepository, JobSummary,
-    MaterializeWorkflowNodeResult, NamespaceSummary, OidcAuthStateRepository, OidcAuthStateSummary,
-    OidcIdentityRepository, OidcIdentitySummary, PermissionSummary, QueueOverview,
-    RaftAppliedCommandSummary, RaftLogEntrySummary, RaftMemberSummary,
-    RaftMembershipProposalSummary, RaftMetadataSummary, RaftRepository, RaftSnapshotSummary,
-    RbacRepository, RecordAlertDeliveryAttempt, RecordRaftAppliedCommand,
+    JobVersionRepository, JobVersionSummary, MaterializeWorkflowNodeResult, NamespaceSummary,
+    OidcAuthStateRepository, OidcAuthStateSummary, OidcIdentityRepository, OidcIdentitySummary,
+    PermissionSummary, QueueOverview, RaftAppliedCommandSummary, RaftLogEntrySummary,
+    RaftMemberSummary, RaftMembershipProposalSummary, RaftMetadataSummary, RaftRepository,
+    RaftSnapshotSummary, RbacRepository, RecordAlertDeliveryAttempt, RecordRaftAppliedCommand,
     RecordRaftMembershipProposal, RecoverWorkflowNodeInput, RecoverWorkflowNodeResult,
     RegisterWorkerSession, ScopeRepository, ScriptReleaseGrantEvidenceSummary,
     ScriptReleaseSignatureSummary, ScriptRepository, ScriptSummary, ScriptVersionRepository,
@@ -220,6 +220,44 @@ async fn ensure_job_schema_compatibility(db: &DatabaseConnection) -> Result<(), 
         ))
         .await?;
     }
+    if !sqlite_column_exists(db, "jobs", "canary_job_id").await? {
+        db.execute(Statement::from_string(
+            DatabaseBackend::Sqlite,
+            "ALTER TABLE jobs ADD COLUMN canary_job_id varchar",
+        ))
+        .await?;
+    }
+    if !sqlite_column_exists(db, "jobs", "canary_percent").await? {
+        db.execute(Statement::from_string(
+            DatabaseBackend::Sqlite,
+            "ALTER TABLE jobs ADD COLUMN canary_percent integer NOT NULL DEFAULT 0",
+        ))
+        .await?;
+    }
+    db.execute(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        r"CREATE TABLE IF NOT EXISTS job_versions (
+            id varchar NOT NULL PRIMARY KEY,
+            job_id varchar NOT NULL,
+            version_number bigint NOT NULL,
+            name varchar NOT NULL,
+            schedule_type varchar NOT NULL,
+            schedule_expr varchar,
+            processor_name varchar,
+            script_id varchar,
+            enabled boolean NOT NULL,
+            created_by varchar NOT NULL,
+            change_reason varchar NOT NULL,
+            rolled_back_from_version bigint,
+            created_at varchar NOT NULL
+        )",
+    ))
+    .await?;
+    db.execute(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_job_versions_job_number ON job_versions (job_id, version_number)",
+    ))
+    .await?;
     Ok(())
 }
 

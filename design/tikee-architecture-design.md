@@ -2287,11 +2287,11 @@ tikee/
 
 #### Phase 3 closeout notes (2026-05-23)
 
-Phase 3 closeout 状态已在 2026-05-25 复核：原先保留未勾选的 OIDC opaque session、真实 TLS/mTLS listener、脚本发布门禁/签名/grant、生产告警投递硬化、Prometheus/Grafana recording-rule 校验等均已在后续 Phase 3 closeout / Phase 4 P0-P1 服务可用性切片中闭环，并按“本地可验证 foundation + 外部系统增强后置”的标准标记完成。外部 KMS/PKI、Helm/K8s、Go ergonomic run-loop、Python/Node SDK、PowerJob/XXL-JOB 迁移工具仍保留在 Phase 4 对应 P1/P2，不再算 Phase 3 未完成项。
+Phase 3 closeout 状态已在 2026-05-28 复核：原先保留未勾选的 OIDC opaque session、真实 TLS/mTLS listener、脚本发布门禁/签名/grant、生产告警投递硬化、Prometheus/Grafana recording-rule 校验、Worker 生命周期治理、Java/Rust management SDK API-Key 闭环等均已在后续 Phase 3 closeout / Phase 4 P0-P1/P2 服务可用性切片中闭环，并按“本地可验证 foundation + 外部系统增强后置”的标准标记完成。外部 KMS/PKI、Helm/K8s、Go ergonomic run-loop、Python/Node SDK 仍保留在 Phase 4 对应 P1/P2；PowerJob/XXL-JOB 等迁移工具统一降为最低优先级 backlog，不再算 Phase 3/4 P0-P2 的服务可用性缺口。
 
 #### Phase 3/4 service-usage priority rebalance (2026-05-24)
 
-剩余工作按“是否直接影响真实团队把 tikee 作为共享服务使用”重新排序。原则：先补齐登录、安全传输、Worker 生命周期、部署运维和可靠告警这些服务可用闭环；再做生产治理增强；最后做迁移工具、生态集成和高级差异化。
+剩余工作按“是否直接影响真实团队把 tikee 作为共享服务使用”重新排序。原则：先补齐登录、安全传输、Worker 生命周期、部署运维和可靠告警这些服务可用闭环；再做生产治理增强；最后做生态集成和高级差异化。各类迁移工具（PowerJob、XXL-JOB、后续同类平台导入器）不再参与 P0-P2 排序，统一放入最低优先级迁移 backlog，等核心服务体验稳定后再做。
 
 **P0 — 服务使用 / 生产上线阻塞项（优先实现）**
 
@@ -2328,14 +2328,15 @@ Phase 3 closeout 状态已在 2026-05-25 复核：原先保留未勾选的 OIDC 
 
 后续源码文件必须保持单文件 `<=1500` 行；`mod.rs` / `lib.rs` 等入口文件只做模块声明和 re-export，不堆实现或测试。当前已拆分 HTTP gateway、raft-rs 测试、storage migration、workflow repository 等超大文件，验证最大源文件行数为 1495。
 
-**P2 — 生态迁移 / 高级差异化（不阻塞服务先跑起来）**
+**P2 — 生态接入 / 高级差异化（不阻塞服务先跑起来）**
 
-- [ ] SDK Management API-Key 签发与鉴权方案：SDK 端 management client 不走人工 session token，也不收敛到某个用户账号的 RBAC 权限；由后台管理员针对 app 作用域手动签发一组授权 API-Key，供 Java/Rust 等 SDK 调用 management 接口。
-- [ ] PowerJob 迁移工具与报告。
-- [ ] XXL-JOB 迁移工具与 GLUE/child_jobid 风险报告。
+- [x] SDK Management API-Key 签发与鉴权方案（2026-05-28 已落地验证）：SDK 端 management client 不走人工 session token，也不收敛到某个用户账号的 RBAC 权限；Server 提供 `POST/GET/PATCH/DELETE /api/v1/management/api-keys`，`tk-` + 64 位大小写字母数字 CSPRNG/rejection sampling 生成，服务端只存 hash 与两端明文脱敏值；`X-Tikee-API-Key` 鉴权映射为 `sdk_api_key/app_service` principal 并强制 namespace/app scope；Web `/api-keys` 支持创建一次性明文展示、编辑名称/权限/有效期、吊销与 last-used 观测；Java 原生 SDK、Spring Boot Starter、Rust SDK management client 与 Java demo 均已接入 API-Key。验证：`cargo test -p tikee-server sdk_api_key -- --nocapture`、`cargo test -p tikee-storage sdk_api_key -- --nocapture`、`cd web && bun run lint && bun run build && bun test src/api/client.test.ts`、Java SDK/starter/demo 相关测试。
 - [ ] Terraform Provider、GitOps/IaC、K8s CRD。
-- [ ] 任务依赖自动发现、拓扑可视化、工作流回放、智能调度。
-- [ ] 插件系统、高级 Webhook/事件源、任务版本管理、灰度/回滚。
+- [x] 任务版本管理与回滚（2026-05-28：`job_versions` 不可变快照表、创建/编辑/回滚自动追加版本、`GET /api/v1/jobs/{job}/versions`、`POST /api/v1/jobs/{job}/rollback`、Jobs 页面版本历史抽屉与回滚入口已落地；回滚生成新的最新版本，不覆盖历史）。
+- [x] 任务依赖自动发现、拓扑图形画布、跨工作流影响分析与回放基础（2026-05-28：已从 Job + Workflow definition 自动推导 job/workflow 节点、workflow_job_ref / workflow_job_dependency 边与 unresolved 缺失引用；`GET /api/v1/jobs/topology` 返回 layer/position 供画布渲染；新增 `GET /api/v1/jobs/{job}/impact` 汇总引用工作流、上游/下游 Job 与风险摘要；新增 `GET /api/v1/workflow-instances/{id}/replay` 返回 instance + definition + events + graph replay bundle；Jobs 页面“任务拓扑”入口跳转到 `/jobs/topology` 二级页面，二级页面承载 SVG 图形画布并可点击 Job 查看跨工作流影响分析）。
+- [x] 高级 Webhook/事件源基础（2026-05-28：入站事件源 `POST /api/v1/events/webhooks/{job}:trigger` 已落地，复用 `instances:execute` 与 namespace/app scope 鉴权，创建 `webhook` trigger instance 并记录 `webhook_event_source` payload 日志；GitHub/GitLab/Alertmanager 等 provider 适配器保留后续增强）。
+- [x] 任务灰度发布基础（2026-05-28：Job 增加 canary target/percent，显式 UI/API trigger 按百分比路由到 canary Job，并在 `JobInstanceSummary.canaryRouting` 返回 original/routed job；Jobs 页面支持配置灰度目标/比例并在触发后提示命中灰度。自动回滚、worker tag 灰度和指标门禁仍保留后续增强）。
+- [ ] 插件系统。
 
 ### Phase 4: 高级能力 (月 10-12)
 
@@ -2355,29 +2356,32 @@ Phase 3 closeout 状态已在 2026-05-25 复核：原先保留未勾选的 OIDC 
 - [x] 脚本生产治理增强（完整审批/签名/KMS、URL/File/Secret grant、生产发布门禁；本地 env-secret verifier 闭环，外部 KMS/PKI 后续增强）
 - [x] Prometheus/Grafana recording-rule 与真实 scrape 验证（132：规则、Prometheus scrape config、Grafana recording-query 与 runbook）。
 
-**P2 — 生态迁移与高级差异化**
+**P2 — 生态接入与高级差异化**
 
-- [ ] SDK Management API-Key 签发与鉴权方案（新增）：SDK management client 使用 app-scoped API-Key，不使用人工 session token，不绑定某个用户账号的 RBAC 权限；后台管理员手动签发/轮换/吊销授权，供 Java/Rust SDK 管理任务、触发任务和读取实例状态。
+- [x] SDK Management API-Key 签发与鉴权方案（2026-05-28 已落地验证）：SDK management client 使用 app-scoped API-Key，不使用人工 session token，不绑定某个用户账号的 RBAC 权限；后台管理员手动签发、编辑元数据、吊销授权，供 Java/Rust SDK 管理任务、触发任务和读取实例状态。
 
-  **设计约束（后续实现必须满足）**：
+  **已实现约束 / 后续增强边界**：
   - Key 明文格式固定为 `tk-${64位大小写字母数字}`，即前缀 `tk-` + 64 个 `[A-Za-z0-9]` 字符；全局唯一，只在创建/轮换时返回一次明文。
   - 生成算法采用业界通用 CSPRNG API-key 方案：使用 OS 级密码学安全随机源（Rust `OsRng` / Java `SecureRandom` / WebCrypto 等同等级来源），对 62 字符 alphabet 做 rejection sampling/无模偏采样，生成 64 位 base62 随机串；约 330 bit 熵，不使用 UUID、时间戳、递增序列或可预测 PRNG。
   - 存储只保存 `key_id`、`prefix`、HMAC-SHA256/SHA-256 hash（建议带 server pepper）、app scope、授权 scope、状态、过期时间、last_used_at、created_by/revoked_by/rotated_from 与审计证据；禁止持久化明文 key。
   - 鉴权边界是 app-scoped service credential：请求通过 `X-Tikee-API-Key: tk-...`（或 SDK 内部等价 header）进入 management API；认证后 principal 类型标记为 `sdk_api_key` / `app_service`，不能伪装成人类用户 session，也不能复用用户 RBAC role expansion。
   - 授权模型为后台针对 namespace/app 手动签发的 allow-list：可细分 `jobs:read/create/update/trigger`、`instances:read/logs:read`、`workflows:*` 等 SDK management scopes，并强制落在签发时绑定的 namespace/app 内；越权访问其它 app 必须 fail-closed。
   - SDK 侧配置应从 `tikee.management.api-key` / `TIKEE_MANAGEMENT_API_KEY` 读取，替换当前 `token` 语义；Java/Rust SDK 都要同等支持，Spring Boot Starter 只做配置映射，不拥有鉴权逻辑。
-  - 后台需提供管理员 API/UI：创建、列表（脱敏显示 `tk-xxxx…`）、轮换、吊销、过期策略、last-used 观测、审计日志；所有签发/轮换/吊销操作仍由后台人工 session + RBAC 保护。
+  - 后台已提供管理员 API/UI：创建、列表（两端明文中间脱敏）、编辑名称/授权 scope/有效期、吊销、last-used 观测与审计日志；所有签发/编辑/吊销操作仍由后台人工 session + RBAC 保护。轮换曾评估但按当前产品决策改为“编辑不改 key”，需要换 key 时新建后吊销旧 key。
   - 与已有 API Token/OIDC session 明确分层：API Token 是用户权限收窄后的 bearer；OIDC 只换本地 opaque session；SDK Management API-Key 是 app 级服务凭据，不能被用户 token/RBAC 自动推导生成。
 
-- [ ] PowerJob 迁移工具（从 Phase 3 后置；与迁移报告/双跑能力一起实现）
-- [ ] XXL-JOB 迁移工具（新增；覆盖 xxl_job_group / xxl_job_info / CRON / child_jobid / GLUE 脚本迁移报告）
 - [ ] Terraform Provider、GitOps/IaC、K8s CRD
-- [ ] 任务依赖自动发现与拓扑可视化
-- [ ] 智能调度 (基于历史数据的资源预测)
+- [x] 任务依赖自动发现、拓扑图形画布、跨工作流影响分析与回放基础（2026-05-28：`GET /api/v1/jobs/topology`、`GET /api/v1/jobs/{job}/impact`、`GET /api/v1/workflow-instances/{id}/replay` 已落地；Jobs 页面拓扑入口已改为 `/jobs/topology` 二级页面，二级页面承载 SVG 图形画布、全屏/退出全屏切换、依赖边/引用边/unresolved 引用列表，并支持选中 Job 查看跨工作流影响分析；Replay API 先作为事故复盘 bundle 暴露，后续可接入 Workflow 实例详情页做时间轴播放）。
+- [x] 智能调度建议基础（2026-05-28：新增 `GET /api/v1/jobs/{job}/scheduling-advice`，基于 Job processor/script 绑定推导 required capability，结合在线 Worker 能力与最近实例失败数返回 ready/severity/reason/eligibleWorkers；Jobs 页面增加“调度建议”抽屉。完整历史耗时/资源预测仍保留后续增强）
 - [ ] 插件系统 (自定义处理器类型、告警通道)
-- [ ] Webhook 入站/出站
-- [ ] 任务版本管理与回滚
-- [ ] 灰度发布支持 (任务 A/B 测试)
+- [x] Webhook 入站/出站基础（2026-05-28：出站告警 Webhook 已有；新增入站 `POST /api/v1/events/webhooks/{job}:trigger`，支持外部系统以 session/API Token/SDK API-Key 触发 Job 并记录事件 payload。高级 provider 签名校验、模板映射、重放保护后续增强）
+- [x] 任务版本管理与回滚（2026-05-28：`job_versions` 不可变快照、版本列表 API、回滚 API、Jobs 页面版本历史与回滚入口；验证 `cargo test -p tikee-storage job_version -- --nocapture`、`cargo test -p tikee-server job_version -- --nocapture`、Web lint/build/API/UI tests）。
+- [x] 灰度发布基础（2026-05-28：`canaryJobId`/`canaryPercent`、显式 trigger canary routing、response `canaryRouting`、Jobs 页面配置与命中提示已落地；A/B 指标分析、按 worker tag 灰度、失败自动回滚后续增强）
+
+**最低优先级 — 迁移工具 Backlog（核心服务体验稳定后再做）**
+
+- [ ] PowerJob 迁移工具（从 Phase 3/4 P2 下调；与迁移报告/双跑能力一起实现）。
+- [ ] XXL-JOB 迁移工具（从 Phase 3/4 P2 下调；覆盖 xxl_job_group / xxl_job_info / CRON / child_jobid / GLUE 脚本迁移报告）。
 
 ### 15.5 创新能力清单
 
@@ -2391,7 +2395,7 @@ Phase 3 closeout 状态已在 2026-05-25 复核：原先保留未勾选的 OIDC 
 | 任务版本与灰度 | Job version、canary、按 worker tag 灰度、失败自动回滚 | Phase 4 |
 | 调度仿真 | 变更前模拟未来 N 次触发、misfire 结果、资源占用 | Phase 4 |
 | 平台管理控制台 | 嵌入式 Web UI + HTTP/OpenAPI 管理接口，覆盖任务、实例、工作流、Worker、脚本、安全、审计和告警 | Phase 1-4 |
-| 工作流回放 | 基于 workflow_event 重放实例，支持事故复盘 bundle | Phase 4 |
+| 工作流回放 | 已提供 `GET /api/v1/workflow-instances/{id}/replay` 事故复盘 bundle（instance/definition/events/graph）；后续增强为实例详情页时间轴播放和状态逐帧动画 | Phase 4 |
 | 智能调度 | 基于历史耗时、Worker 负载、失败率进行资源预测和调度推荐 | Phase 4 |
 | 策略引擎 | OPA/Rego 或内置 DSL，控制 Shell/SQL/HTTP/生产变更审批 | Phase 3-4 |
 | WASM 插件 | 语言无关、安全沙箱、插件签名与版本管理；同时作为普通脚本默认通用沙箱后端 | Phase 3-4 |
@@ -2450,7 +2454,7 @@ Phase 3 closeout 状态已在 2026-05-25 复核：原先保留未勾选的 OIDC 
 - `tikee migrate --from powerjob --db mysql://... --dry-run`
 - 生成迁移报告：不可迁移项、风险项、安全策略缺口、下次触发时间差异。
 - 支持 xxl-job / PowerJob 与 tikee 双跑一段时间，通过实例结果和日志对账后再切流。
-- Phase 4 同时落地 PowerJob 与 XXL-JOB 迁移工具；XXL-JOB 迁移重点是基础任务、路由策略、child_jobid DAG 化和 GLUE 脚本风险报告。
+- 迁移工具已从 Phase 3/4 P0-P2 下调为最低优先级 backlog；核心服务体验、SDK 与治理闭环稳定后再落地 PowerJob 与 XXL-JOB 迁移工具。XXL-JOB 迁移重点仍是基础任务、路由策略、child_jobid DAG 化和 GLUE 脚本风险报告。
 
 ---
 

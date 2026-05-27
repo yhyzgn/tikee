@@ -2,6 +2,11 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 
 const source = readFileSync(new URL('../JobsPage.tsx', import.meta.url), 'utf8');
+const topologyCanvasSource = readFileSync(new URL('../jobs/TopologyCanvas.tsx', import.meta.url), 'utf8');
+const topologyPageSource = readFileSync(new URL('../JobTopologyPage.tsx', import.meta.url), 'utf8');
+const appSource = readFileSync(new URL('../../App.tsx', import.meta.url), 'utf8');
+const routesSource = readFileSync(new URL('../../routes.tsx', import.meta.url), 'utf8');
+const stylesSource = readFileSync(new URL('../../styles.css', import.meta.url), 'utf8');
 
 
 describe('job schedule form governance', () => {
@@ -27,5 +32,79 @@ describe('job schedule form governance', () => {
     expect(source).not.toContain('执行器类型');
     expect(source).not.toContain('script:${script.id}');
     expect(source).not.toContain("label: 'Script'");
+  });
+
+  test('exposes job version history and rollback UI copy', () => {
+    expect(source).toContain('版本历史');
+    expect(source).toContain('listJobVersions');
+    expect(source).toContain('rollbackJob');
+    expect(source).toContain('回滚会生成新的最新版本');
+    expect(source).toContain('回滚到此版本');
+    expect(source).toContain('v{job.versionNumber}');
+  });
+});
+
+describe('job topology foundation', () => {
+  test('exposes topology secondary page backed by topology api', () => {
+    expect(source).toContain('任务拓扑');
+    expect(topologyPageSource).toContain('getJobTopology');
+    expect(topologyPageSource).toContain('workflow_job_dependency');
+    expect(topologyPageSource).toContain('无法解析的引用');
+  });
+});
+
+
+describe('job scheduling advice foundation', () => {
+  test('exposes scheduling advice drawer backed by advice api', () => {
+    expect(source).toContain('调度建议');
+    expect(source).toContain('getJobSchedulingAdvice');
+    expect(source).toContain('Required capability');
+    expect(source).toContain('Eligible workers');
+  });
+});
+
+
+describe('job canary routing foundation', () => {
+  test('exposes canary fields and routed trigger feedback', () => {
+    expect(source).toContain('灰度目标任务');
+    expect(source).toContain('canaryPercent');
+    expect(source).toContain('canary {job.canaryPercent}%');
+    expect(source).toContain('命中灰度');
+  });
+});
+
+
+describe('job topology canvas impact replay upgrade', () => {
+  test('moves topology into a secondary page with canvas and impact analysis', () => {
+    expect(routesSource).toContain('jobTopology');
+    expect(routesSource).toContain('/jobs/topology');
+    expect(appSource).toContain('ROUTE_META.jobTopology.path');
+    expect(source).toContain('navigate(ROUTE_META.jobTopology.path)');
+    expect(source).not.toContain('title="任务拓扑"');
+    expect(topologyCanvasSource).toContain('拓扑图形画布');
+    expect(topologyPageSource).toContain('getJobImpact');
+    expect(topologyPageSource).toContain('跨工作流影响分析');
+    expect(topologyPageSource).toContain('workflow-back-button');
+    expect(topologyPageSource).toContain('← 返回任务列表');
+    expect(topologyPageSource).toContain('upstreamJobs');
+    expect(topologyPageSource).toContain('downstreamJobs');
+  });
+
+  test('supports fullscreen canvas affordance on topology page', () => {
+    expect(topologyCanvasSource).toContain('<svg');
+    expect(topologyCanvasSource).toContain('全屏');
+    expect(topologyCanvasSource).toContain('退出全屏');
+    expect(topologyCanvasSource).toContain('fullscreen');
+    expect(stylesSource).toContain('.topology-canvas-card--fullscreen');
+    expect(stylesSource).toContain('position: fixed');
+  });
+
+  test('routes edges around nodes and animates data flow', () => {
+    expect(topologyCanvasSource).toContain('routeOrthogonalEdge');
+    expect(topologyCanvasSource).toContain('intersectsNodeBox');
+    expect(topologyCanvasSource).toContain('<path');
+    expect(topologyCanvasSource).toContain('topology-flow-line');
+    expect(topologyCanvasSource).toContain('topology-flow-pulse');
+    expect(stylesSource).toContain('@keyframes topology-flow');
   });
 });

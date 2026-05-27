@@ -669,6 +669,7 @@ mod tests {
         let audit = AuditLogRepository::new(db.clone());
         let job = jobs
             .create_job(CreateJob {
+                created_by: None,
                 namespace: "default".to_owned(),
                 app: "billing".to_owned(),
                 name: "assign-token".to_owned(),
@@ -677,6 +678,8 @@ mod tests {
                 processor_name: None,
                 script_id: None,
                 enabled: true,
+                canary_job_id: None,
+                canary_percent: 0,
             })
             .await
             .unwrap_or_else(|error| panic!("job should create: {error}"));
@@ -756,6 +759,7 @@ mod tests {
         let workflows = WorkflowRepository::new(db);
         let job = jobs
             .create_job(CreateJob {
+                created_by: None,
                 namespace: "default".to_owned(),
                 app: "billing".to_owned(),
                 name: "log-stream".to_owned(),
@@ -764,6 +768,8 @@ mod tests {
                 processor_name: None,
                 script_id: None,
                 enabled: true,
+                canary_job_id: None,
+                canary_percent: 0,
             })
             .await
             .unwrap_or_else(|error| panic!("job should create: {error}"));

@@ -13,6 +13,7 @@ import { DEFAULT_INFO_COLOR, DEFAULT_PRIMARY_COLOR, PRIMARY_COLOR_STORAGE_KEY, T
 const Dashboard = lazy(() => import('./pages/Dashboard').then((module) => ({ default: module.Dashboard })));
 const InstancesPage = lazy(() => import('./pages/InstancesPage').then((module) => ({ default: module.InstancesPage })));
 const JobsPage = lazy(() => import('./pages/JobsPage').then((module) => ({ default: module.JobsPage })));
+const JobTopologyPage = lazy(() => import('./pages/JobTopologyPage').then((module) => ({ default: module.JobTopologyPage })));
 const WorkflowEditorPage = lazy(() => import('./pages/WorkflowsPage').then((module) => ({ default: module.WorkflowEditorPage })));
 const WorkflowsPage = lazy(() => import('./pages/WorkflowsPage').then((module) => ({ default: module.WorkflowsPage })));
 const LoginPage = lazy(() => import('./pages/LoginPage').then((module) => ({ default: module.LoginPage })));
@@ -62,6 +63,7 @@ function AppLayout() {
         <Routes>
           <Route path={ROUTE_META.dashboard.path} element={<Dashboard />} />
           <Route path={ROUTE_META.jobs.path} element={<JobsPage />} />
+          <Route path={ROUTE_META.jobTopology.path} element={<JobTopologyPage />} />
           <Route path={ROUTE_META.instances.path} element={<InstancesPage />} />
           <Route path={ROUTE_META.workflows.path} element={<GuardedRoute route={ROUTE_META.workflows}><WorkflowsPage /></GuardedRoute>} />
           <Route path={ROUTE_META.workflowNew.path} element={<GuardedRoute route={ROUTE_META.workflowNew}><WorkflowEditorPage /></GuardedRoute>} />

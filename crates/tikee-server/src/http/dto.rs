@@ -825,6 +825,8 @@ pub struct WorkflowRunRequest {
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct JobSummary {
+    /// Latest immutable version number.
+    pub version_number: i64,
     /// Job identifier.
     pub id: String,
     /// Namespace name.
@@ -843,6 +845,188 @@ pub struct JobSummary {
     pub script_id: Option<String>,
     /// Job enabled flag.
     pub enabled: bool,
+    /// Optional canary target job id for explicit trigger routing.
+    pub canary_job_id: Option<String>,
+    /// Canary traffic percentage in 0..=100.
+    pub canary_percent: i32,
+}
+
+/// Job scheduling advice API envelope.
+pub type JobSchedulingAdviceApiResponse = ApiResponse<JobSchedulingAdviceResponse>;
+
+/// Operator-facing scheduling readiness and risk advice for a job.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct JobSchedulingAdviceResponse {
+    /// Whether at least one currently connected worker can execute this job.
+    pub ready: bool,
+    /// Advice severity: `ok`, `warning`, or `error`.
+    pub severity: String,
+    /// Human-readable reason.
+    pub reason: String,
+    /// Required worker capability inferred from job binding.
+    pub required_capability: Option<String>,
+    /// Currently eligible worker ids.
+    pub eligible_workers: Vec<String>,
+    /// Number of recent instances inspected.
+    pub recent_instances: u64,
+    /// Failed instances in the inspected recent window.
+    pub recent_failures: u64,
+}
+
+/// Job topology API envelope.
+pub type JobTopologyApiResponse = ApiResponse<JobTopologyResponse>;
+
+/// Job/workflow topology graph discovered from workflow definitions.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct JobTopologyResponse {
+    /// Graph nodes. Contains both jobs and workflows.
+    pub nodes: Vec<JobTopologyNode>,
+    /// Graph edges. Contains workflow references and job-to-job dependencies.
+    pub edges: Vec<JobTopologyEdge>,
+    /// Workflow references that point at jobs not visible or not present.
+    pub unresolved: Vec<JobTopologyUnresolvedRef>,
+}
+
+/// Job topology graph node.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct JobTopologyNode {
+    /// Stable node id.
+    pub id: String,
+    /// Node type: `job` or `workflow`.
+    #[serde(rename = "type")]
+    pub node_type: String,
+    /// Human readable label.
+    pub label: String,
+    /// Optional namespace for job nodes.
+    pub namespace: Option<String>,
+    /// Optional app for job nodes.
+    pub app: Option<String>,
+    /// Extra node metadata for UI rendering.
+    pub metadata: serde_json::Value,
+}
+
+/// Job topology graph edge.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct JobTopologyEdge {
+    /// Stable edge id.
+    pub id: String,
+    /// Source node id.
+    pub from: String,
+    /// Target node id.
+    pub to: String,
+    /// Edge type: `workflow_job_ref` or `workflow_job_dependency`.
+    #[serde(rename = "type")]
+    pub edge_type: String,
+    /// Optional display label.
+    pub label: Option<String>,
+    /// Source workflow id when derived from workflow definitions.
+    pub workflow_id: Option<String>,
+    /// Source workflow name when derived from workflow definitions.
+    pub workflow_name: Option<String>,
+    /// Workflow edge condition for dependency edges.
+    pub condition: Option<String>,
+    /// Extra edge metadata for UI rendering.
+    pub metadata: serde_json::Value,
+}
+
+/// Workflow node reference that could not be resolved to a visible job.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct JobTopologyUnresolvedRef {
+    /// Workflow id containing the unresolved reference.
+    pub workflow_id: String,
+    /// Workflow name containing the unresolved reference.
+    pub workflow_name: String,
+    /// Workflow node key containing the unresolved reference.
+    pub node_key: String,
+    /// Missing job id.
+    pub missing_job_id: String,
+    /// Human-readable reason.
+    pub reason: String,
+}
+
+/// Job impact analysis API envelope.
+pub type JobImpactApiResponse = ApiResponse<JobImpactResponse>;
+
+/// Cross-workflow impact analysis for one job.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct JobImpactResponse {
+    /// Target job being analyzed.
+    pub target_job: JobImpactJobRef,
+    /// Workflows referencing the target job.
+    pub referencing_workflows: Vec<JobImpactWorkflowRef>,
+    /// Jobs that can run before the target in any referencing workflow.
+    pub upstream_jobs: Vec<JobImpactJobRef>,
+    /// Jobs that can run after the target in any referencing workflow.
+    pub downstream_jobs: Vec<JobImpactJobRef>,
+    /// Risk rollup for operator review.
+    pub risk_summary: JobImpactRiskSummary,
+}
+
+/// Lightweight job reference used by impact analysis.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct JobImpactJobRef {
+    /// Job id.
+    pub id: String,
+    /// Job name.
+    pub name: String,
+    /// Namespace.
+    pub namespace: String,
+    /// App.
+    pub app: String,
+}
+
+/// Lightweight workflow reference used by impact analysis.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct JobImpactWorkflowRef {
+    /// Workflow id.
+    pub id: String,
+    /// Workflow name.
+    pub name: String,
+    /// Workflow node keys that reference the target job.
+    pub node_keys: Vec<String>,
+}
+
+/// Operator-facing impact risk rollup.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct JobImpactRiskSummary {
+    /// Number of workflows referencing the target job.
+    pub workflow_count: u64,
+    /// Number of distinct upstream jobs.
+    pub upstream_count: u64,
+    /// Number of distinct downstream jobs.
+    pub downstream_count: u64,
+    /// Number of unresolved topology references observed globally.
+    pub unresolved_count: u64,
+    /// Coarse risk level: low, medium, or high.
+    pub risk_level: String,
+    /// Human-readable reasons.
+    pub reasons: Vec<String>,
+}
+
+/// Workflow replay bundle API envelope.
+pub type WorkflowReplayApiResponse = ApiResponse<WorkflowReplayResponse>;
+
+/// Workflow replay bundle for incident review.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkflowReplayResponse {
+    /// Workflow instance.
+    pub instance: tikee_storage::WorkflowInstanceSummary,
+    /// Workflow definition snapshot.
+    pub workflow: tikee_storage::WorkflowSummary,
+    /// Persisted workflow/instance timeline events.
+    pub events: Vec<tikee_storage::InstanceEventSummary>,
+    /// Replay graph for the workflow definition.
+    pub graph: JobTopologyResponse,
 }
 
 /// Create job request.
@@ -865,6 +1049,10 @@ pub struct CreateJobRequest {
     pub script_id: Option<String>,
     /// Enabled flag. Defaults to `true` when omitted.
     pub enabled: Option<bool>,
+    /// Optional canary target job id.
+    pub canary_job_id: Option<String>,
+    /// Canary traffic percentage in 0..=100.
+    pub canary_percent: Option<i32>,
 }
 
 /// Update job request. Omitted fields remain unchanged.
@@ -886,6 +1074,11 @@ pub struct UpdateJobRequest {
     pub script_id: Option<Option<String>>,
     /// Optional enabled flag update.
     pub enabled: Option<bool>,
+    /// Optional canary target update. Use null to clear it.
+    #[serde(default, deserialize_with = "deserialize_nullable_update")]
+    pub canary_job_id: Option<Option<String>>,
+    /// Optional canary traffic percentage update.
+    pub canary_percent: Option<i32>,
 }
 
 fn deserialize_nullable_update<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
@@ -896,6 +1089,27 @@ where
     Option::<T>::deserialize(deserializer).map(Some)
 }
 
+/// Job version page response.
+pub type JobVersionPageApiResponse = ApiResponse<JobVersionPage>;
+
+/// Job version page data.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct JobVersionPage {
+    /// Immutable job version snapshots, newest first.
+    pub items: Vec<tikee_storage::JobVersionSummary>,
+    /// Reserved for future pagination.
+    pub next_page_token: Option<String>,
+}
+
+/// Roll back a job to an immutable version request.
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RollbackJobRequest {
+    /// Historical version number to restore.
+    pub version_number: i64,
+}
+
 /// Trigger job request.
 #[derive(Debug, Clone, Default, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -904,6 +1118,53 @@ pub struct TriggerJobRequest {
     pub trigger_type: Option<String>,
     /// Optional execution mode. Defaults to `single`; `broadcast` fans out to all online workers.
     pub execution_mode: Option<String>,
+}
+
+/// Inbound webhook trigger API envelope.
+pub type InboundWebhookTriggerApiResponse = ApiResponse<InboundWebhookTriggerResponse>;
+
+/// Inbound webhook event trigger request.
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct InboundWebhookTriggerRequest {
+    /// External source name, for example `gitlab` or `alertmanager`.
+    pub source: Option<String>,
+    /// External event type, for example `push` or `alert`.
+    pub event_type: Option<String>,
+    /// Event payload. Defaults to the full submitted object minus source/eventType when omitted.
+    pub payload: Option<serde_json::Value>,
+}
+
+/// Inbound webhook event trigger response.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct InboundWebhookTriggerResponse {
+    /// Whether the event was accepted and a job instance was created.
+    pub accepted: bool,
+    /// Created job instance id.
+    pub instance_id: String,
+    /// Target job id.
+    pub job_id: String,
+    /// Created instance status.
+    pub status: String,
+    /// Trigger type; always `webhook` for this endpoint.
+    pub trigger_type: String,
+}
+
+/// Canary routing metadata for explicit job triggers.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CanaryRoutingSummary {
+    /// Whether canary routing was configured on the requested job.
+    pub enabled: bool,
+    /// Whether this trigger was routed to the canary job.
+    pub routed: bool,
+    /// Requested original job id.
+    pub original_job_id: String,
+    /// Actual job id used for created instance.
+    pub routed_job_id: String,
+    /// Canary percentage configured on the requested job.
+    pub percent: i32,
 }
 
 /// Job instance page response.
@@ -940,6 +1201,8 @@ pub struct JobInstanceSummary {
     pub latest_log: Option<JobInstanceLogSummary>,
     /// Best-effort worker id observed from persisted logs for single-mode tasks.
     pub worker_id: Option<String>,
+    /// Optional canary routing metadata when explicit trigger passed through canary routing.
+    pub canary_routing: Option<CanaryRoutingSummary>,
 }
 
 /// Job instance attempt page response.

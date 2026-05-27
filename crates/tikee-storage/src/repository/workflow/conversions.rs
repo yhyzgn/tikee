@@ -102,6 +102,8 @@ where
         processor_name: Set(Some(job_id.to_owned())),
         script_id: Set(None),
         enabled: Set(true),
+        canary_job_id: Set(None),
+        canary_percent: Set(0),
         created_at: Set(now.to_owned()),
         updated_at: Set(now.to_owned()),
     }

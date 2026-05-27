@@ -33,6 +33,7 @@ export interface AppRouteMeta {
 export const ROUTE_META = {
   dashboard: { path: '/dashboard', menuKey: '/dashboard', label: '总览', icon: <DashboardOutlined />, menu: true, group: 'main' },
   jobs: { path: '/jobs', menuKey: '/jobs', label: '任务', icon: <ThunderboltOutlined />, menu: true, group: 'main' },
+  jobTopology: { path: '/jobs/topology', menuKey: '/jobs', label: '任务拓扑', permission: { resource: 'jobs', action: 'read' }, menu: false },
   instances: { path: '/instances', menuKey: '/instances', label: '实例', icon: <DeploymentUnitOutlined />, menu: true, group: 'main' },
   workflows: { path: '/workflows', menuKey: '/workflows', label: '工作流', icon: <BranchesOutlined />, permission: { resource: 'workflows', action: 'read' }, menu: true, group: 'main' },
   workers: { path: '/workers', menuKey: '/workers', label: 'Worker 集群', icon: <ApiOutlined />, permission: { resource: 'workers', action: 'read' }, menu: true, group: 'main' },

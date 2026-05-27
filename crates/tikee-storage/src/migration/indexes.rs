@@ -2,10 +2,10 @@ use sea_orm_migration::prelude::*;
 
 use super::iden::{
     Apps, AuditLogs, AuthSessions, DispatchQueue, InstanceEvents, JobInstanceAttempts,
-    JobInstanceLogs, JobInstances, Jobs, Namespaces, OidcAuthStates, OidcIdentities, Permissions,
-    RaftAppliedCommands, RaftLogEntries, RaftMembers, RaftMembershipProposals, RaftMetadata,
-    RaftSnapshots, RolePermissions, Roles, ScriptVersions, Scripts, SdkApiKeys, Users,
-    WorkerLogicalInstances, WorkerPools, WorkerSessionEvents, WorkerSessions, WorkflowEdges,
+    JobInstanceLogs, JobInstances, JobVersions, Jobs, Namespaces, OidcAuthStates, OidcIdentities,
+    Permissions, RaftAppliedCommands, RaftLogEntries, RaftMembers, RaftMembershipProposals,
+    RaftMetadata, RaftSnapshots, RolePermissions, Roles, ScriptVersions, Scripts, SdkApiKeys,
+    Users, WorkerLogicalInstances, WorkerPools, WorkerSessionEvents, WorkerSessions, WorkflowEdges,
     WorkflowInstances, WorkflowNodeInstances, WorkflowNodes, WorkflowShards, Workflows,
 };
 
@@ -84,6 +84,17 @@ async fn create_job_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
             .table(JobInstances::Table)
             .col(JobInstances::JobId)
             .col(JobInstances::CreatedAt)
+            .to_owned(),
+    )
+    .await?;
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_job_versions_job_number")
+            .table(JobVersions::Table)
+            .col(JobVersions::JobId)
+            .col(JobVersions::VersionNumber)
+            .unique()
             .to_owned(),
     )
     .await?;

@@ -499,8 +499,28 @@ pub(super) enum Jobs {
     ProcessorName,
     ScriptId,
     Enabled,
+    CanaryJobId,
+    CanaryPercent,
     CreatedAt,
     UpdatedAt,
+}
+
+#[derive(DeriveIden)]
+pub(super) enum JobVersions {
+    Table,
+    Id,
+    JobId,
+    VersionNumber,
+    Name,
+    ScheduleType,
+    ScheduleExpr,
+    ProcessorName,
+    ScriptId,
+    Enabled,
+    CreatedBy,
+    ChangeReason,
+    RolledBackFromVersion,
+    CreatedAt,
 }
 
 #[derive(DeriveIden)]

@@ -13,6 +13,7 @@ mod auth;
 mod instance;
 mod job;
 mod job_repo;
+mod job_version;
 mod log;
 mod oidc;
 mod oidc_identity;
@@ -41,6 +42,7 @@ pub use auth::{
 pub use instance::{CreateJobInstance, JobInstanceRepository, JobInstanceSummary};
 pub use job::{CreateJob, JobSummary, UpdateJob};
 pub use job_repo::JobRepository;
+pub use job_version::{JobVersionRepository, JobVersionSummary};
 pub use log::{AppendJobInstanceLog, JobInstanceLogRepository, JobInstanceLogSummary};
 pub use oidc::{CreateOidcAuthState, OidcAuthStateRepository, OidcAuthStateSummary};
 pub use oidc_identity::{OidcIdentityRepository, OidcIdentitySummary, UpsertOidcIdentity};
@@ -84,13 +86,73 @@ mod tests {
         migration::Migrator,
         repository::{
             AppendJobInstanceLog, CreateJob, CreateJobInstance, CreateScript, RaftRepository,
-            RecordRaftAppliedCommand, ScriptRepository, UpdateScript, UpsertRaftLogEntry,
-            UpsertRaftMember, UpsertRaftMetadata, UpsertRaftSnapshot, VerifiedScriptReleaseGrants,
-            VerifiedScriptReleaseSignature,
+            RecordRaftAppliedCommand, ScriptRepository, UpdateJob, UpdateScript,
+            UpsertRaftLogEntry, UpsertRaftMember, UpsertRaftMetadata, UpsertRaftSnapshot,
+            VerifiedScriptReleaseGrants, VerifiedScriptReleaseSignature,
         },
     };
 
     use super::JobRepository;
+
+    #[tokio::test]
+    async fn job_version_history_tracks_updates_and_rollbacks() {
+        let db = crate::connect_and_migrate("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("sqlite memory db should connect: {error}"));
+        let repository = JobRepository::new(db);
+        let created = repository
+            .create_job(CreateJob {
+                created_by: Some("admin".to_owned()),
+                namespace: "default".to_owned(),
+                app: "billing".to_owned(),
+                name: "versioned".to_owned(),
+                schedule_type: "api".to_owned(),
+                schedule_expr: None,
+                processor_name: Some("demo.echo".to_owned()),
+                script_id: None,
+                enabled: true,
+                canary_job_id: None,
+                canary_percent: 0,
+            })
+            .await
+            .unwrap_or_else(|error| panic!("job should create: {error}"));
+        assert_eq!(created.version_number, 1);
+
+        let updated = repository
+            .update_job(
+                &created.id,
+                UpdateJob {
+                    updated_by: Some("editor".to_owned()),
+                    name: Some("versioned-v2".to_owned()),
+                    enabled: Some(false),
+                    ..UpdateJob::default()
+                },
+            )
+            .await
+            .unwrap_or_else(|error| panic!("job should update: {error}"))
+            .unwrap_or_else(|| panic!("updated job should exist"));
+        assert_eq!(updated.version_number, 2);
+
+        let rolled_back = repository
+            .rollback_job(&created.id, 1, Some("operator".to_owned()))
+            .await
+            .unwrap_or_else(|error| panic!("job should rollback: {error}"))
+            .unwrap_or_else(|| panic!("rolled back job should exist"));
+        assert_eq!(rolled_back.version_number, 3);
+        assert_eq!(rolled_back.name, "versioned");
+        assert!(rolled_back.enabled);
+
+        let versions = repository
+            .versions()
+            .list_versions(&created.id)
+            .await
+            .unwrap_or_else(|error| panic!("versions should list: {error}"));
+        assert_eq!(versions.len(), 3);
+        assert_eq!(versions[0].change_reason, "rollback");
+        assert_eq!(versions[0].rolled_back_from_version, Some(1));
+        assert_eq!(versions[1].created_by, "editor");
+        assert_eq!(versions[2].created_by, "admin");
+    }
 
     #[tokio::test]
     async fn worker_lifecycle_repository_replaces_generations_and_fences_stale_heartbeats() {
@@ -777,6 +839,7 @@ mod tests {
 
         let created = repository
             .create_job(CreateJob {
+                created_by: None,
                 namespace: "default".to_owned(),
                 app: "billing".to_owned(),
                 name: "nightly".to_owned(),
@@ -785,6 +848,8 @@ mod tests {
                 processor_name: None,
                 script_id: None,
                 enabled: true,
+                canary_job_id: None,
+                canary_percent: 0,
             })
             .await
             .unwrap_or_else(|error| panic!("job should be created: {error}"));
@@ -818,6 +883,7 @@ mod tests {
 
         let job = jobs
             .create_job(CreateJob {
+                created_by: None,
                 namespace: "default".to_owned(),
                 app: "billing".to_owned(),
                 name: "manual".to_owned(),
@@ -826,6 +892,8 @@ mod tests {
                 processor_name: None,
                 script_id: None,
                 enabled: true,
+                canary_job_id: None,
+                canary_percent: 0,
             })
             .await
             .unwrap_or_else(|error| panic!("job should be created: {error}"));
@@ -873,6 +941,7 @@ mod tests {
         let logs = super::JobInstanceLogRepository::new(db);
         let job = jobs
             .create_job(CreateJob {
+                created_by: None,
                 namespace: "default".to_owned(),
                 app: "billing".to_owned(),
                 name: "manual".to_owned(),
@@ -881,6 +950,8 @@ mod tests {
                 processor_name: None,
                 script_id: None,
                 enabled: true,
+                canary_job_id: None,
+                canary_percent: 0,
             })
             .await
             .unwrap_or_else(|error| panic!("job should be created: {error}"));
@@ -1031,6 +1102,7 @@ mod tests {
         let workflows = super::WorkflowRepository::new(db.clone());
         let first_job = jobs
             .create_job(CreateJob {
+                created_by: None,
                 namespace: "default".to_owned(),
                 app: "billing".to_owned(),
                 name: "first".to_owned(),
@@ -1039,11 +1111,14 @@ mod tests {
                 processor_name: None,
                 script_id: None,
                 enabled: true,
+                canary_job_id: None,
+                canary_percent: 0,
             })
             .await
             .unwrap_or_else(|error| panic!("first job should be created: {error}"));
         let second_job = jobs
             .create_job(CreateJob {
+                created_by: None,
                 namespace: "default".to_owned(),
                 app: "billing".to_owned(),
                 name: "second".to_owned(),
@@ -1052,6 +1127,8 @@ mod tests {
                 processor_name: None,
                 script_id: None,
                 enabled: true,
+                canary_job_id: None,
+                canary_percent: 0,
             })
             .await
             .unwrap_or_else(|error| panic!("second job should be created: {error}"));
@@ -1150,6 +1227,7 @@ mod tests {
         let workflows = super::WorkflowRepository::new(db);
         let job = jobs
             .create_job(CreateJob {
+                created_by: None,
                 namespace: "default".to_owned(),
                 app: "billing".to_owned(),
                 name: "terminal-close".to_owned(),
@@ -1158,6 +1236,8 @@ mod tests {
                 processor_name: None,
                 script_id: None,
                 enabled: true,
+                canary_job_id: None,
+                canary_percent: 0,
             })
             .await
             .unwrap_or_else(|error| panic!("job should be created: {error}"));
@@ -1202,6 +1282,7 @@ mod tests {
         let workflows = super::WorkflowRepository::new(db.clone());
         let job = jobs
             .create_job(CreateJob {
+                created_by: None,
                 namespace: "default".to_owned(),
                 app: "billing".to_owned(),
                 name: "claimable".to_owned(),
@@ -1210,6 +1291,8 @@ mod tests {
                 processor_name: None,
                 script_id: None,
                 enabled: true,
+                canary_job_id: None,
+                canary_percent: 0,
             })
             .await
             .unwrap_or_else(|error| panic!("job should be created: {error}"));
@@ -1300,6 +1383,7 @@ mod tests {
         let workflows = super::WorkflowRepository::new(db);
         let reduce_job = jobs
             .create_job(CreateJob {
+                created_by: None,
                 namespace: "default".to_owned(),
                 app: "billing".to_owned(),
                 name: "reduce".to_owned(),
@@ -1308,6 +1392,8 @@ mod tests {
                 processor_name: None,
                 script_id: None,
                 enabled: true,
+                canary_job_id: None,
+                canary_percent: 0,
             })
             .await
             .unwrap_or_else(|error| panic!("job should be created: {error}"));
@@ -1424,6 +1510,7 @@ mod tests {
         let workflows = super::WorkflowRepository::new(db);
         let child_job = jobs
             .create_job(CreateJob {
+                created_by: None,
                 namespace: "default".to_owned(),
                 app: "billing".to_owned(),
                 name: "child-job".to_owned(),
@@ -1432,6 +1519,8 @@ mod tests {
                 processor_name: None,
                 script_id: None,
                 enabled: true,
+                canary_job_id: None,
+                canary_percent: 0,
             })
             .await
             .unwrap_or_else(|error| panic!("job should be created: {error}"));

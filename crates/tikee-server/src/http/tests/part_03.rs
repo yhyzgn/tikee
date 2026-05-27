@@ -8,6 +8,7 @@
         let instances = JobInstanceRepository::new(db.clone());
         let job = jobs
             .create_job(CreateJob {
+                created_by: None,
                 namespace: "default".to_owned(),
                 app: "billing".to_owned(),
                 name: "metrics-job".to_owned(),
@@ -16,6 +17,8 @@
                 processor_name: None,
                 script_id: None,
                 enabled: true,
+                canary_job_id: None,
+                canary_percent: 0,
             })
             .await
             .unwrap_or_else(|error| panic!("job should create: {error}"));
@@ -254,6 +257,559 @@
         );
     }
 
+
+    #[tokio::test]
+    async fn job_topology_api_discovers_workflow_dependencies_and_unresolved_refs() {
+        let db = connect_and_migrate("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("test storage should initialize: {error}"));
+        let jobs = JobRepository::new(db.clone());
+        let upstream = jobs
+            .create_job(CreateJob {
+                created_by: Some("admin".to_owned()),
+                namespace: "default".to_owned(),
+                app: "billing".to_owned(),
+                name: "extract".to_owned(),
+                schedule_type: "api".to_owned(),
+                schedule_expr: None,
+                processor_name: Some("billing.extract".to_owned()),
+                script_id: None,
+                enabled: true,
+                canary_job_id: None,
+                canary_percent: 0,
+            })
+            .await
+            .unwrap_or_else(|error| panic!("upstream job should create: {error}"));
+        let downstream = jobs
+            .create_job(CreateJob {
+                created_by: Some("admin".to_owned()),
+                namespace: "default".to_owned(),
+                app: "billing".to_owned(),
+                name: "load".to_owned(),
+                schedule_type: "api".to_owned(),
+                schedule_expr: None,
+                processor_name: Some("billing.load".to_owned()),
+                script_id: None,
+                enabled: true,
+                canary_job_id: None,
+                canary_percent: 0,
+            })
+            .await
+            .unwrap_or_else(|error| panic!("downstream job should create: {error}"));
+        let workflows = WorkflowRepository::new(db.clone());
+        let workflow = workflows
+            .create_workflow(CreateWorkflow {
+                name: "billing-etl".to_owned(),
+                definition: WorkflowDefinition {
+                    nodes: vec![
+                        WorkflowNodeSpec {
+                            key: "extract".to_owned(),
+                            name: Some("Extract".to_owned()),
+                            kind: Some("job".to_owned()),
+                            job_id: Some(upstream.id.clone()),
+                            processor_name: None,
+                            child_workflow_id: None,
+                            map_items: None,
+                            config: None,
+                        },
+                        WorkflowNodeSpec {
+                            key: "load".to_owned(),
+                            name: Some("Load".to_owned()),
+                            kind: Some("job".to_owned()),
+                            job_id: Some(downstream.id.clone()),
+                            processor_name: None,
+                            child_workflow_id: None,
+                            map_items: None,
+                            config: None,
+                        },
+                        WorkflowNodeSpec {
+                            key: "notify".to_owned(),
+                            name: Some("Notify".to_owned()),
+                            kind: Some("job".to_owned()),
+                            job_id: Some("job_missing_notify".to_owned()),
+                            processor_name: None,
+                            child_workflow_id: None,
+                            map_items: None,
+                            config: None,
+                        },
+                    ],
+                    edges: vec![
+                        tikee_storage::WorkflowEdgeSpec {
+                            from: "extract".to_owned(),
+                            to: "load".to_owned(),
+                            condition: Some("on_success".to_owned()),
+                        },
+                        tikee_storage::WorkflowEdgeSpec {
+                            from: "load".to_owned(),
+                            to: "notify".to_owned(),
+                            condition: Some("always".to_owned()),
+                        },
+                    ],
+                },
+                created_by: "admin".to_owned(),
+            })
+            .await
+            .unwrap_or_else(|error| panic!("workflow should create: {error}"));
+
+        let app = router_with_state(AppState::new(
+            jobs,
+            JobInstanceRepository::new(db.clone()),
+            JobInstanceLogRepository::new(db.clone()),
+            JobInstanceAttemptRepository::new(db.clone()),
+            UserRepository::new(db.clone()),
+            ScriptRepository::new(db.clone()),
+            workflows,
+            AuditLogRepository::new(db.clone()),
+            crate::tunnel::WorkerRegistry::default(),
+            StandaloneCoordinator::shared("test-node"),
+        ));
+
+        let response = app
+            .clone()
+            .oneshot(admin_request_builder(app, "GET", "/api/v1/jobs/topology").await)
+            .await
+            .unwrap_or_else(|error| panic!("topology route should respond: {error}"));
+        let status = response.status();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+
+        assert!(status.is_success(), "unexpected status {status}: {json}");
+        assert_eq!(json["code"], 0);
+        assert!(
+            json["data"]["nodes"]
+                .as_array()
+                .unwrap_or_else(|| panic!("nodes should be array"))
+                .iter()
+                .any(|node| node["id"] == upstream.id && node["type"] == "job")
+        );
+        assert!(
+            json["data"]["nodes"]
+                .as_array()
+                .unwrap_or_else(|| panic!("nodes should be array"))
+                .iter()
+                .any(|node| node["id"] == workflow.id && node["type"] == "workflow")
+        );
+        assert!(
+            json["data"]["edges"]
+                .as_array()
+                .unwrap_or_else(|| panic!("edges should be array"))
+                .iter()
+                .any(|edge| edge["from"] == upstream.id
+                    && edge["to"] == downstream.id
+                    && edge["condition"] == "on_success")
+        );
+        assert!(
+            json["data"]["unresolved"]
+                .as_array()
+                .unwrap_or_else(|| panic!("unresolved should be array"))
+                .iter()
+                .any(|item| item["workflowId"] == workflow.id
+                    && item["nodeKey"] == "notify"
+                    && item["missingJobId"] == "job_missing_notify")
+        );
+    }
+
+
+    #[tokio::test]
+    async fn inbound_webhook_event_source_triggers_job_and_records_payload_log() {
+        let db = connect_and_migrate("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("test storage should initialize: {error}"));
+        let jobs = JobRepository::new(db.clone());
+        let job = jobs
+            .create_job(CreateJob {
+                created_by: Some("admin".to_owned()),
+                namespace: "default".to_owned(),
+                app: "billing".to_owned(),
+                name: "webhook-target".to_owned(),
+                schedule_type: "api".to_owned(),
+                schedule_expr: None,
+                processor_name: Some("billing.webhook".to_owned()),
+                script_id: None,
+                enabled: true,
+                canary_job_id: None,
+                canary_percent: 0,
+            })
+            .await
+            .unwrap_or_else(|error| panic!("job should create: {error}"));
+        let instances = JobInstanceRepository::new(db.clone());
+        let logs = JobInstanceLogRepository::new(db.clone());
+        let app = router_with_state(AppState::new(
+            jobs,
+            instances.clone(),
+            logs.clone(),
+            JobInstanceAttemptRepository::new(db.clone()),
+            UserRepository::new(db.clone()),
+            ScriptRepository::new(db.clone()),
+            WorkflowRepository::new(db.clone()),
+            AuditLogRepository::new(db.clone()),
+            crate::tunnel::WorkerRegistry::default(),
+            StandaloneCoordinator::shared("test-node"),
+        ));
+
+        let response = app
+            .clone()
+            .oneshot(
+                admin_json_request_builder(
+                    app,
+                    "POST",
+                    format!("/api/v1/events/webhooks/{}:trigger", job.id),
+                    r#"{"source":"gitlab","eventType":"push","payload":{"ref":"main","sha":"abc123"}}"#,
+                )
+                .await,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("webhook route should respond: {error}"));
+        let status = response.status();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+
+        assert!(status.is_success(), "unexpected status {status}: {json}");
+        assert_eq!(json["code"], 0);
+        assert_eq!(json["data"]["accepted"], true);
+        assert_eq!(json["data"]["jobId"], job.id);
+        assert_eq!(json["data"]["triggerType"], "webhook");
+        let instance_id = json["data"]["instanceId"]
+            .as_str()
+            .unwrap_or_else(|| panic!("instanceId should be returned"));
+        let listed = instances
+            .list_by_job(&job.id)
+            .await
+            .unwrap_or_else(|error| panic!("instances should list: {error}"));
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].trigger_type, TriggerType::Webhook);
+        let instance_logs = logs
+            .list_by_instance(instance_id)
+            .await
+            .unwrap_or_else(|error| panic!("logs should list: {error}"));
+        assert!(
+            instance_logs
+                .iter()
+                .any(|log| log.message.contains("webhook_event_source")
+                    && log.message.contains("abc123")),
+            "webhook payload should be recorded in instance logs: {instance_logs:?}"
+        );
+    }
+
+
+    #[tokio::test]
+    async fn scheduling_advice_reports_worker_capability_readiness() {
+        let db = connect_and_migrate("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("test storage should initialize: {error}"));
+        let jobs = JobRepository::new(db.clone());
+        let job = jobs
+            .create_job(CreateJob {
+                created_by: Some("admin".to_owned()),
+                namespace: "default".to_owned(),
+                app: "billing".to_owned(),
+                name: "advice-target".to_owned(),
+                schedule_type: "api".to_owned(),
+                schedule_expr: None,
+                processor_name: Some("billing.advice".to_owned()),
+                script_id: None,
+                enabled: true,
+                canary_job_id: None,
+                canary_percent: 0,
+            })
+            .await
+            .unwrap_or_else(|error| panic!("job should create: {error}"));
+        let registry = crate::tunnel::WorkerRegistry::default();
+        let app = router_with_state(AppState::new(
+            jobs,
+            JobInstanceRepository::new(db.clone()),
+            JobInstanceLogRepository::new(db.clone()),
+            JobInstanceAttemptRepository::new(db.clone()),
+            UserRepository::new(db.clone()),
+            ScriptRepository::new(db.clone()),
+            WorkflowRepository::new(db.clone()),
+            AuditLogRepository::new(db.clone()),
+            registry.clone(),
+            StandaloneCoordinator::shared("test-node"),
+        ));
+
+        let not_ready = app
+            .clone()
+            .oneshot(
+                admin_request_builder(
+                    app.clone(),
+                    "GET",
+                    format!("/api/v1/jobs/{}/scheduling-advice", job.id),
+                )
+                .await,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("advice route should respond: {error}"));
+        let body = axum::body::to_bytes(not_ready.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+        assert_eq!(json["data"]["ready"], false);
+        assert_eq!(json["data"]["severity"], "error");
+        assert_eq!(json["data"]["requiredCapability"], "processor:billing.advice");
+
+        let (tx, _rx) = tokio::sync::mpsc::channel(1);
+        let mut worker = worker("advice-worker", "billing");
+        worker.capabilities = vec!["processor:billing.advice".to_owned()];
+        registry.register(worker, tx).await;
+
+        let ready = app
+            .clone()
+            .oneshot(
+                admin_request_builder(
+                    app,
+                    "GET",
+                    format!("/api/v1/jobs/{}/scheduling-advice", job.id),
+                )
+                .await,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("advice route should respond: {error}"));
+        let body = axum::body::to_bytes(ready.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+        assert_eq!(json["data"]["ready"], true);
+        assert_eq!(json["data"]["severity"], "ok");
+        assert_eq!(json["data"]["eligibleWorkers"].as_array().map(Vec::len), Some(1));
+    }
+
+
+    #[tokio::test]
+    async fn job_trigger_routes_to_canary_job_when_percent_is_full() {
+        let db = connect_and_migrate("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("test storage should initialize: {error}"));
+        let jobs = JobRepository::new(db.clone());
+        let canary = jobs
+            .create_job(CreateJob {
+                created_by: Some("admin".to_owned()),
+                namespace: "default".to_owned(),
+                app: "billing".to_owned(),
+                name: "canary-target".to_owned(),
+                schedule_type: "api".to_owned(),
+                schedule_expr: None,
+                processor_name: Some("billing.canary".to_owned()),
+                script_id: None,
+                enabled: true,
+                canary_job_id: None,
+                canary_percent: 0,
+            })
+            .await
+            .unwrap_or_else(|error| panic!("canary job should create: {error}"));
+        let main = jobs
+            .create_job(CreateJob {
+                created_by: Some("admin".to_owned()),
+                namespace: "default".to_owned(),
+                app: "billing".to_owned(),
+                name: "main-target".to_owned(),
+                schedule_type: "api".to_owned(),
+                schedule_expr: None,
+                processor_name: Some("billing.main".to_owned()),
+                script_id: None,
+                enabled: true,
+                canary_job_id: Some(canary.id.clone()),
+                canary_percent: 100,
+            })
+            .await
+            .unwrap_or_else(|error| panic!("main job should create: {error}"));
+        let instances = JobInstanceRepository::new(db.clone());
+        let app = router_with_state(AppState::new(
+            jobs,
+            instances.clone(),
+            JobInstanceLogRepository::new(db.clone()),
+            JobInstanceAttemptRepository::new(db.clone()),
+            UserRepository::new(db.clone()),
+            ScriptRepository::new(db.clone()),
+            WorkflowRepository::new(db.clone()),
+            AuditLogRepository::new(db.clone()),
+            crate::tunnel::WorkerRegistry::default(),
+            StandaloneCoordinator::shared("test-node"),
+        ));
+
+        let response = app
+            .clone()
+            .oneshot(
+                admin_json_request_builder(
+                    app,
+                    "POST",
+                    format!("/api/v1/jobs/{}:trigger", main.id),
+                    r#"{"triggerType":"api","executionMode":"single"}"#,
+                )
+                .await,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("trigger route should respond: {error}"));
+        let status = response.status();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+
+        assert!(status.is_success(), "unexpected status {status}: {json}");
+        assert_eq!(json["data"]["jobId"], canary.id);
+        assert_eq!(json["data"]["canaryRouting"]["enabled"], true);
+        assert_eq!(json["data"]["canaryRouting"]["routed"], true);
+        assert_eq!(json["data"]["canaryRouting"]["originalJobId"], main.id);
+        assert_eq!(json["data"]["canaryRouting"]["routedJobId"], canary.id);
+        assert_eq!(instances.list_by_job(&main.id).await.unwrap().len(), 0);
+        assert_eq!(instances.list_by_job(&canary.id).await.unwrap().len(), 1);
+    }
+
+
+    #[tokio::test]
+    async fn job_impact_api_reports_cross_workflow_upstream_and_downstream() {
+        let db = connect_and_migrate("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("test storage should initialize: {error}"));
+        let jobs = JobRepository::new(db.clone());
+        let extract = jobs
+            .create_job(CreateJob { created_by: Some("admin".to_owned()), namespace: "default".to_owned(), app: "billing".to_owned(), name: "extract".to_owned(), schedule_type: "api".to_owned(), schedule_expr: None, processor_name: Some("billing.extract".to_owned()), script_id: None, enabled: true, canary_job_id: None, canary_percent: 0 })
+            .await
+            .unwrap_or_else(|error| panic!("extract job should create: {error}"));
+        let normalize = jobs
+            .create_job(CreateJob { created_by: Some("admin".to_owned()), namespace: "default".to_owned(), app: "billing".to_owned(), name: "normalize".to_owned(), schedule_type: "api".to_owned(), schedule_expr: None, processor_name: Some("billing.normalize".to_owned()), script_id: None, enabled: true, canary_job_id: None, canary_percent: 0 })
+            .await
+            .unwrap_or_else(|error| panic!("normalize job should create: {error}"));
+        let publish = jobs
+            .create_job(CreateJob { created_by: Some("admin".to_owned()), namespace: "default".to_owned(), app: "billing".to_owned(), name: "publish".to_owned(), schedule_type: "api".to_owned(), schedule_expr: None, processor_name: Some("billing.publish".to_owned()), script_id: None, enabled: true, canary_job_id: None, canary_percent: 0 })
+            .await
+            .unwrap_or_else(|error| panic!("publish job should create: {error}"));
+        let workflows = WorkflowRepository::new(db.clone());
+        let first = workflows
+            .create_workflow(CreateWorkflow {
+                name: "billing-ingest".to_owned(),
+                definition: WorkflowDefinition {
+                    nodes: vec![workflow_node("extract", &extract.id), workflow_node("normalize", &normalize.id)],
+                    edges: vec![tikee_storage::WorkflowEdgeSpec { from: "extract".to_owned(), to: "normalize".to_owned(), condition: Some("on_success".to_owned()) }],
+                },
+                created_by: "admin".to_owned(),
+            })
+            .await
+            .unwrap_or_else(|error| panic!("first workflow should create: {error}"));
+        let second = workflows
+            .create_workflow(CreateWorkflow {
+                name: "billing-publish".to_owned(),
+                definition: WorkflowDefinition {
+                    nodes: vec![workflow_node("normalize", &normalize.id), workflow_node("publish", &publish.id)],
+                    edges: vec![tikee_storage::WorkflowEdgeSpec { from: "normalize".to_owned(), to: "publish".to_owned(), condition: Some("always".to_owned()) }],
+                },
+                created_by: "admin".to_owned(),
+            })
+            .await
+            .unwrap_or_else(|error| panic!("second workflow should create: {error}"));
+        let app = router_with_state(AppState::new(
+            jobs,
+            JobInstanceRepository::new(db.clone()),
+            JobInstanceLogRepository::new(db.clone()),
+            JobInstanceAttemptRepository::new(db.clone()),
+            UserRepository::new(db.clone()),
+            ScriptRepository::new(db.clone()),
+            workflows,
+            AuditLogRepository::new(db.clone()),
+            crate::tunnel::WorkerRegistry::default(),
+            StandaloneCoordinator::shared("test-node"),
+        ));
+
+        let response = app
+            .clone()
+            .oneshot(admin_request_builder(app, "GET", format!("/api/v1/jobs/{}/impact", normalize.id)).await)
+            .await
+            .unwrap_or_else(|error| panic!("impact route should respond: {error}"));
+        let status = response.status();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+
+        assert!(status.is_success(), "unexpected status {status}: {json}");
+        assert_eq!(json["data"]["targetJob"]["id"], normalize.id);
+        assert!(json["data"]["referencingWorkflows"].as_array().unwrap().iter().any(|item| item["id"] == first.id));
+        assert!(json["data"]["referencingWorkflows"].as_array().unwrap().iter().any(|item| item["id"] == second.id));
+        assert!(json["data"]["upstreamJobs"].as_array().unwrap().iter().any(|item| item["id"] == extract.id));
+        assert!(json["data"]["downstreamJobs"].as_array().unwrap().iter().any(|item| item["id"] == publish.id));
+        assert_eq!(json["data"]["riskSummary"]["workflowCount"], 2);
+    }
+
+    #[tokio::test]
+    async fn workflow_replay_api_returns_instance_events_and_graph_bundle() {
+        let db = connect_and_migrate("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("test storage should initialize: {error}"));
+        let jobs = JobRepository::new(db.clone());
+        let job = jobs
+            .create_job(CreateJob { created_by: Some("admin".to_owned()), namespace: "default".to_owned(), app: "billing".to_owned(), name: "replay-job".to_owned(), schedule_type: "api".to_owned(), schedule_expr: None, processor_name: Some("billing.replay".to_owned()), script_id: None, enabled: true, canary_job_id: None, canary_percent: 0 })
+            .await
+            .unwrap_or_else(|error| panic!("job should create: {error}"));
+        let workflows = WorkflowRepository::new(db.clone());
+        let workflow = workflows
+            .create_workflow(CreateWorkflow {
+                name: "replay-flow".to_owned(),
+                definition: WorkflowDefinition { nodes: vec![workflow_node("run", &job.id)], edges: vec![] },
+                created_by: "admin".to_owned(),
+            })
+            .await
+            .unwrap_or_else(|error| panic!("workflow should create: {error}"));
+        let instance = workflows
+            .run_workflow(&workflow.id, "api")
+            .await
+            .unwrap_or_else(|error| panic!("workflow should run: {error}"))
+            .unwrap_or_else(|| panic!("workflow should exist"));
+        let app = router_with_state(AppState::new(
+            jobs,
+            JobInstanceRepository::new(db.clone()),
+            JobInstanceLogRepository::new(db.clone()),
+            JobInstanceAttemptRepository::new(db.clone()),
+            UserRepository::new(db.clone()),
+            ScriptRepository::new(db.clone()),
+            workflows,
+            AuditLogRepository::new(db.clone()),
+            crate::tunnel::WorkerRegistry::default(),
+            StandaloneCoordinator::shared("test-node"),
+        ));
+
+        let response = app
+            .clone()
+            .oneshot(admin_request_builder(app, "GET", format!("/api/v1/workflow-instances/{}/replay", instance.id)).await)
+            .await
+            .unwrap_or_else(|error| panic!("replay route should respond: {error}"));
+        let status = response.status();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+
+        assert!(status.is_success(), "unexpected status {status}: {json}");
+        assert_eq!(json["data"]["instance"]["id"], instance.id);
+        assert_eq!(json["data"]["workflow"]["id"], workflow.id);
+        assert!(json["data"]["events"].as_array().is_some_and(|events| !events.is_empty()));
+        assert!(json["data"]["graph"]["nodes"].as_array().is_some_and(|nodes| nodes.len() == 1));
+    }
+
+    fn workflow_node(key: &str, job_id: &str) -> WorkflowNodeSpec {
+        WorkflowNodeSpec {
+            key: key.to_owned(),
+            name: Some(key.to_owned()),
+            kind: Some("job".to_owned()),
+            job_id: Some(job_id.to_owned()),
+            processor_name: None,
+            child_workflow_id: None,
+            map_items: None,
+            config: None,
+        }
+    }
+
     #[tokio::test]
     async fn script_governance_audit_logs_filter_by_failure_reason() {
         let db = connect_and_migrate("sqlite::memory:")
@@ -264,6 +820,7 @@
         let audit = AuditLogRepository::new(db.clone());
         let job = jobs
             .create_job(CreateJob {
+                created_by: None,
                 namespace: "default".to_owned(),
                 app: "billing".to_owned(),
                 name: "governed-script".to_owned(),
@@ -272,6 +829,8 @@
                 processor_name: None,
                 script_id: Some("script-missing-runtime".to_owned()),
                 enabled: true,
+                canary_job_id: None,
+                canary_percent: 0,
             })
             .await
             .unwrap_or_else(|error| panic!("job should create: {error}"));
@@ -320,7 +879,6 @@
             )
             .await
             .unwrap_or_else(|error| panic!("router should respond: {error}"));
-        assert!(response.status().is_success());
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .unwrap_or_else(|error| panic!("body should collect: {error}"));
@@ -374,7 +932,6 @@
             )
             .await
             .unwrap_or_else(|error| panic!("router should respond: {error}"));
-        assert!(response.status().is_success());
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .unwrap_or_else(|error| panic!("body should collect: {error}"));
@@ -384,6 +941,54 @@
         assert_eq!(me["data"]["username"], "tikee_init");
     }
 
+
+
+    #[tokio::test]
+    async fn job_version_api_lists_and_rolls_back_snapshots() {
+        let app = router().await;
+        let admin = admin_token(app.clone()).await;
+        let created = post_json_raw(
+            app.clone(),
+            "/api/v1/jobs",
+            r#"{"namespace":"default","app":"billing","name":"versioned-job","scheduleType":"api","processorName":"demo.echo"}"#,
+            Some(&admin),
+        )
+        .await;
+        let job_id = created["data"]["id"]
+            .as_str()
+            .unwrap_or_else(|| panic!("job id should be present"))
+            .to_owned();
+        assert_eq!(created["data"]["versionNumber"], 1);
+
+        let updated = patch_json_raw(
+            app.clone(),
+            &format!("/api/v1/jobs/{job_id}"),
+            r#"{"name":"versioned-job-v2","enabled":false}"#,
+            &admin,
+        )
+        .await;
+        assert_eq!(updated["data"]["versionNumber"], 2);
+        assert_eq!(updated["data"]["enabled"], false);
+
+        let versions = get_json_with_auth(app.clone(), &format!("/api/v1/jobs/{job_id}/versions"), &admin).await;
+        let items = versions["data"]["items"]
+            .as_array()
+            .unwrap_or_else(|| panic!("versions should be an array"));
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0]["version_number"], 2);
+        assert_eq!(items[1]["version_number"], 1);
+
+        let rolled_back = post_json_raw(
+            app,
+            &format!("/api/v1/jobs/{job_id}/rollback"),
+            r#"{"versionNumber":1}"#,
+            Some(&admin),
+        )
+        .await;
+        assert_eq!(rolled_back["data"]["versionNumber"], 3);
+        assert_eq!(rolled_back["data"]["name"], "versioned-job");
+        assert_eq!(rolled_back["data"]["enabled"], true);
+    }
 
     #[tokio::test]
     async fn sdk_api_key_lifecycle_uses_header_and_app_scope() {
@@ -401,6 +1006,49 @@
         assert_sdk_api_key_list_still_contains_updated_key(app.clone(), &admin, &key_id).await;
         revoke_sdk_api_key(app.clone(), &admin, &key_id).await;
         assert_revoked_sdk_key_rejected(app, &api_key).await;
+    }
+
+
+    async fn patch_json_raw(app: axum::Router, uri: &str, body: &str, token: &str) -> Value {
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("PATCH")
+                    .uri(uri)
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(body.to_owned()))
+                    .unwrap_or_else(|error| panic!("request should build: {error}")),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("router should respond: {error}"));
+        let status = response.status();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let json: Value = serde_json::from_slice(&body).unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+        assert!(status.is_success(), "unexpected status {status}: {json}");
+        json
+    }
+
+    async fn get_json_with_auth(app: axum::Router, uri: &str, token: &str) -> Value {
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri(uri)
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap_or_else(|error| panic!("request should build: {error}")),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("router should respond: {error}"));
+        let status = response.status();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let json: Value = serde_json::from_slice(&body).unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+        assert!(status.is_success(), "unexpected status {status}: {json}");
+        json
     }
 
     async fn create_billing_sdk_api_key(app: axum::Router, admin: &str) -> (String, String) {
@@ -1033,7 +1681,6 @@
             )
             .await
             .unwrap_or_else(|error| panic!("router should respond: {error}"));
-        assert!(response.status().is_success());
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .unwrap_or_else(|error| panic!("body should collect: {error}"));

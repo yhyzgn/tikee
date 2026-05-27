@@ -1,13 +1,16 @@
-import { Button, Card, Drawer, Form, Input, InputNumber, Popconfirm, Select, Space, Switch, Table, Tag, Typography, message } from 'antd';
+import { Alert, Button, Card, Drawer, Form, Input, InputNumber, Popconfirm, Select, Space, Switch, Table, Tag, Timeline, Typography, message } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
-import { createJob, deleteJob, listJobs, listScripts, listWorkers, triggerJob, updateJob, type CreateJobRequest, type JobSummary, type ScriptSummary, type UpdateJobRequest, type WorkerSummary } from '../api/client';
+import { createJob, deleteJob, getJobSchedulingAdvice, listJobs, listJobVersions, listScripts, listWorkers, rollbackJob, triggerJob, updateJob, type CreateJobRequest, type JobSchedulingAdvice, type JobSummary, type JobVersionSummary, type ScriptSummary, type UpdateJobRequest, type WorkerSummary } from '../api/client';
 import { PermissionGate, useCan } from '../components/Permission';
+import { ROUTE_META } from '../routes';
 import { useUrlQueryState } from '../hooks/useUrlQueryState';
 import { TABLE_PAGE_SIZE_OPTIONS, usePersistentTablePageSize } from '../utils/pagination';
 
 export function JobsPage() {
+  const navigate = useNavigate();
   const canWriteJobs = useCan('jobs', 'write');
   const canExecuteInstances = useCan('instances', 'execute');
   const [pageSize, setPageSize] = usePersistentTablePageSize();
@@ -21,6 +24,12 @@ export function JobsPage() {
   const [editForm] = Form.useForm<UpdateJobRequest & { executorKind?: 'sdk' | 'script'; fixedRateValue?: number; fixedRateUnit?: string }>();
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<JobSummary | null>(null);
+  const [versionJob, setVersionJob] = useState<JobSummary | null>(null);
+  const [jobVersions, setJobVersions] = useState<JobVersionSummary[]>([]);
+  const [versionsLoading, setVersionsLoading] = useState(false);
+  const [adviceJob, setAdviceJob] = useState<JobSummary | null>(null);
+  const [schedulingAdvice, setSchedulingAdvice] = useState<JobSchedulingAdvice | null>(null);
+  const [adviceLoading, setAdviceLoading] = useState(false);
   const [createProcessorSearch, setCreateProcessorSearch] = useState('');
   const [editProcessorSearch, setEditProcessorSearch] = useState('');
 
@@ -83,7 +92,7 @@ export function JobsPage() {
   const openCreateDrawer = () => {
     form.resetFields();
     setCreateProcessorSearch('');
-    form.setFieldsValue({ namespace: 'default', app: 'default', scheduleType: 'api', enabled: true, fixedRateUnit: 's', executorKind: 'sdk' });
+    form.setFieldsValue({ namespace: 'default', app: 'default', scheduleType: 'api', enabled: true, fixedRateUnit: 's', executorKind: 'sdk', canaryPercent: 0 });
     setCreateDrawerOpen(true);
   };
 
@@ -99,6 +108,8 @@ export function JobsPage() {
       executorKind: job.scriptId ? 'script' : 'sdk',
       processorName: job.processorName ?? undefined,
       scriptId: job.scriptId ?? undefined,
+      canaryJobId: job.canaryJobId ?? undefined,
+      canaryPercent: job.canaryPercent ?? 0,
       enabled: job.enabled,
     });
   };
@@ -129,6 +140,35 @@ export function JobsPage() {
     }
   };
 
+
+  const openVersionDrawer = async (job: JobSummary) => {
+    setVersionJob(job);
+    setVersionsLoading(true);
+    try {
+      const page = await listJobVersions(job.id);
+      setJobVersions(page.items);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '加载版本历史失败');
+      setJobVersions([]);
+    } finally {
+      setVersionsLoading(false);
+    }
+  };
+
+  const handleRollback = async (version: JobVersionSummary) => {
+    if (!versionJob) return;
+    if (!canWriteJobs) { message.error('当前账号无权限回滚任务'); return; }
+    try {
+      const updated = await rollbackJob(versionJob.id, version.version_number);
+      setJobs((current) => current.map((item) => item.id === updated.id ? updated : item));
+      setVersionJob(updated);
+      await openVersionDrawer(updated);
+      message.success(`已回滚到版本 v${version.version_number}`);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '回滚任务失败');
+    }
+  };
+
   const handleDelete = async (job: JobSummary) => {
     if (!canWriteJobs) { message.error('当前账号无权限删除任务'); return; }
     try {
@@ -137,6 +177,19 @@ export function JobsPage() {
       await load();
     } catch (err) {
       message.error(err instanceof Error ? err.message : '删除任务失败');
+    }
+  };
+
+  const openAdviceDrawer = async (job: JobSummary) => {
+    setAdviceJob(job);
+    setAdviceLoading(true);
+    try {
+      setSchedulingAdvice(await getJobSchedulingAdvice(job.id));
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '加载调度建议失败');
+      setSchedulingAdvice(null);
+    } finally {
+      setAdviceLoading(false);
     }
   };
 
@@ -152,7 +205,7 @@ export function JobsPage() {
   const columns: ColumnsType<JobSummary> = [
     { title: 'Name', dataIndex: 'name' },
     { title: 'Namespace / App', render: (_, job) => <Space direction="vertical" size={0}><strong>{job.namespace}</strong><Typography.Text type="secondary" style={{ fontSize: 12 }}>{job.app}</Typography.Text></Space> },
-    { title: 'Schedule', dataIndex: 'scheduleType', render: (value: string) => <Tag color="blue" className="soft-tag">{value}</Tag> },
+    { title: 'Schedule', dataIndex: 'scheduleType', render: (value: string, job) => <Space><Tag color="blue" className="soft-tag">{value}</Tag><Tag>v{job.versionNumber}</Tag>{job.canaryPercent > 0 ? <Tag color="orange">canary {job.canaryPercent}%</Tag> : null}</Space> },
     { title: '执行器', render: (_, job) => job.scriptId ? <Tag color="purple">脚本 · {job.scriptId}</Tag> : <Typography.Text code>{job.processorName || job.name}</Typography.Text> },
     {
       title: 'Enabled',
@@ -186,8 +239,8 @@ export function JobsPage() {
               type="link"
               onClick={async () => {
                 try {
-                  await triggerJob(job.id, { triggerType: 'api', executionMode: 'single' });
-                  message.success(`已触发 ${job.name}`);
+                  const instance = await triggerJob(job.id, { triggerType: 'api', executionMode: 'single' });
+                  message.success(instance.canaryRouting?.routed ? `已触发 ${job.name}，命中灰度 ${instance.canaryRouting.routedJobId}` : `已触发 ${job.name}`);
                   await load();
                 } catch (err) {
                   message.error(err instanceof Error ? err.message : '触发失败');
@@ -203,8 +256,8 @@ export function JobsPage() {
               type="link"
               onClick={async () => {
                 try {
-                  await triggerJob(job.id, { triggerType: 'api', executionMode: 'broadcast' });
-                  message.success(`已广播触发 ${job.name}`);
+                  const instance = await triggerJob(job.id, { triggerType: 'api', executionMode: 'broadcast' });
+                  message.success(instance.canaryRouting?.routed ? `已广播触发 ${job.name}，命中灰度 ${instance.canaryRouting.routedJobId}` : `已广播触发 ${job.name}`);
                   await load();
                 } catch (err) {
                   message.error(err instanceof Error ? err.message : '触发失败');
@@ -214,6 +267,8 @@ export function JobsPage() {
               广播
             </Button>
           ) : null}
+          <Button size="small" type="link" onClick={() => void openAdviceDrawer(job)}>调度建议</Button>
+          <Button size="small" type="link" onClick={() => void openVersionDrawer(job)}>版本</Button>
           <PermissionGate resource="jobs" action="write">
             <Button size="small" type="link" onClick={() => openEditDrawer(job)}>编辑</Button>
           </PermissionGate>
@@ -240,7 +295,7 @@ export function JobsPage() {
         <Form
           form={form}
           layout="vertical"
-          initialValues={{ namespace: 'default', app: 'default', scheduleType: 'api', enabled: true }}
+          initialValues={{ namespace: 'default', app: 'default', scheduleType: 'api', enabled: true, canaryPercent: 0 }}
           onFinish={async (values) => {
             if (!canWriteJobs) { message.error('当前账号无权限创建任务'); return; }
             try {
@@ -278,6 +333,8 @@ export function JobsPage() {
               return <Typography.Paragraph type="secondary">API 手动触发任务不会配置调度表达式，可通过 UI、SDK 或 HTTP API 显式触发。</Typography.Paragraph>;
             }}
           </Form.Item>
+          <Form.Item name="canaryJobId" label="灰度目标任务" extra="可选：显式触发当前任务时，按灰度比例路由到目标任务。"><Select allowClear showSearch optionFilterProp="label" placeholder="选择同 App 下的 canary 任务" options={jobs.map((item) => ({ value: item.id, label: `${item.name} · ${item.id}` }))} /></Form.Item>
+          <Form.Item name="canaryPercent" label="灰度比例"><InputNumber min={0} max={100} precision={0} addonAfter="%" style={{ width: '100%' }} /></Form.Item>
           <Form.Item name="enabled" label="启用" valuePropName="checked"><Switch /></Form.Item>
           <PermissionGate resource="jobs" action="write"><Button type="primary" htmlType="submit" block>创建任务</Button></PermissionGate>
         </Form>
@@ -311,15 +368,71 @@ export function JobsPage() {
               return <Typography.Paragraph type="secondary">API 手动触发任务不会配置调度表达式，可通过 UI、SDK 或 HTTP API 显式触发。</Typography.Paragraph>;
             }}
           </Form.Item>
+          <Form.Item name="canaryJobId" label="灰度目标任务" extra="可选：显式触发当前任务时，按灰度比例路由到目标任务。"><Select allowClear showSearch optionFilterProp="label" placeholder="选择同 App 下的 canary 任务" options={jobs.map((item) => ({ value: item.id, label: `${item.name} · ${item.id}` }))} /></Form.Item>
+          <Form.Item name="canaryPercent" label="灰度比例"><InputNumber min={0} max={100} precision={0} addonAfter="%" style={{ width: '100%' }} /></Form.Item>
           <Form.Item name="enabled" label="启用" valuePropName="checked"><Switch /></Form.Item>
           <PermissionGate resource="jobs" action="write"><Button type="primary" htmlType="submit" block>保存任务</Button></PermissionGate>
         </Form>
       </Drawer>
 
+
+      <Drawer
+        title={versionJob ? `版本历史 - ${versionJob.name}` : '版本历史'}
+        open={versionJob !== null}
+        onClose={() => { setVersionJob(null); setJobVersions([]); }}
+        width={560}
+      >
+        <Typography.Paragraph type="secondary">任务版本是每次创建、编辑和回滚后的不可变快照；回滚会生成新的最新版本，不会覆盖历史。</Typography.Paragraph>
+        <Timeline
+          pending={versionsLoading ? '加载版本历史...' : undefined}
+          items={jobVersions.map((version) => ({
+            color: version.version_number === versionJob?.versionNumber ? 'green' : 'blue',
+            children: (
+              <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                <Space wrap>
+                  <Tag color={version.version_number === versionJob?.versionNumber ? 'green' : 'default'}>v{version.version_number}</Tag>
+                  <Typography.Text strong>{version.name}</Typography.Text>
+                  <Tag>{version.change_reason}</Tag>
+                  {version.rolled_back_from_version ? <Tag color="orange">from v{version.rolled_back_from_version}</Tag> : null}
+                </Space>
+                <Typography.Text type="secondary">{version.schedule_type}{version.schedule_expr ? ` · ${version.schedule_expr}` : ''} · {version.enabled ? '启用' : '禁用'} · {version.created_by} · {version.created_at}</Typography.Text>
+                <Typography.Text code>{version.script_id ? `script:${version.script_id}` : (version.processor_name ?? 'default processor')}</Typography.Text>
+                <PermissionGate resource="jobs" action="write">
+                  <Popconfirm title="回滚任务版本" description={`将任务恢复到 v${version.version_number}，并生成新的最新版本。`} onConfirm={() => void handleRollback(version)} disabled={version.version_number === versionJob?.versionNumber}>
+                    <Button size="small" disabled={version.version_number === versionJob?.versionNumber}>回滚到此版本</Button>
+                  </Popconfirm>
+                </PermissionGate>
+              </Space>
+            ),
+          }))}
+        />
+      </Drawer>
+
+
+
+      <Drawer
+        title={adviceJob ? `调度建议 - ${adviceJob.name}` : '调度建议'}
+        open={adviceJob !== null}
+        onClose={() => { setAdviceJob(null); setSchedulingAdvice(null); }}
+        width={520}
+      >
+        <Typography.Paragraph type="secondary">基于当前 Job 绑定、在线 Worker 能力和最近实例状态给出触发前建议；只读展示，不改变调度行为。</Typography.Paragraph>
+        {adviceLoading ? <Typography.Text type="secondary">加载调度建议...</Typography.Text> : null}
+        {schedulingAdvice ? (
+          <Space direction="vertical" size={12} style={{ width: '100%' }}>
+            <Alert type={schedulingAdvice.severity === 'error' ? 'error' : schedulingAdvice.severity === 'warning' ? 'warning' : 'success'} showIcon message={schedulingAdvice.ready ? '当前可调度' : '当前不可调度'} description={schedulingAdvice.reason} />
+            <Typography.Text>Required capability: <Typography.Text code>{schedulingAdvice.requiredCapability ?? 'none'}</Typography.Text></Typography.Text>
+            <Typography.Text>Eligible workers: {schedulingAdvice.eligibleWorkers.length ? schedulingAdvice.eligibleWorkers.map((worker) => <Tag key={worker}>{worker}</Tag>) : <Tag color="red">0</Tag>}</Typography.Text>
+            <Typography.Text>Recent window: {schedulingAdvice.recentInstances} instances · {schedulingAdvice.recentFailures} failures</Typography.Text>
+          </Space>
+        ) : null}
+      </Drawer>
+
+
       <Card
         className="clean-card"
         title="任务列表"
-        extra={<Space wrap className="card-toolbar"><PermissionGate resource="jobs" action="write"><Button type="primary" onClick={openCreateDrawer}>新建任务</Button></PermissionGate><Input allowClear placeholder="搜索任务/Namespace/App" value={String(query.keyword ?? '')} onChange={(event) => setQuery({ keyword: event.target.value, page: 1 })} style={{ width: 220 }} /><Select allowClear placeholder="调度类型" value={query.scheduleType || undefined} onChange={(value) => setQuery({ scheduleType: value ?? '', page: 1 })} style={{ width: 130 }} options={[{ value: 'api' }, { value: 'cron' }, { value: 'fixed_rate' }]} /><Button onClick={load}>刷新</Button></Space>}
+        extra={<Space wrap className="card-toolbar"><Button onClick={() => navigate(ROUTE_META.jobTopology.path)}>任务拓扑</Button><PermissionGate resource="jobs" action="write"><Button type="primary" onClick={openCreateDrawer}>新建任务</Button></PermissionGate><Input allowClear placeholder="搜索任务/Namespace/App" value={String(query.keyword ?? '')} onChange={(event) => setQuery({ keyword: event.target.value, page: 1 })} style={{ width: 220 }} /><Select allowClear placeholder="调度类型" value={query.scheduleType || undefined} onChange={(value) => setQuery({ scheduleType: value ?? '', page: 1 })} style={{ width: 130 }} options={[{ value: 'api' }, { value: 'cron' }, { value: 'fixed_rate' }]} /><Button onClick={load}>刷新</Button></Space>}
       >
         <Table rowKey="id" loading={loading} columns={columns} dataSource={filteredJobs} pagination={{ pageSize: Number(query.page_size) || pageSize, current: Number(query.page) || 1, showSizeChanger: true, pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS.map(String), onChange: (page, nextPageSize) => { setPageSize(nextPageSize); setQuery({ page, page_size: nextPageSize }); } }} size="middle" />
       </Card>

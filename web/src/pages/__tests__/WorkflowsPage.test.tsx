@@ -13,6 +13,17 @@ describe('workflow canvas fullscreen affordance', () => {
     expect(styles).toContain('.workflow-dag-editor--fullscreen');
     expect(styles).toContain('position: fixed');
   });
+
+  test('workflow canvas uses solid smooth moving data-flow dots', () => {
+    expect(source).toContain('workflow-edge__line');
+    expect(source).toContain('workflow-edge__flow-dot');
+    expect(source).toContain('<animateMotion');
+    expect(source).toContain('begin="-1.2s"');
+    expect(source).not.toContain('workflow-edge__line" strokeDasharray');
+    expect(source).not.toContain('strokeDasharray="28 76"');
+    expect(styles).toContain('workflow-edge__flow-dot');
+    expect(styles).toContain('filter: drop-shadow(0 0 6px');
+  });
 });
 
 

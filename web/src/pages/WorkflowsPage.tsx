@@ -418,7 +418,13 @@ function DagPreview({ definition, instance, jobs = [], workflows = [], currentWo
               return (
                 <g key={`${edge.from}-${edge.to}-${index}`} className={`workflow-edge ${selected ? 'workflow-edge--selected' : ''}`}>
                   {editable ? <path className="workflow-edge__hit" d={path} stroke="transparent" strokeWidth="16" fill="none" onPointerDown={(event) => { event.preventDefault(); event.stopPropagation(); setSelectedEdgeIndex(index); setSelectedNodeKey(null); }} /> : null}
-                  <path d={path} stroke={selected ? '#0ea5e9' : meta.color} strokeWidth={selected ? '3.5' : '2.5'} fill="none" markerEnd="url(#workflow-arrow)" />
+                  <path className="workflow-edge__line" d={path} stroke={selected ? '#0ea5e9' : meta.color} strokeWidth={selected ? '3.5' : '2.5'} fill="none" markerEnd="url(#workflow-arrow)" />
+                  <circle className="workflow-edge__flow-dot" r="4.8" fill={selected ? '#67e8f9' : meta.color}>
+                    <animateMotion dur="2.4s" repeatCount="indefinite" path={path} />
+                  </circle>
+                  <circle className="workflow-edge__flow-dot workflow-edge__flow-dot--secondary" r="3.6" fill={selected ? '#bae6fd' : meta.color}>
+                    <animateMotion dur="2.4s" begin="-1.2s" repeatCount="indefinite" path={path} />
+                  </circle>
                   <text className="workflow-edge__label" x={(x1 + x2) / 2} y={(y1 + y2) / 2 - 10} fill={meta.color}>{meta.value}</text>
                   {selected ? (
                     <>

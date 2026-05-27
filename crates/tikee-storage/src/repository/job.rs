@@ -1,6 +1,8 @@
 /// Minimal job creation input.
 #[derive(Debug, Clone)]
 pub struct CreateJob {
+    /// Actor creating the initial immutable version snapshot.
+    pub created_by: Option<String>,
     /// Namespace name. Defaults to `default` at HTTP boundary.
     pub namespace: String,
     /// Application name. Defaults to `default` at HTTP boundary.
@@ -17,11 +19,17 @@ pub struct CreateJob {
     pub script_id: Option<String>,
     /// Whether the job is enabled.
     pub enabled: bool,
+    /// Optional canary target job id for explicit trigger routing.
+    pub canary_job_id: Option<String>,
+    /// Canary traffic percentage in 0..=100.
+    pub canary_percent: i32,
 }
 
 /// Minimal job update input. `None` leaves the field unchanged.
 #[derive(Debug, Clone, Default)]
 pub struct UpdateJob {
+    /// Actor creating the update version snapshot.
+    pub updated_by: Option<String>,
     /// Optional job display name.
     pub name: Option<String>,
     /// Optional schedule type.
@@ -34,11 +42,17 @@ pub struct UpdateJob {
     pub script_id: Option<Option<String>>,
     /// Optional enabled flag.
     pub enabled: Option<bool>,
+    /// Optional canary target update. Outer `None` leaves unchanged; inner `None` clears it.
+    pub canary_job_id: Option<Option<String>>,
+    /// Optional canary percentage update.
+    pub canary_percent: Option<i32>,
 }
 
 /// Job summary returned to management API callers.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JobSummary {
+    /// Latest immutable version number.
+    pub version_number: i64,
     /// Job identifier.
     pub id: String,
     /// Namespace name.
@@ -57,4 +71,8 @@ pub struct JobSummary {
     pub script_id: Option<String>,
     /// Enabled flag.
     pub enabled: bool,
+    /// Optional canary target job id for explicit trigger routing.
+    pub canary_job_id: Option<String>,
+    /// Canary traffic percentage in 0..=100.
+    pub canary_percent: i32,
 }
