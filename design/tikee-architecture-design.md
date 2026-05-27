@@ -2330,6 +2330,7 @@ Phase 3 closeout 状态已在 2026-05-25 复核：原先保留未勾选的 OIDC 
 
 **P2 — 生态迁移 / 高级差异化（不阻塞服务先跑起来）**
 
+- [ ] SDK Management API-Key 签发与鉴权方案：SDK 端 management client 不走人工 session token，也不收敛到某个用户账号的 RBAC 权限；由后台管理员针对 app 作用域手动签发一组授权 API-Key，供 Java/Rust 等 SDK 调用 management 接口。
 - [ ] PowerJob 迁移工具与报告。
 - [ ] XXL-JOB 迁移工具与 GLUE/child_jobid 风险报告。
 - [ ] Terraform Provider、GitOps/IaC、K8s CRD。
@@ -2355,6 +2356,18 @@ Phase 3 closeout 状态已在 2026-05-25 复核：原先保留未勾选的 OIDC 
 - [x] Prometheus/Grafana recording-rule 与真实 scrape 验证（132：规则、Prometheus scrape config、Grafana recording-query 与 runbook）。
 
 **P2 — 生态迁移与高级差异化**
+
+- [ ] SDK Management API-Key 签发与鉴权方案（新增）：SDK management client 使用 app-scoped API-Key，不使用人工 session token，不绑定某个用户账号的 RBAC 权限；后台管理员手动签发/轮换/吊销授权，供 Java/Rust SDK 管理任务、触发任务和读取实例状态。
+
+  **设计约束（后续实现必须满足）**：
+  - Key 明文格式固定为 `tk-${64位大小写字母数字}`，即前缀 `tk-` + 64 个 `[A-Za-z0-9]` 字符；全局唯一，只在创建/轮换时返回一次明文。
+  - 生成算法采用业界通用 CSPRNG API-key 方案：使用 OS 级密码学安全随机源（Rust `OsRng` / Java `SecureRandom` / WebCrypto 等同等级来源），对 62 字符 alphabet 做 rejection sampling/无模偏采样，生成 64 位 base62 随机串；约 330 bit 熵，不使用 UUID、时间戳、递增序列或可预测 PRNG。
+  - 存储只保存 `key_id`、`prefix`、HMAC-SHA256/SHA-256 hash（建议带 server pepper）、app scope、授权 scope、状态、过期时间、last_used_at、created_by/revoked_by/rotated_from 与审计证据；禁止持久化明文 key。
+  - 鉴权边界是 app-scoped service credential：请求通过 `X-Tikee-API-Key: tk-...`（或 SDK 内部等价 header）进入 management API；认证后 principal 类型标记为 `sdk_api_key` / `app_service`，不能伪装成人类用户 session，也不能复用用户 RBAC role expansion。
+  - 授权模型为后台针对 namespace/app 手动签发的 allow-list：可细分 `jobs:read/create/update/trigger`、`instances:read/logs:read`、`workflows:*` 等 SDK management scopes，并强制落在签发时绑定的 namespace/app 内；越权访问其它 app 必须 fail-closed。
+  - SDK 侧配置应从 `tikee.management.api-key` / `TIKEE_MANAGEMENT_API_KEY` 读取，替换当前 `token` 语义；Java/Rust SDK 都要同等支持，Spring Boot Starter 只做配置映射，不拥有鉴权逻辑。
+  - 后台需提供管理员 API/UI：创建、列表（脱敏显示 `tk-xxxx…`）、轮换、吊销、过期策略、last-used 观测、审计日志；所有签发/轮换/吊销操作仍由后台人工 session + RBAC 保护。
+  - 与已有 API Token/OIDC session 明确分层：API Token 是用户权限收窄后的 bearer；OIDC 只换本地 opaque session；SDK Management API-Key 是 app 级服务凭据，不能被用户 token/RBAC 自动推导生成。
 
 - [ ] PowerJob 迁移工具（从 Phase 3 后置；与迁移报告/双跑能力一起实现）
 - [ ] XXL-JOB 迁移工具（新增；覆盖 xxl_job_group / xxl_job_info / CRON / child_jobid / GLUE 脚本迁移报告）
