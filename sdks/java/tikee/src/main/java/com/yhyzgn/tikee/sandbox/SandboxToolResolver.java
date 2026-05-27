@@ -22,27 +22,27 @@ public final class SandboxToolResolver {
     public String resolveCommand(SandboxToolInstaller.Tool tool) {
         log.info("[tikee.sandbox] resolving tool={} platform={} installDir={}", tool.binaryName(), SandboxToolInstaller.runtimePlatform(), installDir(tool));
         String command = tool.binaryName();
-        if (explicitInstallDir(tool).isEmpty() && runtimeAvailable(command, "--version")) {
+        if (explicitInstallDir(tool).isEmpty() && toolAvailable(tool, command)) {
             log.info("[tikee.sandbox] tool={} found on PATH command={}", tool.binaryName(), command);
             return command;
         }
         if (explicitInstallDir(tool).isEmpty()) {
             command = localCommand(tool);
-            if (runtimeAvailable(command, "--version")) {
+            if (toolAvailable(tool, command)) {
                 log.info("[tikee.sandbox] tool={} found in managed install command={}", tool.binaryName(), command);
                 return command;
             }
         }
         command = installIfAllowed(tool);
         if (explicitInstallDir(tool).isPresent()) {
-            if (runtimeAvailable(command, "--version")) {
+            if (toolAvailable(tool, command)) {
                 log.info("[tikee.sandbox] tool={} installed/resolved command={}", tool.binaryName(), command);
                 return command;
             }
             log.info("[tikee.sandbox] tool={} unavailable after explicit-dir resolution; returning local command={}", tool.binaryName(), localCommand(tool));
             return localCommand(tool);
         }
-        if (runtimeAvailable(command, "--version")) {
+        if (toolAvailable(tool, command)) {
             log.info("[tikee.sandbox] tool={} installed/resolved command={}", tool.binaryName(), command);
             return command;
         }
@@ -51,8 +51,9 @@ public final class SandboxToolResolver {
     }
 
     public Optional<String> resolveWasmtimeCommand() {
-        String command = resolveCommand(SandboxToolInstaller.Tool.WASMTIME);
-        return runtimeAvailable(command, "--version") ? Optional.of(command) : Optional.empty();
+        SandboxToolInstaller.Tool tool = SandboxToolInstaller.Tool.WASMTIME;
+        String command = resolveCommand(tool);
+        return toolAvailable(tool, command) ? Optional.of(command) : Optional.empty();
     }
 
     public String localCommand(SandboxToolInstaller.Tool tool) {
@@ -98,6 +99,32 @@ public final class SandboxToolResolver {
             case POWERSHELL -> List.of("pwsh", "-NoProfile", "-NonInteractive", "-Command", "-");
             case RHAI -> List.of(resolveCommand(SandboxToolInstaller.Tool.RHAI));
         };
+    }
+
+    public static boolean toolAvailable(SandboxToolInstaller.Tool tool, String command) {
+        return switch (tool) {
+            case RHAI -> rhaiAvailable(command);
+            default -> runtimeAvailable(command, "--version");
+        };
+    }
+
+    private static boolean rhaiAvailable(String command) {
+        java.nio.file.Path script = null;
+        try {
+            script = java.nio.file.Files.createTempFile("tikee-rhai-smoke-", ".rhai");
+            java.nio.file.Files.writeString(script, "print(\"ok\");");
+            return runtimeAvailable(command, script.toString());
+        } catch (Exception error) {
+            return false;
+        } finally {
+            if (script != null) {
+                try {
+                    java.nio.file.Files.deleteIfExists(script);
+                } catch (Exception ignored) {
+                    // Smoke-test cleanup failure does not affect availability.
+                }
+            }
+        }
     }
 
     public static boolean runtimeAvailable(String runtimeCommand, String... args) {
