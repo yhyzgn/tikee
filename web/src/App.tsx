@@ -23,6 +23,7 @@ const ScriptsPage = lazy(() => import('./pages/ScriptsPage').then((module) => ({
 const ScriptEditorPage = lazy(() => import('./pages/ScriptsPage').then((module) => ({ default: module.ScriptEditorPage })));
 const UsersPage = lazy(() => import('./pages/UsersPage').then((module) => ({ default: module.UsersPage })));
 const ScopesPage = lazy(() => import('./pages/ScopesPage').then((module) => ({ default: module.ScopesPage })));
+const PluginsPage = lazy(() => import('./pages/PluginsPage').then((module) => ({ default: module.PluginsPage })));
 const ApiKeysPage = lazy(() => import('./pages/ApiKeysPage').then((module) => ({ default: module.ApiKeysPage })));
 const WorkersPage = lazy(() => import('./pages/WorkersPage').then((module) => ({ default: module.WorkersPage })));
 
@@ -71,6 +72,7 @@ function AppLayout() {
           <Route path={ROUTE_META.workers.path} element={<GuardedRoute route={ROUTE_META.workers}><WorkersPage /></GuardedRoute>} />
           <Route path={ROUTE_META.users.path} element={<GuardedRoute route={ROUTE_META.users}><UsersPage /></GuardedRoute>} />
           <Route path={ROUTE_META.scopes.path} element={<GuardedRoute route={ROUTE_META.scopes}><ScopesPage /></GuardedRoute>} />
+          <Route path={ROUTE_META.plugins.path} element={<GuardedRoute route={ROUTE_META.plugins}><PluginsPage /></GuardedRoute>} />
           <Route path={ROUTE_META.apiKeys.path} element={<GuardedRoute route={ROUTE_META.apiKeys}><ApiKeysPage /></GuardedRoute>} />
           <Route path={ROUTE_META.scripts.path} element={<GuardedRoute route={ROUTE_META.scripts}><ScriptsPage /></GuardedRoute>} />
           <Route path={ROUTE_META.scriptEdit.path} element={<GuardedRoute route={ROUTE_META.scriptEdit}><ScriptEditorPage /></GuardedRoute>} />

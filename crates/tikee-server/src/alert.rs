@@ -9,6 +9,7 @@ pub use retry::{
 };
 use serde::{Deserialize, Serialize};
 use std::{net::IpAddr, sync::Arc, time::Duration};
+use tikee_storage::PluginAlertChannelTypeSummary;
 use tracing::{info, warn};
 use url::Url;
 
@@ -103,6 +104,16 @@ pub enum NotificationChannel {
         /// `PagerDuty` routing/integration key.
         routing_key: String,
     },
+    /// Plugin-defined webhook-compatible notification channel.
+    #[serde(skip)]
+    PluginWebhook {
+        /// Plugin channel type.
+        channel_type: String,
+        /// Target webhook URL.
+        url: String,
+        /// Plugin-provided payload template metadata.
+        template: serde_json::Value,
+    },
     /// Email channel delivered through a configured SMTP endpoint.
     Email {
         /// Recipient addresses.
@@ -128,6 +139,45 @@ pub enum NotificationChannel {
         #[serde(default)]
         password_secret_ref: Option<String>,
     },
+}
+
+/// Build notification channels from persisted JSON and enabled plugin channel declarations.
+#[must_use]
+pub fn notification_channels_from_json(
+    channels_json: &str,
+    plugins: &[PluginAlertChannelTypeSummary],
+) -> Vec<NotificationChannel> {
+    let values = serde_json::from_str::<Vec<serde_json::Value>>(channels_json).unwrap_or_default();
+    values
+        .into_iter()
+        .filter_map(|value| notification_channel_from_value(&value, plugins))
+        .collect()
+}
+
+fn notification_channel_from_value(
+    value: &serde_json::Value,
+    plugins: &[PluginAlertChannelTypeSummary],
+) -> Option<NotificationChannel> {
+    if let Ok(channel) = serde_json::from_value::<NotificationChannel>(value.clone()) {
+        return Some(channel);
+    }
+    let channel_type = value.get("type").and_then(serde_json::Value::as_str)?;
+    let plugin = plugins
+        .iter()
+        .find(|plugin| plugin.r#type == channel_type)?;
+    if plugin.target_kind != "webhook" {
+        return None;
+    }
+    value
+        .get("url")
+        .or_else(|| value.get("webhook_url"))
+        .and_then(serde_json::Value::as_str)
+        .filter(|url| !url.trim().is_empty())
+        .map(|url| NotificationChannel::PluginWebhook {
+            channel_type: channel_type.to_owned(),
+            url: url.to_owned(),
+            template: plugin.template.clone(),
+        })
 }
 
 /// Payload sent to notification channels.
@@ -218,6 +268,12 @@ pub fn notification_channel_identity(channel: &NotificationChannel) -> Notificat
                 url.as_deref()
                     .unwrap_or("https://events.pagerduty.com/v2/enqueue"),
             ),
+        },
+        NotificationChannel::PluginWebhook {
+            channel_type, url, ..
+        } => NotificationChannelIdentity {
+            provider: channel_type.clone(),
+            target: redact_url(url),
         },
         NotificationChannel::Email { recipients, .. } => NotificationChannelIdentity {
             provider: "email".to_owned(),
@@ -412,6 +468,18 @@ impl AlertDispatcher {
                     });
                     results.push(self.post_json("pagerduty", target, &body).await);
                 }
+                NotificationChannel::PluginWebhook {
+                    channel_type,
+                    url,
+                    template,
+                } => {
+                    let body = plugin_webhook_body(template, payload);
+                    let headers = plugin_webhook_headers(template, payload);
+                    results.push(
+                        self.post_json_with_headers(channel_type, url, &body, &headers)
+                            .await,
+                    );
+                }
                 NotificationChannel::Email {
                     recipients,
                     smtp_url,
@@ -475,6 +543,16 @@ impl AlertDispatcher {
         url: &str,
         body: &serde_json::Value,
     ) -> AlertDeliveryResult {
+        self.post_json_with_headers(provider, url, body, &[]).await
+    }
+
+    async fn post_json_with_headers(
+        &self,
+        provider: &str,
+        url: &str,
+        body: &serde_json::Value,
+        headers: &[(String, String)],
+    ) -> AlertDeliveryResult {
         if let Err(error) = validate_webhook_url(url, self.policy) {
             warn!(provider, target = %redact_url(url), %error, "alert provider rejected by safety policy");
             return AlertDeliveryResult {
@@ -485,7 +563,11 @@ impl AlertDispatcher {
                 error: Some(error.to_owned()),
             };
         }
-        match self.http.post(url).json(body).send().await {
+        let mut request = self.http.post(url).json(body);
+        for (name, value) in headers {
+            request = request.header(name, value);
+        }
+        match request.send().await {
             Ok(resp) => {
                 let status = resp.status();
                 let delivered = status.is_success();
@@ -513,6 +595,73 @@ impl AlertDispatcher {
                 }
             }
         }
+    }
+}
+
+fn plugin_webhook_body(template: &serde_json::Value, payload: &AlertPayload) -> serde_json::Value {
+    let mut body = template.get("body").cloned().unwrap_or_else(|| {
+        serde_json::json!({
+            "text": alert_text(payload),
+        })
+    });
+    replace_template_tokens(&mut body, payload);
+    body
+}
+
+fn plugin_webhook_headers(
+    template: &serde_json::Value,
+    payload: &AlertPayload,
+) -> Vec<(String, String)> {
+    let mut headers = template
+        .get("headers")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!({}));
+    replace_template_tokens(&mut headers, payload);
+    headers
+        .as_object()
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|(key, value)| {
+                    value.as_str().map(|value| (key.clone(), value.to_owned()))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+#[cfg(test)]
+fn plugin_webhook_example_payload() -> AlertPayload {
+    AlertPayload {
+        rule_name: "Plugin alert".to_owned(),
+        severity: Severity::Warning,
+        message: "custom plugin alert message".to_owned(),
+        resource_type: "job".to_owned(),
+        resource_id: "job_plugin".to_owned(),
+        triggered_at: "2026-05-28T00:00:00Z".to_owned(),
+    }
+}
+
+fn replace_template_tokens(value: &mut serde_json::Value, payload: &AlertPayload) {
+    match value {
+        serde_json::Value::String(item) => {
+            *item = item
+                .replace("{{message}}", &payload.message)
+                .replace("{{resource_id}}", &payload.resource_id)
+                .replace("{{resource_type}}", &payload.resource_type)
+                .replace("{{severity}}", pagerduty_severity(&payload.severity));
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                replace_template_tokens(item, payload);
+            }
+        }
+        serde_json::Value::Object(map) => {
+            for item in map.values_mut() {
+                replace_template_tokens(item, payload);
+            }
+        }
+        _ => {}
     }
 }
 
@@ -965,5 +1114,32 @@ mod tests {
             .unwrap_or_else(|_| panic!("webhook receiver should not drop"));
         assert_eq!(received.rule_name, "Local webhook");
         assert_eq!(received.resource_id, "inst-webhook");
+    }
+
+    #[test]
+    fn plugin_webhook_template_replaces_payload_tokens() {
+        let payload = plugin_webhook_example_payload();
+        let template = serde_json::json!({
+            "headers": {
+                "X-Tikee-Resource": "{{resource_type}}/{{resource_id}}",
+                "X-Tikee-Severity": "{{severity}}"
+            },
+            "body": {
+                "text": "{{message}}",
+                "resource": "{{resource_type}}/{{resource_id}}",
+                "severity": "{{severity}}",
+                "nested": ["{{message}}"]
+            }
+        });
+
+        let body = plugin_webhook_body(&template, &payload);
+        let headers = plugin_webhook_headers(&template, &payload);
+
+        assert_eq!(body["text"], "custom plugin alert message");
+        assert_eq!(body["resource"], "job/job_plugin");
+        assert_eq!(body["severity"], "warning");
+        assert_eq!(body["nested"][0], "custom plugin alert message");
+        assert!(headers.contains(&("X-Tikee-Resource".to_owned(), "job/job_plugin".to_owned())));
+        assert!(headers.contains(&("X-Tikee-Severity".to_owned(), "warning".to_owned())));
     }
 }

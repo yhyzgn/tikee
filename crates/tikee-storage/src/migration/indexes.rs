@@ -3,10 +3,11 @@ use sea_orm_migration::prelude::*;
 use super::iden::{
     Apps, AuditLogs, AuthSessions, DispatchQueue, InstanceEvents, JobInstanceAttempts,
     JobInstanceLogs, JobInstances, JobVersions, Jobs, Namespaces, OidcAuthStates, OidcIdentities,
-    Permissions, RaftAppliedCommands, RaftLogEntries, RaftMembers, RaftMembershipProposals,
-    RaftMetadata, RaftSnapshots, RolePermissions, Roles, ScriptVersions, Scripts, SdkApiKeys,
-    Users, WorkerLogicalInstances, WorkerPools, WorkerSessionEvents, WorkerSessions, WorkflowEdges,
-    WorkflowInstances, WorkflowNodeInstances, WorkflowNodes, WorkflowShards, Workflows,
+    Permissions, Plugins, RaftAppliedCommands, RaftLogEntries, RaftMembers,
+    RaftMembershipProposals, RaftMetadata, RaftSnapshots, RolePermissions, Roles, ScriptVersions,
+    Scripts, SdkApiKeys, Users, WorkerLogicalInstances, WorkerPools, WorkerSessionEvents,
+    WorkerSessions, WorkflowEdges, WorkflowInstances, WorkflowNodeInstances, WorkflowNodes,
+    WorkflowShards, Workflows,
 };
 
 pub(super) async fn create_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
@@ -15,6 +16,7 @@ pub(super) async fn create_indexes(manager: &SchemaManager<'_>) -> Result<(), Db
     create_job_indexes(manager).await?;
     create_auth_indexes(manager).await?;
     create_script_indexes(manager).await?;
+    create_plugin_indexes(manager).await?;
     create_audit_log_indexes(manager).await?;
     create_workflow_indexes(manager).await?;
     create_dispatch_indexes(manager).await?;
@@ -196,6 +198,19 @@ async fn create_auth_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
     .await?;
     create_oidc_auth_state_indexes(manager).await?;
     create_oidc_identity_indexes(manager).await
+}
+
+async fn create_plugin_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    create_index(
+        manager,
+        Index::create()
+            .name("idx_plugins_name")
+            .table(Plugins::Table)
+            .col(Plugins::Name)
+            .unique()
+            .to_owned(),
+    )
+    .await
 }
 
 async fn create_script_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {

@@ -60,6 +60,14 @@ describe('job scheduling advice foundation', () => {
     expect(source).toContain('getJobSchedulingAdvice');
     expect(source).toContain('Required capability');
     expect(source).toContain('Eligible workers');
+    expect(source).toContain('历史耗时');
+    expect(source).toContain('资源预测');
+    expect(source).toContain('recommendedConcurrency');
+    expect(source).toContain('scheduling-advice-grid');
+    expect(source).toContain('scheduling-advice-stat-card');
+    expect(source).toContain('预测依据');
+    expect(stylesSource).toContain('.scheduling-advice-grid');
+    expect(stylesSource).toContain('.scheduling-advice-stat-card');
   });
 });
 

@@ -3,28 +3,27 @@ package com.yhyzgn.tikee.worker.client;
 import com.yhyzgn.tikee.processor.ProcessorCapabilityProvider;
 import com.yhyzgn.tikee.processor.TaskContext;
 import com.yhyzgn.tikee.processor.TaskOutcome;
+import com.yhyzgn.tikee.processor.TaskProcessor;
 import com.yhyzgn.tikee.script.ScriptRunnerKind;
 import com.yhyzgn.tikee.script.ScriptRunnerPolicy;
 import com.yhyzgn.tikee.script.ScriptRunnerRegistry;
-import com.yhyzgn.tikee.script.ScriptSandboxBackend;
 import com.yhyzgn.tikee.script.ScriptRunnerTask;
-import com.yhyzgn.tikee.processor.TaskProcessor;
-import com.yhyzgn.tikee.worker.WorkerRegistration;
+import com.yhyzgn.tikee.script.ScriptSandboxBackend;
 import com.yhyzgn.tikee.wasm.WasmRunnerPolicy;
 import com.yhyzgn.tikee.wasm.WasmRunnerRegistry;
 import com.yhyzgn.tikee.wasm.WasmRunnerTask;
-import tikee.worker.v1.Worker;
-import tikee.worker.v1.WorkerTunnelServiceGrpc;
+import com.yhyzgn.tikee.worker.WorkerRegistration;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
 import java.net.URI;
 import java.time.Duration;
 import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Optional;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -36,15 +35,26 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import tikee.worker.v1.Worker;
+import tikee.worker.v1.WorkerTunnelServiceGrpc;
 
 /**
  * gRPC implementation of the active outbound Worker Tunnel client.
  */
 public final class GrpcTikeeWorkerClient implements TikeeWorkerClient {
-    private static final Logger log = LoggerFactory.getLogger(GrpcTikeeWorkerClient.class);
-    private static final Duration DEFAULT_START_TIMEOUT = Duration.ofSeconds(10);
-    private static final Duration DEFAULT_RECONNECT_INITIAL_DELAY = Duration.ofSeconds(1);
-    private static final Duration DEFAULT_RECONNECT_MAX_DELAY = Duration.ofSeconds(30);
+
+    private static final Logger log = LoggerFactory.getLogger(
+        GrpcTikeeWorkerClient.class
+    );
+    private static final Duration DEFAULT_START_TIMEOUT = Duration.ofSeconds(
+        10
+    );
+    private static final Duration DEFAULT_RECONNECT_INITIAL_DELAY =
+        Duration.ofSeconds(1);
+    private static final Duration DEFAULT_RECONNECT_MAX_DELAY =
+        Duration.ofSeconds(30);
 
     private final WorkerRegistration registration;
     private final ManagedChannel channel;
@@ -60,9 +70,14 @@ public final class GrpcTikeeWorkerClient implements TikeeWorkerClient {
     private final ScheduledExecutorService tikee;
     private final ExecutorService processorExecutor;
     private final AtomicReference<String> workerId = new AtomicReference<>();
-    private final AtomicReference<String> fencingToken = new AtomicReference<>("");
-    private final AtomicReference<StreamObserver<Worker.WorkerMessage>> outbound = new AtomicReference<>();
-    private final AtomicReference<Throwable> terminalError = new AtomicReference<>();
+    private final AtomicReference<String> fencingToken = new AtomicReference<>(
+        ""
+    );
+    private final AtomicReference<
+        StreamObserver<Worker.WorkerMessage>
+    > outbound = new AtomicReference<>();
+    private final AtomicReference<Throwable> terminalError =
+        new AtomicReference<>();
     private final AtomicBoolean started = new AtomicBoolean(false);
     private final AtomicBoolean closed = new AtomicBoolean(false);
     private final AtomicBoolean connected = new AtomicBoolean(false);
@@ -81,7 +96,10 @@ public final class GrpcTikeeWorkerClient implements TikeeWorkerClient {
      * @param endpoint tikee Worker Tunnel endpoint, e.g. {@code http://127.0.0.1:9998}
      * @param registration worker registration metadata
      */
-    public GrpcTikeeWorkerClient(String endpoint, WorkerRegistration registration) {
+    public GrpcTikeeWorkerClient(
+        String endpoint,
+        WorkerRegistration registration
+    ) {
         this(endpoint, registration, context -> TaskOutcome.succeeded());
     }
 
@@ -92,7 +110,11 @@ public final class GrpcTikeeWorkerClient implements TikeeWorkerClient {
      * @param registration worker registration metadata
      * @param processor task processor
      */
-    public GrpcTikeeWorkerClient(String endpoint, WorkerRegistration registration, TaskProcessor processor) {
+    public GrpcTikeeWorkerClient(
+        String endpoint,
+        WorkerRegistration registration,
+        TaskProcessor processor
+    ) {
         this(endpoint, registration, processor, Duration.ofSeconds(10));
     }
 
@@ -105,11 +127,18 @@ public final class GrpcTikeeWorkerClient implements TikeeWorkerClient {
      * @param scriptRunners sandboxed script runner registry
      */
     public GrpcTikeeWorkerClient(
-            String endpoint,
-            WorkerRegistration registration,
-            TaskProcessor processor,
-            ScriptRunnerRegistry scriptRunners) {
-        this(endpoint, registration, processor, scriptRunners, Duration.ofSeconds(10));
+        String endpoint,
+        WorkerRegistration registration,
+        TaskProcessor processor,
+        ScriptRunnerRegistry scriptRunners
+    ) {
+        this(
+            endpoint,
+            registration,
+            processor,
+            scriptRunners,
+            Duration.ofSeconds(10)
+        );
     }
 
     /**
@@ -121,160 +150,193 @@ public final class GrpcTikeeWorkerClient implements TikeeWorkerClient {
      * @param heartbeatInterval heartbeat interval
      */
     public GrpcTikeeWorkerClient(
-            String endpoint,
-            WorkerRegistration registration,
-            TaskProcessor processor,
-            Duration heartbeatInterval) {
+        String endpoint,
+        WorkerRegistration registration,
+        TaskProcessor processor,
+        Duration heartbeatInterval
+    ) {
         this(
-                channelForEndpoint(endpoint),
-                true,
-                registration,
-                processor,
-                new ScriptRunnerRegistry(),
-                new WasmRunnerRegistry(),
-                heartbeatInterval,
-                DEFAULT_START_TIMEOUT,
-                DEFAULT_RECONNECT_INITIAL_DELAY,
-                DEFAULT_RECONNECT_MAX_DELAY,
-                ignored -> {});
+            channelForEndpoint(endpoint),
+            true,
+            registration,
+            processor,
+            new ScriptRunnerRegistry(),
+            new WasmRunnerRegistry(),
+            heartbeatInterval,
+            DEFAULT_START_TIMEOUT,
+            DEFAULT_RECONNECT_INITIAL_DELAY,
+            DEFAULT_RECONNECT_MAX_DELAY,
+            ignored -> {}
+        );
     }
 
     public GrpcTikeeWorkerClient(
-            String endpoint,
-            WorkerRegistration registration,
-            TaskProcessor processor,
-            ScriptRunnerRegistry scriptRunners,
-            Duration heartbeatInterval) {
+        String endpoint,
+        WorkerRegistration registration,
+        TaskProcessor processor,
+        ScriptRunnerRegistry scriptRunners,
+        Duration heartbeatInterval
+    ) {
         this(
-                channelForEndpoint(endpoint),
-                true,
-                registration,
-                processor,
-                scriptRunners,
-                new WasmRunnerRegistry(),
-                heartbeatInterval,
-                DEFAULT_START_TIMEOUT,
-                DEFAULT_RECONNECT_INITIAL_DELAY,
-                DEFAULT_RECONNECT_MAX_DELAY,
-                ignored -> {});
+            channelForEndpoint(endpoint),
+            true,
+            registration,
+            processor,
+            scriptRunners,
+            new WasmRunnerRegistry(),
+            heartbeatInterval,
+            DEFAULT_START_TIMEOUT,
+            DEFAULT_RECONNECT_INITIAL_DELAY,
+            DEFAULT_RECONNECT_MAX_DELAY,
+            ignored -> {}
+        );
     }
 
     public GrpcTikeeWorkerClient(
-            String endpoint,
-            WorkerRegistration registration,
-            TaskProcessor processor,
-            ScriptRunnerRegistry scriptRunners,
-            WasmRunnerRegistry wasmRunners,
-            Duration heartbeatInterval) {
+        String endpoint,
+        WorkerRegistration registration,
+        TaskProcessor processor,
+        ScriptRunnerRegistry scriptRunners,
+        WasmRunnerRegistry wasmRunners,
+        Duration heartbeatInterval
+    ) {
         this(
-                channelForEndpoint(endpoint),
-                true,
-                registration,
-                processor,
-                scriptRunners,
-                wasmRunners,
-                heartbeatInterval,
-                DEFAULT_START_TIMEOUT,
-                DEFAULT_RECONNECT_INITIAL_DELAY,
-                DEFAULT_RECONNECT_MAX_DELAY,
-                ignored -> {});
+            channelForEndpoint(endpoint),
+            true,
+            registration,
+            processor,
+            scriptRunners,
+            wasmRunners,
+            heartbeatInterval,
+            DEFAULT_START_TIMEOUT,
+            DEFAULT_RECONNECT_INITIAL_DELAY,
+            DEFAULT_RECONNECT_MAX_DELAY,
+            ignored -> {}
+        );
     }
 
     GrpcTikeeWorkerClient(
-            ManagedChannel channel,
-            boolean ownsChannel,
-            WorkerRegistration registration,
-            TaskProcessor processor,
-            Duration heartbeatInterval,
-            Duration startTimeout,
-            Consumer<Worker.DispatchTask> dispatchObserver) {
+        ManagedChannel channel,
+        boolean ownsChannel,
+        WorkerRegistration registration,
+        TaskProcessor processor,
+        Duration heartbeatInterval,
+        Duration startTimeout,
+        Consumer<Worker.DispatchTask> dispatchObserver
+    ) {
         this(
-                channel,
-                ownsChannel,
-                registration,
-                processor,
-                new ScriptRunnerRegistry(),
-                new WasmRunnerRegistry(),
-                heartbeatInterval,
-                startTimeout,
-                DEFAULT_RECONNECT_INITIAL_DELAY,
-                DEFAULT_RECONNECT_MAX_DELAY,
-                dispatchObserver);
+            channel,
+            ownsChannel,
+            registration,
+            processor,
+            new ScriptRunnerRegistry(),
+            new WasmRunnerRegistry(),
+            heartbeatInterval,
+            startTimeout,
+            DEFAULT_RECONNECT_INITIAL_DELAY,
+            DEFAULT_RECONNECT_MAX_DELAY,
+            dispatchObserver
+        );
     }
 
     GrpcTikeeWorkerClient(
-            ManagedChannel channel,
-            boolean ownsChannel,
-            WorkerRegistration registration,
-            TaskProcessor processor,
-            Duration heartbeatInterval,
-            Duration startTimeout,
-            Duration reconnectInitialDelay,
-            Duration reconnectMaxDelay,
-            Consumer<Worker.DispatchTask> dispatchObserver) {
+        ManagedChannel channel,
+        boolean ownsChannel,
+        WorkerRegistration registration,
+        TaskProcessor processor,
+        Duration heartbeatInterval,
+        Duration startTimeout,
+        Duration reconnectInitialDelay,
+        Duration reconnectMaxDelay,
+        Consumer<Worker.DispatchTask> dispatchObserver
+    ) {
         this(
-                channel,
-                ownsChannel,
-                registration,
-                processor,
-                new ScriptRunnerRegistry(),
-                new WasmRunnerRegistry(),
-                heartbeatInterval,
-                startTimeout,
-                reconnectInitialDelay,
-                reconnectMaxDelay,
-                dispatchObserver);
+            channel,
+            ownsChannel,
+            registration,
+            processor,
+            new ScriptRunnerRegistry(),
+            new WasmRunnerRegistry(),
+            heartbeatInterval,
+            startTimeout,
+            reconnectInitialDelay,
+            reconnectMaxDelay,
+            dispatchObserver
+        );
     }
 
     GrpcTikeeWorkerClient(
-            ManagedChannel channel,
-            boolean ownsChannel,
-            WorkerRegistration registration,
-            TaskProcessor processor,
-            ScriptRunnerRegistry scriptRunners,
-            Duration heartbeatInterval,
-            Duration startTimeout,
-            Duration reconnectInitialDelay,
-            Duration reconnectMaxDelay,
-            Consumer<Worker.DispatchTask> dispatchObserver) {
+        ManagedChannel channel,
+        boolean ownsChannel,
+        WorkerRegistration registration,
+        TaskProcessor processor,
+        ScriptRunnerRegistry scriptRunners,
+        Duration heartbeatInterval,
+        Duration startTimeout,
+        Duration reconnectInitialDelay,
+        Duration reconnectMaxDelay,
+        Consumer<Worker.DispatchTask> dispatchObserver
+    ) {
         this(
-                channel,
-                ownsChannel,
-                registration,
-                processor,
-                scriptRunners,
-                new WasmRunnerRegistry(),
-                heartbeatInterval,
-                startTimeout,
-                reconnectInitialDelay,
-                reconnectMaxDelay,
-                dispatchObserver);
+            channel,
+            ownsChannel,
+            registration,
+            processor,
+            scriptRunners,
+            new WasmRunnerRegistry(),
+            heartbeatInterval,
+            startTimeout,
+            reconnectInitialDelay,
+            reconnectMaxDelay,
+            dispatchObserver
+        );
     }
 
     GrpcTikeeWorkerClient(
-            ManagedChannel channel,
-            boolean ownsChannel,
-            WorkerRegistration registration,
-            TaskProcessor processor,
-            ScriptRunnerRegistry scriptRunners,
-            WasmRunnerRegistry wasmRunners,
-            Duration heartbeatInterval,
-            Duration startTimeout,
-            Duration reconnectInitialDelay,
-            Duration reconnectMaxDelay,
-            Consumer<Worker.DispatchTask> dispatchObserver) {
-        this.registration = Objects.requireNonNull(registration, "registration");
+        ManagedChannel channel,
+        boolean ownsChannel,
+        WorkerRegistration registration,
+        TaskProcessor processor,
+        ScriptRunnerRegistry scriptRunners,
+        WasmRunnerRegistry wasmRunners,
+        Duration heartbeatInterval,
+        Duration startTimeout,
+        Duration reconnectInitialDelay,
+        Duration reconnectMaxDelay,
+        Consumer<Worker.DispatchTask> dispatchObserver
+    ) {
+        this.registration = Objects.requireNonNull(
+            registration,
+            "registration"
+        );
         this.channel = Objects.requireNonNull(channel, "channel");
         this.ownsChannel = ownsChannel;
         this.processor = Objects.requireNonNull(processor, "processor");
-        this.scriptRunners = Objects.requireNonNull(scriptRunners, "scriptRunners");
+        this.scriptRunners = Objects.requireNonNull(
+            scriptRunners,
+            "scriptRunners"
+        );
         this.wasmRunners = Objects.requireNonNull(wasmRunners, "wasmRunners");
-        this.heartbeatInterval = positiveDuration(heartbeatInterval, "heartbeatInterval");
+        this.heartbeatInterval = positiveDuration(
+            heartbeatInterval,
+            "heartbeatInterval"
+        );
         this.startTimeout = positiveDuration(startTimeout, "startTimeout");
-        this.reconnectInitialDelay = positiveDuration(reconnectInitialDelay, "reconnectInitialDelay");
-        this.reconnectMaxDelay = positiveDuration(reconnectMaxDelay, "reconnectMaxDelay");
-        this.dispatchObserver = Objects.requireNonNull(dispatchObserver, "dispatchObserver");
-        ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(1);
+        this.reconnectInitialDelay = positiveDuration(
+            reconnectInitialDelay,
+            "reconnectInitialDelay"
+        );
+        this.reconnectMaxDelay = positiveDuration(
+            reconnectMaxDelay,
+            "reconnectMaxDelay"
+        );
+        this.dispatchObserver = Objects.requireNonNull(
+            dispatchObserver,
+            "dispatchObserver"
+        );
+        ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(
+            1
+        );
         executor.setRemoveOnCancelPolicy(true);
         this.tikee = executor;
         this.processorExecutor = Executors.newCachedThreadPool(runnable -> {
@@ -307,21 +369,29 @@ public final class GrpcTikeeWorkerClient implements TikeeWorkerClient {
 
     @Override
     public boolean connected() {
-        return connected.get() && outbound.get() != null && workerId.get() != null;
+        return (
+            connected.get() && outbound.get() != null && workerId.get() != null
+        );
     }
 
     @Override
     public void emitLog(String instanceId, String level, String message) {
         String assignedWorkerId = requireConnectedWorkerId();
-        send(Worker.WorkerMessage.newBuilder()
-                .setTaskLog(Worker.TaskLog.newBuilder()
+        send(
+            Worker.WorkerMessage.newBuilder()
+                .setTaskLog(
+                    Worker.TaskLog.newBuilder()
                         .setWorkerId(assignedWorkerId)
-                        .setInstanceId(Objects.requireNonNull(instanceId, "instanceId"))
+                        .setInstanceId(
+                            Objects.requireNonNull(instanceId, "instanceId")
+                        )
                         .setLevel(Objects.requireNonNullElse(level, "info"))
                         .setMessage(Objects.requireNonNullElse(message, ""))
                         .setSequence(logSequence.incrementAndGet())
-                        .build())
-                .build());
+                        .build()
+                )
+                .build()
+        );
     }
 
     @Override
@@ -334,7 +404,9 @@ public final class GrpcTikeeWorkerClient implements TikeeWorkerClient {
         Optional.ofNullable(heartbeatTask).ifPresent(task -> task.cancel(true));
         heartbeatTask = null;
         connected.set(false);
-        StreamObserver<Worker.WorkerMessage> observer = outbound.getAndSet(null);
+        StreamObserver<Worker.WorkerMessage> observer = outbound.getAndSet(
+            null
+        );
         if (observer != null) {
             sendGracefulUnregister(observer);
             observer.onCompleted();
@@ -352,8 +424,11 @@ public final class GrpcTikeeWorkerClient implements TikeeWorkerClient {
         }
         terminalError.set(null);
         registrationLatch = new CountDownLatch(1);
-        WorkerTunnelServiceGrpc.WorkerTunnelServiceStub stub = WorkerTunnelServiceGrpc.newStub(channel);
-        StreamObserver<Worker.WorkerMessage> requestObserver = stub.openTunnel(new ServerObserver());
+        WorkerTunnelServiceGrpc.WorkerTunnelServiceStub stub =
+            WorkerTunnelServiceGrpc.newStub(channel);
+        StreamObserver<Worker.WorkerMessage> requestObserver = stub.openTunnel(
+            new ServerObserver()
+        );
         outbound.set(requestObserver);
         requestObserver.onNext(registerMessage());
         awaitRegistration();
@@ -362,23 +437,35 @@ public final class GrpcTikeeWorkerClient implements TikeeWorkerClient {
     }
 
     private void startHeartbeat() {
-        Optional.ofNullable(heartbeatTask).ifPresent(task -> task.cancel(false));
-        heartbeatTask = tikee.scheduleAtFixedRate(this::sendHeartbeatSafely,
-                heartbeatInterval.toMillis(), heartbeatInterval.toMillis(), TimeUnit.MILLISECONDS);
+        Optional.ofNullable(heartbeatTask).ifPresent(task ->
+            task.cancel(false)
+        );
+        heartbeatTask = tikee.scheduleAtFixedRate(
+            this::sendHeartbeatSafely,
+            heartbeatInterval.toMillis(),
+            heartbeatInterval.toMillis(),
+            TimeUnit.MILLISECONDS
+        );
     }
 
-    private void sendGracefulUnregister(StreamObserver<Worker.WorkerMessage> observer) {
+    private void sendGracefulUnregister(
+        StreamObserver<Worker.WorkerMessage> observer
+    ) {
         String assignedWorkerId = workerId.get();
         if (assignedWorkerId == null || assignedWorkerId.isBlank()) {
             return;
         }
-        observer.onNext(Worker.WorkerMessage.newBuilder()
-                .setUnregister(Worker.UnregisterWorker.newBuilder()
+        observer.onNext(
+            Worker.WorkerMessage.newBuilder()
+                .setUnregister(
+                    Worker.UnregisterWorker.newBuilder()
                         .setWorkerId(assignedWorkerId)
                         .setGeneration(generation.get())
                         .setFencingToken(fencingToken.get())
-                        .build())
-                .build());
+                        .build()
+                )
+                .build()
+        );
     }
 
     private static ManagedChannel channelForEndpoint(String endpoint) {
@@ -390,8 +477,12 @@ public final class GrpcTikeeWorkerClient implements TikeeWorkerClient {
                 default -> 80;
             };
         }
-        String host = uri.getHost() == null ? uri.getSchemeSpecificPart() : uri.getHost();
-        ManagedChannelBuilder<?> builder = ManagedChannelBuilder.forAddress(host, port);
+        String host =
+            uri.getHost() == null ? uri.getSchemeSpecificPart() : uri.getHost();
+        ManagedChannelBuilder<?> builder = ManagedChannelBuilder.forAddress(
+            host,
+            port
+        );
         if (!"https".equalsIgnoreCase(uri.getScheme())) {
             builder.usePlaintext();
         }
@@ -407,7 +498,8 @@ public final class GrpcTikeeWorkerClient implements TikeeWorkerClient {
     }
 
     private Worker.WorkerMessage registerMessage() {
-        Worker.RegisterWorker.Builder builder = Worker.RegisterWorker.newBuilder()
+        Worker.RegisterWorker.Builder builder =
+            Worker.RegisterWorker.newBuilder()
                 .setClientInstanceId(registration.clientInstanceId())
                 .setNamespace(registration.namespace())
                 .setApp(registration.app())
@@ -431,16 +523,29 @@ public final class GrpcTikeeWorkerClient implements TikeeWorkerClient {
 
     private void awaitRegistration() {
         try {
-            if (!registrationLatch.await(startTimeout.toMillis(), TimeUnit.MILLISECONDS)) {
-                throw new WorkerClientException("worker registration timed out");
+            if (
+                !registrationLatch.await(
+                    startTimeout.toMillis(),
+                    TimeUnit.MILLISECONDS
+                )
+            ) {
+                throw new WorkerClientException(
+                    "worker registration timed out"
+                );
             }
         } catch (InterruptedException error) {
             Thread.currentThread().interrupt();
-            throw new WorkerClientException("worker registration interrupted", error);
+            throw new WorkerClientException(
+                "worker registration interrupted",
+                error
+            );
         }
         Throwable error = terminalError.get();
         if (error != null && !connected.get()) {
-            throw new WorkerClientException("worker tunnel failed during registration", error);
+            throw new WorkerClientException(
+                "worker tunnel failed during registration",
+                error
+            );
         }
         requireWorkerId();
     }
@@ -467,14 +572,18 @@ public final class GrpcTikeeWorkerClient implements TikeeWorkerClient {
             if (assignedWorkerId == null || assignedWorkerId.isBlank()) {
                 return;
             }
-            send(Worker.WorkerMessage.newBuilder()
-                    .setHeartbeat(Worker.Heartbeat.newBuilder()
+            send(
+                Worker.WorkerMessage.newBuilder()
+                    .setHeartbeat(
+                        Worker.Heartbeat.newBuilder()
                             .setWorkerId(assignedWorkerId)
                             .setSequence(heartbeatSequence.incrementAndGet())
                             .setGeneration(generation.get())
                             .setFencingToken(fencingToken.get())
-                            .build())
-                    .build());
+                            .build()
+                    )
+                    .build()
+            );
         } catch (RuntimeException error) {
             terminalError.compareAndSet(null, error);
             markDisconnected();
@@ -493,7 +602,9 @@ public final class GrpcTikeeWorkerClient implements TikeeWorkerClient {
     private void markDisconnected() {
         connected.set(false);
         outbound.set(null);
-        Optional.ofNullable(heartbeatTask).ifPresent(task -> task.cancel(false));
+        Optional.ofNullable(heartbeatTask).ifPresent(task ->
+            task.cancel(false)
+        );
         heartbeatTask = null;
     }
 
@@ -506,19 +617,23 @@ public final class GrpcTikeeWorkerClient implements TikeeWorkerClient {
         }
         long attempt = reconnectAttempt.incrementAndGet();
         long delayMillis = reconnectDelayMillis(attempt);
-        reconnectTask = tikee.schedule(() -> {
-            reconnectScheduled.set(false);
-            if (closed.get() || !started.get() || connected()) {
-                return;
-            }
-            try {
-                openTunnelAndRegister();
-            } catch (RuntimeException error) {
-                terminalError.compareAndSet(null, error);
-                markDisconnected();
-                scheduleReconnect();
-            }
-        }, delayMillis, TimeUnit.MILLISECONDS);
+        reconnectTask = tikee.schedule(
+            () -> {
+                reconnectScheduled.set(false);
+                if (closed.get() || !started.get() || connected()) {
+                    return;
+                }
+                try {
+                    openTunnelAndRegister();
+                } catch (RuntimeException error) {
+                    terminalError.compareAndSet(null, error);
+                    markDisconnected();
+                    scheduleReconnect();
+                }
+            },
+            delayMillis,
+            TimeUnit.MILLISECONDS
+        );
     }
 
     private long reconnectDelayMillis(long attempt) {
@@ -536,125 +651,253 @@ public final class GrpcTikeeWorkerClient implements TikeeWorkerClient {
         dispatchObserver.accept(task);
         processorExecutor.submit(() -> {
             String assignedWorkerId = requireConnectedWorkerId();
-            log.info("[tikee.worker] received task instanceId={} jobId={} processor={}",
-                    task.getInstanceId(), task.getJobId(), task.getProcessorName());
-            emitTaskLog(task, assignedWorkerId, "info", "received task " + task.getInstanceId()
-                    + " processor=" + task.getProcessorName());
+            log.info(
+                "[tikee.worker] received task instanceId={} jobId={} processor={}",
+                task.getInstanceId(),
+                task.getJobId(),
+                task.getProcessorName()
+            );
+            emitTaskLog(
+                task,
+                assignedWorkerId,
+                "info",
+                "received task " +
+                    task.getInstanceId() +
+                    " processor=" +
+                    task.getProcessorName()
+            );
             TaskOutcome outcome;
-            if (task.hasProcessorBinding() && task.getProcessorBinding().hasWasm()) {
+            if (
+                task.hasProcessorBinding() &&
+                task.getProcessorBinding().hasWasm()
+            ) {
                 outcome = processWasmBinding(task, assignedWorkerId);
-            } else if (task.hasProcessorBinding() && task.getProcessorBinding().hasScript()) {
+            } else if (
+                task.hasProcessorBinding() &&
+                task.getProcessorBinding().hasScript()
+            ) {
                 outcome = processScriptBinding(task, assignedWorkerId);
             } else {
                 try {
-                    outcome = processor.process(new TaskContext(
-                            task.getJobId(),
-                            task.getProcessorName(),
-                            task.getInstanceId(),
-                            task.getPayload().toByteArray()));
+                    outcome = captureProcessorStdout(
+                        task,
+                        assignedWorkerId,
+                        () ->
+                            processor.process(
+                                new TaskContext(
+                                    task.getJobId(),
+                                    task.getProcessorName(),
+                                    task.getInstanceId(),
+                                    task.getPayload().toByteArray()
+                                )
+                            )
+                    );
                 } catch (Exception error) {
                     outcome = TaskOutcome.failed(error.getMessage());
                 }
             }
             String level = outcome.success() ? "info" : "error";
-            log.info("[tikee.worker] completed task instanceId={} processor={} success={} message={}",
-                    task.getInstanceId(), task.getProcessorName(), outcome.success(), outcome.message());
-            emitTaskLog(task, assignedWorkerId, level, "completed task " + task.getInstanceId()
-                    + " success=" + outcome.success() + " message=" + outcome.message());
-            send(Worker.WorkerMessage.newBuilder()
-                    .setTaskResult(Worker.TaskResult.newBuilder()
+            log.info(
+                "[tikee.worker] completed task instanceId={} processor={} success={} message={}",
+                task.getInstanceId(),
+                task.getProcessorName(),
+                outcome.success(),
+                outcome.message()
+            );
+            emitTaskLog(
+                task,
+                assignedWorkerId,
+                level,
+                "completed task " +
+                    task.getInstanceId() +
+                    " success=" +
+                    outcome.success() +
+                    " message=" +
+                    outcome.message()
+            );
+            send(
+                Worker.WorkerMessage.newBuilder()
+                    .setTaskResult(
+                        Worker.TaskResult.newBuilder()
                             .setWorkerId(assignedWorkerId)
                             .setInstanceId(task.getInstanceId())
                             .setSuccess(outcome.success())
                             .setMessage(outcome.message())
                             .setAssignmentToken(task.getAssignmentToken())
-                            .build())
-                    .build());
+                            .build()
+                    )
+                    .build()
+            );
         });
     }
 
-    private TaskOutcome processWasmBinding(Worker.DispatchTask task, String assignedWorkerId) {
-        Worker.WasmProcessorBinding binding = task.getProcessorBinding().getWasm();
+    private TaskOutcome captureProcessorStdout(
+        Worker.DispatchTask task,
+        String assignedWorkerId,
+        Callable<TaskOutcome> processorCall
+    ) throws Exception {
+        PrintStream originalOut = System.out;
+        ByteArrayOutputStream captured = new ByteArrayOutputStream();
+        TaskStdoutCaptureStream tee = new TaskStdoutCaptureStream(
+            originalOut,
+            captured
+        );
+        try (
+            PrintStream captureOut = new PrintStream(
+                tee,
+                true,
+                java.nio.charset.StandardCharsets.UTF_8
+            )
+        ) {
+            System.setOut(captureOut);
+            return processorCall.call();
+        } finally {
+            System.setOut(originalOut);
+            emitCapturedProcessorStdout(
+                task,
+                assignedWorkerId,
+                captured.toString(java.nio.charset.StandardCharsets.UTF_8)
+            );
+        }
+    }
+
+    private void emitCapturedProcessorStdout(
+        Worker.DispatchTask task,
+        String assignedWorkerId,
+        String output
+    ) {
+        for (String line : output.split("\\R")) {
+            String trimmed = line.trim();
+            if (!trimmed.isEmpty()) {
+                emitTaskLog(task, assignedWorkerId, "info", trimmed);
+            }
+        }
+    }
+
+    private TaskOutcome processWasmBinding(
+        Worker.DispatchTask task,
+        String assignedWorkerId
+    ) {
+        Worker.WasmProcessorBinding binding = task
+            .getProcessorBinding()
+            .getWasm();
         try {
-            return wasmRunners.runner()
-                    .orElseThrow(() -> new WorkerClientException("wasm runner is not registered"))
-                    .run(new WasmRunnerTask(
-                            binding.getScriptId(),
-                            binding.getVersionId(),
-                            binding.getVersionNumber(),
-                            binding.getModule().toByteArray(),
-                            binding.getModuleSha256(),
-                            binding.getRuntime(),
-                            binding.getEntrypoint(),
-                            new WasmRunnerPolicy(
-                                    binding.getTimeoutMs(),
-                                    binding.getMaxMemoryBytes(),
-                                    binding.getFuel(),
-                                    binding.getAllowNetwork(),
-                                    binding.getAllowedEnvVarsList())),
-                            (level, message) -> emitTaskLog(task, assignedWorkerId, level, message));
+            return wasmRunners
+                .runner()
+                .orElseThrow(() ->
+                    new WorkerClientException("wasm runner is not registered")
+                )
+                .run(
+                    new WasmRunnerTask(
+                        binding.getScriptId(),
+                        binding.getVersionId(),
+                        binding.getVersionNumber(),
+                        binding.getModule().toByteArray(),
+                        binding.getModuleSha256(),
+                        binding.getRuntime(),
+                        binding.getEntrypoint(),
+                        new WasmRunnerPolicy(
+                            binding.getTimeoutMs(),
+                            binding.getMaxMemoryBytes(),
+                            binding.getFuel(),
+                            binding.getAllowNetwork(),
+                            binding.getAllowedEnvVarsList()
+                        )
+                    ),
+                    (level, message) ->
+                        emitTaskLog(task, assignedWorkerId, level, message)
+                );
         } catch (Exception error) {
             return TaskOutcome.failed(error.getMessage());
         }
     }
 
-    private TaskOutcome processScriptBinding(Worker.DispatchTask task, String assignedWorkerId) {
-        Worker.ScriptProcessorBinding binding = task.getProcessorBinding().getScript();
+    private TaskOutcome processScriptBinding(
+        Worker.DispatchTask task,
+        String assignedWorkerId
+    ) {
+        Worker.ScriptProcessorBinding binding = task
+            .getProcessorBinding()
+            .getScript();
         try {
-            ScriptRunnerKind kind = ScriptRunnerKind.fromLanguage(binding.getLanguage())
-                    .orElseThrow(() -> new WorkerClientException("unsupported script language: " + binding.getLanguage()));
-            return scriptRunners.find(kind)
-                    .orElseThrow(() -> new WorkerClientException("script runner is not registered for language: "
-                            + binding.getLanguage()))
-                    .run(new ScriptRunnerTask(
-                            binding.getScriptId(),
-                            binding.getVersionId(),
-                            binding.getVersionNumber(),
-                            binding.getLanguage(),
-                            binding.getContent().toStringUtf8(),
-                            binding.getContentSha256(),
-                            new ScriptRunnerPolicy(
-                                    binding.getTimeoutMs(),
-                                    binding.getMaxMemoryBytes(),
-                                    binding.getMaxOutputBytes(),
-                                    binding.getAllowNetwork(),
-                                    binding.getAllowedNetworkHostsList(),
-                                    binding.getAllowedEnvVarsList(),
-                                    binding.getReadOnlyPathsList(),
-                                    binding.getWritablePathsList(),
-                                    binding.getSecretRefsList()),
-                            ScriptSandboxBackend.fromValue(binding.getSandboxBackend())),
-                            (level, message) -> emitTaskLog(task, assignedWorkerId, level, message));
+            ScriptRunnerKind kind = ScriptRunnerKind.fromLanguage(
+                binding.getLanguage()
+            ).orElseThrow(() ->
+                new WorkerClientException(
+                    "unsupported script language: " + binding.getLanguage()
+                )
+            );
+            return scriptRunners
+                .find(kind)
+                .orElseThrow(() ->
+                    new WorkerClientException(
+                        "script runner is not registered for language: " +
+                            binding.getLanguage()
+                    )
+                )
+                .run(
+                    new ScriptRunnerTask(
+                        binding.getScriptId(),
+                        binding.getVersionId(),
+                        binding.getVersionNumber(),
+                        binding.getLanguage(),
+                        binding.getContent().toStringUtf8(),
+                        binding.getContentSha256(),
+                        new ScriptRunnerPolicy(
+                            binding.getTimeoutMs(),
+                            binding.getMaxMemoryBytes(),
+                            binding.getMaxOutputBytes(),
+                            binding.getAllowNetwork(),
+                            binding.getAllowedNetworkHostsList(),
+                            binding.getAllowedEnvVarsList(),
+                            binding.getReadOnlyPathsList(),
+                            binding.getWritablePathsList(),
+                            binding.getSecretRefsList()
+                        ),
+                        ScriptSandboxBackend.fromValue(
+                            binding.getSandboxBackend()
+                        )
+                    ),
+                    (level, message) ->
+                        emitTaskLog(task, assignedWorkerId, level, message)
+                );
         } catch (Exception error) {
             return TaskOutcome.failed(error.getMessage());
         }
     }
 
-    private void emitTaskLog(Worker.DispatchTask task, String assignedWorkerId, String level, String message) {
-        String line = "[tikee-worker] " + message;
-        if ("error".equalsIgnoreCase(level)) {
-            System.err.println(line);
-        } else {
-            System.out.println(line);
-        }
-        send(Worker.WorkerMessage.newBuilder()
-                .setTaskLog(Worker.TaskLog.newBuilder()
+    private void emitTaskLog(
+        Worker.DispatchTask task,
+        String assignedWorkerId,
+        String level,
+        String message
+    ) {
+        send(
+            Worker.WorkerMessage.newBuilder()
+                .setTaskLog(
+                    Worker.TaskLog.newBuilder()
                         .setWorkerId(assignedWorkerId)
                         .setInstanceId(task.getInstanceId())
                         .setLevel(level)
                         .setMessage(message)
                         .setSequence(logSequence.incrementAndGet())
                         .setAssignmentToken(task.getAssignmentToken())
-                        .build())
-                .build());
+                        .build()
+                )
+                .build()
+        );
     }
 
-    private final class ServerObserver implements StreamObserver<Worker.ServerMessage> {
+    private final class ServerObserver
+        implements StreamObserver<Worker.ServerMessage>
+    {
+
         @Override
         public void onNext(Worker.ServerMessage message) {
             switch (message.getKindCase()) {
                 case REGISTERED -> {
-                    Worker.WorkerRegistered registered = message.getRegistered();
+                    Worker.WorkerRegistered registered =
+                        message.getRegistered();
                     workerId.set(registered.getWorkerId());
                     generation.set(registered.getGeneration());
                     fencingToken.set(registered.getFencingToken());

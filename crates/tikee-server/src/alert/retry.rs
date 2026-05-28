@@ -3,7 +3,10 @@
 use super::{AlertDeliveryPolicy, AlertDispatcher};
 use crate::cluster::SharedClusterCoordinator;
 use std::time::Duration;
-use tikee_storage::{AlertRepository, RecordAlertDeliveryAttempt};
+use tikee_storage::{
+    AlertDeliveryAttemptSummary, AlertEventSummary, AlertRepository, AlertRuleSummary,
+    RecordAlertDeliveryAttempt,
+};
 use tokio::time as tokio_time;
 use tracing::{debug, info, warn};
 
@@ -60,7 +63,6 @@ pub async fn process_due_alert_delivery_retries(
 ///
 /// # Errors
 /// Returns storage errors from loading rules/events or writing retry attempt state.
-#[allow(clippy::too_many_lines)]
 pub async fn retry_once_if_owner(
     alerts: &AlertRepository,
     cluster: &SharedClusterCoordinator,
@@ -112,7 +114,6 @@ pub async fn run_retry_loop(
 ///
 /// # Errors
 /// Returns storage errors from loading rules/events or writing retry attempt state.
-#[allow(clippy::too_many_lines)]
 pub async fn process_due_alert_delivery_retries_with_delivery_policy(
     alerts: &AlertRepository,
     limit: u64,
@@ -123,125 +124,156 @@ pub async fn process_due_alert_delivery_retries_with_delivery_policy(
     let mut summary = AlertRetryProcessSummary::default();
     for attempt in due {
         summary.scanned = summary.scanned.saturating_add(1);
-        if attempt.attempt >= policy.max_attempts {
-            alerts
-                .mark_delivery_attempt_retry_state(
-                    &attempt.id,
-                    "dead_letter",
-                    Some("max retry attempts exhausted"),
-                    None,
-                )
-                .await?;
-            summary.dead_lettered = summary.dead_lettered.saturating_add(1);
-            continue;
-        }
-        let Some(event) = alerts.get_event(&attempt.event_id).await? else {
-            alerts
-                .mark_delivery_attempt_retry_state(
-                    &attempt.id,
-                    "dead_letter",
-                    Some("source alert event not found"),
-                    None,
-                )
-                .await?;
-            summary.dead_lettered = summary.dead_lettered.saturating_add(1);
-            continue;
-        };
-        let Some(rule) = alerts.get_rule(&attempt.rule_id).await? else {
-            alerts
-                .mark_delivery_attempt_retry_state(
-                    &attempt.id,
-                    "dead_letter",
-                    Some("source alert rule not found"),
-                    None,
-                )
-                .await?;
-            summary.dead_lettered = summary.dead_lettered.saturating_add(1);
-            continue;
-        };
-        let Ok(channels) =
-            serde_json::from_str::<Vec<super::NotificationChannel>>(&rule.channels_json)
-        else {
-            alerts
-                .mark_delivery_attempt_retry_state(
-                    &attempt.id,
-                    "dead_letter",
-                    Some("source alert rule channels are invalid"),
-                    None,
-                )
-                .await?;
-            summary.dead_lettered = summary.dead_lettered.saturating_add(1);
-            continue;
-        };
-        let retry_channels: Vec<_> = channels
-            .into_iter()
-            .filter(|channel| {
-                let identity = super::notification_channel_identity(channel);
-                identity.provider == attempt.provider && identity.target == attempt.target
-            })
-            .collect();
-        if retry_channels.is_empty() {
-            alerts
-                .mark_delivery_attempt_retry_state(
-                    &attempt.id,
-                    "dead_letter",
-                    Some("matching notification channel not found"),
-                    None,
-                )
-                .await?;
-            summary.dead_lettered = summary.dead_lettered.saturating_add(1);
-            continue;
-        }
-        alerts
-            .mark_delivery_attempt_retry_state(&attempt.id, "retry_consumed", None, None)
-            .await?;
-        let payload = super::AlertPayload {
-            rule_name: event.rule_name,
-            severity: severity_from_str(&event.severity),
-            message: event.message.unwrap_or_else(|| event.event_type.clone()),
-            resource_type: event.resource_type,
-            resource_id: event.resource_id,
-            triggered_at: event.created_at,
-        };
-        let results = AlertDispatcher::new_with_policy(Vec::new(), delivery_policy)
-            .deliver_payload(&retry_channels, &payload)
-            .await;
-        for result in results {
-            let delivered = result.delivered;
-            let next_attempt = attempt.attempt.saturating_add(1);
-            let exhausted = !delivered && next_attempt >= policy.max_attempts;
-            alerts
-                .record_delivery_attempt(RecordAlertDeliveryAttempt {
-                    event_id: attempt.event_id.clone(),
-                    rule_id: attempt.rule_id.clone(),
-                    provider: result.provider,
-                    target: result.target,
-                    delivered,
-                    status_code: result.status.map(i32::from),
-                    error: result.error,
-                    attempt: next_attempt,
-                    retry_state: if delivered {
-                        "delivered".to_owned()
-                    } else if exhausted {
-                        "dead_letter".to_owned()
-                    } else {
-                        "retry_pending".to_owned()
-                    },
-                    next_retry_at: if delivered || exhausted {
-                        None
-                    } else {
-                        Some(retry_after_seconds(policy.backoff_seconds))
-                    },
-                })
-                .await?;
-            if delivered || !exhausted {
-                summary.retried = summary.retried.saturating_add(1);
-            } else {
-                summary.dead_lettered = summary.dead_lettered.saturating_add(1);
-            }
-        }
+        process_due_attempt(alerts, &attempt, policy, delivery_policy, &mut summary).await?;
     }
     Ok(summary)
+}
+
+async fn process_due_attempt(
+    alerts: &AlertRepository,
+    attempt: &AlertDeliveryAttemptSummary,
+    policy: AlertRetryPolicy,
+    delivery_policy: AlertDeliveryPolicy,
+    summary: &mut AlertRetryProcessSummary,
+) -> Result<(), tikee_storage::DbErr> {
+    if attempt.attempt >= policy.max_attempts {
+        dead_letter_attempt(alerts, attempt, "max retry attempts exhausted", summary).await?;
+        return Ok(());
+    }
+    let Some((event, rule)) = load_retry_context(alerts, attempt, summary).await? else {
+        return Ok(());
+    };
+    let retry_channels = retry_channels(alerts, attempt, &rule).await?;
+    if retry_channels.is_empty() {
+        dead_letter_attempt(
+            alerts,
+            attempt,
+            "matching notification channel not found",
+            summary,
+        )
+        .await?;
+        return Ok(());
+    }
+    alerts
+        .mark_delivery_attempt_retry_state(&attempt.id, "retry_consumed", None, None)
+        .await?;
+    let payload = alert_payload_from_event(event);
+    let results = AlertDispatcher::new_with_policy(Vec::new(), delivery_policy)
+        .deliver_payload(&retry_channels, &payload)
+        .await;
+    for result in results {
+        record_retry_result(alerts, attempt, result, policy, summary).await?;
+    }
+    Ok(())
+}
+
+async fn load_retry_context(
+    alerts: &AlertRepository,
+    attempt: &AlertDeliveryAttemptSummary,
+    summary: &mut AlertRetryProcessSummary,
+) -> Result<Option<(AlertEventSummary, AlertRuleSummary)>, tikee_storage::DbErr> {
+    let Some(event) = alerts.get_event(&attempt.event_id).await? else {
+        dead_letter_attempt(alerts, attempt, "source alert event not found", summary).await?;
+        return Ok(None);
+    };
+    let Some(rule) = alerts.get_rule(&attempt.rule_id).await? else {
+        dead_letter_attempt(alerts, attempt, "source alert rule not found", summary).await?;
+        return Ok(None);
+    };
+    Ok(Some((event, rule)))
+}
+
+async fn retry_channels(
+    alerts: &AlertRepository,
+    attempt: &AlertDeliveryAttemptSummary,
+    rule: &AlertRuleSummary,
+) -> Result<Vec<super::NotificationChannel>, tikee_storage::DbErr> {
+    let plugin_channels = tikee_storage::PluginRepository::new(alerts.db())
+        .list_plugins()
+        .await?
+        .into_iter()
+        .filter(|plugin| plugin.enabled)
+        .flat_map(|plugin| plugin.alert_channel_types)
+        .collect::<Vec<_>>();
+    let channels = super::notification_channels_from_json(&rule.channels_json, &plugin_channels);
+    Ok(channels
+        .into_iter()
+        .filter(|channel| {
+            let identity = super::notification_channel_identity(channel);
+            identity.provider == attempt.provider && identity.target == attempt.target
+        })
+        .collect())
+}
+
+fn alert_payload_from_event(event: AlertEventSummary) -> super::AlertPayload {
+    super::AlertPayload {
+        rule_name: event.rule_name,
+        severity: severity_from_str(&event.severity),
+        message: event.message.unwrap_or_else(|| event.event_type.clone()),
+        resource_type: event.resource_type,
+        resource_id: event.resource_id,
+        triggered_at: event.created_at,
+    }
+}
+
+async fn record_retry_result(
+    alerts: &AlertRepository,
+    attempt: &AlertDeliveryAttemptSummary,
+    result: super::AlertDeliveryResult,
+    policy: AlertRetryPolicy,
+    summary: &mut AlertRetryProcessSummary,
+) -> Result<(), tikee_storage::DbErr> {
+    let delivered = result.delivered;
+    let next_attempt = attempt.attempt.saturating_add(1);
+    let exhausted = !delivered && next_attempt >= policy.max_attempts;
+    alerts
+        .record_delivery_attempt(RecordAlertDeliveryAttempt {
+            event_id: attempt.event_id.clone(),
+            rule_id: attempt.rule_id.clone(),
+            provider: result.provider,
+            target: result.target,
+            delivered,
+            status_code: result.status.map(i32::from),
+            error: result.error,
+            attempt: next_attempt,
+            retry_state: retry_state_for(delivered, exhausted),
+            next_retry_at: next_retry_at(delivered, exhausted, policy.backoff_seconds),
+        })
+        .await?;
+    if delivered || !exhausted {
+        summary.retried = summary.retried.saturating_add(1);
+    } else {
+        summary.dead_lettered = summary.dead_lettered.saturating_add(1);
+    }
+    Ok(())
+}
+
+async fn dead_letter_attempt(
+    alerts: &AlertRepository,
+    attempt: &AlertDeliveryAttemptSummary,
+    reason: &str,
+    summary: &mut AlertRetryProcessSummary,
+) -> Result<(), tikee_storage::DbErr> {
+    alerts
+        .mark_delivery_attempt_retry_state(&attempt.id, "dead_letter", Some(reason), None)
+        .await?;
+    summary.dead_lettered = summary.dead_lettered.saturating_add(1);
+    Ok(())
+}
+
+fn retry_state_for(delivered: bool, exhausted: bool) -> String {
+    if delivered {
+        "delivered"
+    } else if exhausted {
+        "dead_letter"
+    } else {
+        "retry_pending"
+    }
+    .to_owned()
+}
+
+fn next_retry_at(delivered: bool, exhausted: bool, backoff_seconds: i64) -> Option<String> {
+    (!delivered && !exhausted).then(|| retry_after_seconds(backoff_seconds))
 }
 
 fn severity_from_str(value: &str) -> super::Severity {

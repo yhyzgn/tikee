@@ -80,6 +80,11 @@ impl JobRepository {
         let app = self.ensure_app(&namespace.id, &input.app, &now).await?;
         let id = new_id("job");
         let script_id = normalize_processor_name(input.script_id);
+        let processor_type = if script_id.is_some() {
+            None
+        } else {
+            normalize_processor_name(input.processor_type)
+        };
         let processor_name = if script_id.is_some() {
             None
         } else {
@@ -94,6 +99,7 @@ impl JobRepository {
             schedule_type: Set(input.schedule_type),
             schedule_expr: Set(input.schedule_expr),
             processor_name: Set(processor_name),
+            processor_type: Set(processor_type),
             script_id: Set(script_id),
             enabled: Set(input.enabled),
             canary_job_id: Set(normalize_processor_name(input.canary_job_id)),
@@ -118,6 +124,7 @@ impl JobRepository {
             schedule_type: model.schedule_type,
             schedule_expr: model.schedule_expr,
             processor_name: model.processor_name,
+            processor_type: model.processor_type,
             script_id: model.script_id,
             enabled: model.enabled,
             canary_job_id: model.canary_job_id,
@@ -158,10 +165,14 @@ impl JobRepository {
                 active.script_id = Set(None);
             }
         }
+        if let Some(processor_type) = input.processor_type {
+            active.processor_type = Set(normalize_processor_name(processor_type));
+        }
         if let Some(script_id) = input.script_id {
             active.script_id = Set(normalize_processor_name(script_id));
             if matches!(active.script_id, sea_orm::ActiveValue::Set(Some(_))) {
                 active.processor_name = Set(None);
+                active.processor_type = Set(None);
             }
         }
         if let Some(enabled) = input.enabled {
@@ -223,6 +234,7 @@ impl JobRepository {
         active.schedule_type = Set(version.schedule_type);
         active.schedule_expr = Set(version.schedule_expr);
         active.processor_name = Set(version.processor_name);
+        active.processor_type = Set(version.processor_type);
         active.script_id = Set(version.script_id);
         active.enabled = Set(version.enabled);
         active.updated_at = Set(now_rfc3339());
@@ -280,6 +292,7 @@ impl JobRepository {
                 schedule_type: job.schedule_type,
                 schedule_expr: job.schedule_expr,
                 processor_name: job.processor_name,
+                processor_type: job.processor_type,
                 script_id: job.script_id,
                 enabled: job.enabled,
                 canary_job_id: job.canary_job_id,
@@ -356,6 +369,7 @@ fn job_changed(before: &job::Model, active: &job::ActiveModel) -> bool {
         || active.schedule_type.as_ref() != &before.schedule_type
         || active.schedule_expr.as_ref() != &before.schedule_expr
         || active.processor_name.as_ref() != &before.processor_name
+        || active.processor_type.as_ref() != &before.processor_type
         || active.script_id.as_ref() != &before.script_id
         || active.enabled.as_ref() != &before.enabled
         || active.canary_job_id.as_ref() != &before.canary_job_id

@@ -9,6 +9,7 @@ pub(crate) mod jobs;
 pub(crate) mod metrics;
 pub(crate) mod observability;
 pub(crate) mod oidc_identity;
+pub(crate) mod plugins;
 pub(crate) mod raft;
 pub(crate) mod scheduling;
 pub(crate) mod scope;
@@ -34,6 +35,7 @@ pub use jobs::{
 pub use metrics::metrics_summary;
 pub use observability::observability_status;
 pub use oidc_identity::{delete_oidc_identity, list_oidc_identities, upsert_oidc_identity};
+pub use plugins::{create_plugin, delete_plugin, list_plugins, update_plugin};
 pub use raft::{append_entries, propose_member_change};
 pub use scheduling::job_scheduling_advice;
 pub use scope::{

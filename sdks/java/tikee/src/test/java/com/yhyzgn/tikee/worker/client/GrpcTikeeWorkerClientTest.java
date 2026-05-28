@@ -198,6 +198,50 @@ class GrpcTikeeWorkerClientTest {
     }
 
     @Test
+    void dispatchedTaskCapturesProcessorStdoutAsTaskLog() throws Exception {
+        String serverName = "tikee-worker-test-" + UUID.randomUUID();
+        RecordingTunnelService service = new RecordingTunnelService(Worker.DispatchTask.newBuilder()
+                .setJobId("job-sql")
+                .setProcessorName("billing.sql-sync")
+                .setInstanceId("instance-sql")
+                .setPayload(com.google.protobuf.ByteString.copyFromUtf8("{}"))
+                .setAssignmentToken("java-assign-token")
+                .build());
+        Server server = InProcessServerBuilder.forName(serverName)
+                .directExecutor()
+                .addService(service)
+                .build()
+                .start();
+        ManagedChannel channel = InProcessChannelBuilder.forName(serverName).directExecutor().build();
+        try {
+            GrpcTikeeWorkerClient client = new GrpcTikeeWorkerClient(
+                    channel,
+                    false,
+                    new WorkerRegistration("java-instance-stdout", "default", "billing", "local", "local", List.of(), Map.of()),
+                    context -> {
+                        System.out.println("[billing.sql-sync] plugin SQL processor received payload='"
+                                + new String(context.payload(), StandardCharsets.UTF_8) + "'");
+                        return new TaskOutcome(true, "sql-plugin-ok");
+                    },
+                    Duration.ofSeconds(60),
+                    Duration.ofSeconds(2),
+                    ignored -> {});
+
+            client.start();
+            service.awaitResult();
+            service.awaitTaskLogs(3);
+            client.close();
+
+            assertTrue(service.taskLogs.stream()
+                    .anyMatch(log -> log.getMessage().contains("[billing.sql-sync] plugin SQL processor received payload='{}'")
+                            && log.getAssignmentToken().equals("java-assign-token")));
+        } finally {
+            channel.shutdownNow();
+            server.shutdownNow();
+        }
+    }
+
+    @Test
     void serverCompletionEventuallyReconnectsWithoutForgettingWorkerId() throws Exception {
         String serverName = "tikee-worker-test-" + UUID.randomUUID();
         RecordingTunnelService service = new RecordingTunnelService(null, true);

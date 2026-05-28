@@ -92,11 +92,20 @@ pub async fn alert_rule_delivery_status(
         .ok_or_else(|| ApiError::not_found("alert rule not found"))?;
     let channel_values: Vec<serde_json::Value> =
         serde_json::from_str(&rule.channels_json).unwrap_or_default();
+    let plugin_channel_types = state
+        .plugins
+        .list_plugins()
+        .await
+        .map_err(|error| ApiError::storage(&error))?
+        .into_iter()
+        .filter(|plugin| plugin.enabled)
+        .flat_map(|plugin| plugin.alert_channel_types)
+        .collect::<Vec<_>>();
     let mut issues = Vec::new();
     let channels: Vec<_> = channel_values
         .iter()
         .enumerate()
-        .map(|(index, value)| channel_status(index, value))
+        .map(|(index, value)| channel_status(index, value, &plugin_channel_types))
         .inspect(|status| issues.extend(status.issues.iter().cloned()))
         .collect();
     Ok(Json(ApiResponse::success(AlertDeliveryStatusResponse {
@@ -108,7 +117,11 @@ pub async fn alert_rule_delivery_status(
     })))
 }
 
-fn channel_status(index: usize, value: &serde_json::Value) -> AlertDeliveryChannelStatus {
+fn channel_status(
+    index: usize,
+    value: &serde_json::Value,
+    plugin_channel_types: &[tikee_storage::PluginAlertChannelTypeSummary],
+) -> AlertDeliveryChannelStatus {
     let provider = value
         .get("type")
         .or_else(|| value.get("provider"))
@@ -119,6 +132,10 @@ fn channel_status(index: usize, value: &serde_json::Value) -> AlertDeliveryChann
         .get("enabled")
         .and_then(serde_json::Value::as_bool)
         .unwrap_or(true);
+    let provider_supported = builtin_provider(&provider)
+        || plugin_channel_types
+            .iter()
+            .any(|channel| channel.r#type == provider);
     let target_configured = channel_target_configured(&provider, value);
     let secret_configured = channel_secret_configured(value);
     let transport_security = channel_transport_security(&provider, value);
@@ -126,6 +143,10 @@ fn channel_status(index: usize, value: &serde_json::Value) -> AlertDeliveryChann
     let mut issues = Vec::new();
     if provider == "unknown" {
         issues.push(format!("channels[{index}].type is required"));
+    } else if !provider_supported {
+        issues.push(format!(
+            "channels[{index}].type is not registered: {provider}"
+        ));
     }
     if enabled && !target_configured {
         issues.push(format!(
@@ -146,6 +167,13 @@ fn channel_status(index: usize, value: &serde_json::Value) -> AlertDeliveryChann
         transport_security,
         issues,
     }
+}
+
+fn builtin_provider(provider: &str) -> bool {
+    matches!(
+        provider,
+        "webhook" | "slack" | "dingtalk" | "feishu" | "wechat_work" | "pagerduty" | "email"
+    )
 }
 
 fn channel_target_configured(provider: &str, value: &serde_json::Value) -> bool {

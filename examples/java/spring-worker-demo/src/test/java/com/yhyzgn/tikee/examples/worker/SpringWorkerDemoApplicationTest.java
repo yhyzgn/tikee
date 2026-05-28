@@ -12,6 +12,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -26,10 +28,12 @@ import org.springframework.boot.test.web.server.LocalServerPort;
         "tikee.worker.region=demo-region",
         "tikee.worker.capabilities[0]=java",
         "tikee.worker.capabilities[1]=spring-boot",
+        "tikee.worker.capabilities[2]=plugin-processor:sql",
         "tikee.worker.labels.runtime=java",
         "tikee.worker.labels.demo=spring-worker"
 })
 class SpringWorkerDemoApplicationTest {
+    private static final Logger log = LoggerFactory.getLogger(SpringWorkerDemoApplicationTest.class);
     @Autowired
     private TikeeWorkerClient client;
 
@@ -52,8 +56,11 @@ class SpringWorkerDemoApplicationTest {
         assertThat(noop.registration().cluster()).isEqualTo("demo-cluster");
         assertThat(noop.registration().region()).isEqualTo("demo-region");
         assertThat(noop.registration().capabilities()).contains("java", "spring-boot");
+        assertThat(noop.registration().capabilities()).contains("plugin-processor:sql");
         assertThat(noop.registration().labels()).containsEntry("runtime", "java")
                 .containsEntry("demo", "spring-worker");
+        log.info("[java-demo-plugin-test] dry-run registration capabilities={}", noop.registration().capabilities());
+        log.info("[java-demo-plugin-test] dry-run registration labels={}", noop.registration().labels());
     }
 
     @Test
@@ -65,13 +72,15 @@ class SpringWorkerDemoApplicationTest {
         assertThat(health).contains("\"connected\":true");
         assertThat(health).contains("\"workerId\":\"dry-run-java-");
         assertThat(health).contains("demo.echo", "demo.fail", "demo.workflow.step");
-        assertThat(processors).contains("demo.echo", "demo.context", "demo.bytes", "demo.heartbeat", "demo.report", "demo.workflow.step", "demo.fail");
+        assertThat(processors).contains("demo.echo", "demo.context", "demo.bytes", "demo.heartbeat", "demo.report", "demo.workflow.step", "demo.fail", "billing.sql-sync");
         assertThat(processors).doesNotContain("shell.test");
+        log.info("[java-demo-plugin-test] /demo/health response={}", health);
+        log.info("[java-demo-plugin-test] /demo/processors response={}", processors);
     }
 
     @Test
     void springRegistersEchoProcessorAndInvokesItThroughRegistry() {
-        assertThat(registry.handlers()).containsKeys("demo.echo", "demo.context", "demo.bytes", "demo.heartbeat", "demo.report", "demo.workflow.step", "demo.fail");
+        assertThat(registry.handlers()).containsKeys("demo.echo", "demo.context", "demo.bytes", "demo.heartbeat", "demo.report", "demo.workflow.step", "demo.fail", "billing.sql-sync");
         assertThat(registry.handlers()).doesNotContainKey("shell.test");
 
         var outcome = registry.invoke("demo.echo", new TaskContext(
@@ -82,6 +91,23 @@ class SpringWorkerDemoApplicationTest {
 
         assertThat(outcome.success()).isTrue();
         assertThat(outcome.message()).isEqualTo("echo:hello");
+    }
+
+    @Test
+    void springRegistersPluginSqlProcessorAndInvokesItThroughRegistry() {
+        var payload = "{\"source\":\"demo-test\",\"records\":3}";
+        log.info("[java-demo-plugin-test] invoking registry processor=billing.sql-sync payload={}", payload);
+
+        var outcome = registry.invoke("billing.sql-sync", new TaskContext(
+                "job-sql-plugin",
+                "billing.sql-sync",
+                "instance-sql-plugin",
+                payload.getBytes(StandardCharsets.UTF_8)));
+
+        log.info("[java-demo-plugin-test] plugin processor outcome success={} message={}",
+                outcome.success(), outcome.message());
+        assertThat(outcome.success()).isTrue();
+        assertThat(outcome.message()).isEqualTo("sql-plugin-ok:" + payload);
     }
 
     private String httpGet(String path) throws Exception {

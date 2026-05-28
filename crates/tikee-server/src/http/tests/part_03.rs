@@ -15,6 +15,7 @@
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
                 processor_name: None,
+                processor_type: None,
                 script_id: None,
                 enabled: true,
                 canary_job_id: None,
@@ -273,6 +274,7 @@
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
                 processor_name: Some("billing.extract".to_owned()),
+                processor_type: None,
                 script_id: None,
                 enabled: true,
                 canary_job_id: None,
@@ -289,6 +291,7 @@
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
                 processor_name: Some("billing.load".to_owned()),
+                processor_type: None,
                 script_id: None,
                 enabled: true,
                 canary_job_id: None,
@@ -428,6 +431,7 @@
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
                 processor_name: Some("billing.webhook".to_owned()),
+                processor_type: None,
                 script_id: None,
                 enabled: true,
                 canary_job_id: None,
@@ -513,6 +517,7 @@
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
                 processor_name: Some("billing.advice".to_owned()),
+                processor_type: None,
                 script_id: None,
                 enabled: true,
                 canary_job_id: None,
@@ -598,6 +603,7 @@
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
                 processor_name: Some("billing.canary".to_owned()),
+                processor_type: None,
                 script_id: None,
                 enabled: true,
                 canary_job_id: None,
@@ -614,6 +620,7 @@
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
                 processor_name: Some("billing.main".to_owned()),
+                processor_type: None,
                 script_id: None,
                 enabled: true,
                 canary_job_id: Some(canary.id.clone()),
@@ -666,6 +673,106 @@
     }
 
 
+
+    #[tokio::test]
+    async fn scheduling_advice_reports_history_duration_and_resource_prediction() {
+        let db = connect_and_migrate("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("test storage should initialize: {error}"));
+        let jobs = JobRepository::new(db.clone());
+        let instances = JobInstanceRepository::new(db.clone());
+        let job = jobs
+            .create_job(CreateJob {
+                created_by: Some("admin".to_owned()),
+                namespace: "default".to_owned(),
+                app: "billing".to_owned(),
+                name: "predictable-job".to_owned(),
+                schedule_type: "api".to_owned(),
+                schedule_expr: None,
+                processor_name: Some("demo.predict".to_owned()),
+                processor_type: None,
+                script_id: None,
+                enabled: true,
+                canary_job_id: None,
+                canary_percent: 0,
+            })
+            .await
+            .unwrap_or_else(|error| panic!("job should create: {error}"));
+        let first = instances
+            .create_pending(CreateJobInstance { job_id: job.id.clone(), trigger_type: TriggerType::Api, execution_mode: ExecutionMode::Single })
+            .await
+            .unwrap_or_else(|error| panic!("first instance should create: {error}"))
+            .unwrap_or_else(|| panic!("first instance should exist"));
+        instances
+            .update_status(&first.id, tikee_core::InstanceStatus::Succeeded)
+            .await
+            .unwrap_or_else(|error| panic!("first should succeed: {error}"));
+        instances
+            .set_timestamps_for_test(&first.id, "2026-05-28T00:00:00Z", "2026-05-28T00:00:10Z")
+            .await
+            .unwrap_or_else(|error| panic!("first timestamps should update: {error}"));
+        let second = instances
+            .create_pending(CreateJobInstance { job_id: job.id.clone(), trigger_type: TriggerType::Api, execution_mode: ExecutionMode::Single })
+            .await
+            .unwrap_or_else(|error| panic!("second instance should create: {error}"))
+            .unwrap_or_else(|| panic!("second instance should exist"));
+        instances
+            .update_status(&second.id, tikee_core::InstanceStatus::Succeeded)
+            .await
+            .unwrap_or_else(|error| panic!("second should succeed: {error}"));
+        instances
+            .set_timestamps_for_test(&second.id, "2026-05-28T00:01:00Z", "2026-05-28T00:01:30Z")
+            .await
+            .unwrap_or_else(|error| panic!("second timestamps should update: {error}"));
+        let registry = crate::tunnel::WorkerRegistry::default();
+        let (sender, _receiver) = tokio::sync::mpsc::channel(1);
+        let mut worker = RegisterWorker {
+            client_instance_id: "predict-worker".to_owned(),
+            app: "billing".to_owned(),
+            namespace: "default".to_owned(),
+            cluster: "local".to_owned(),
+            region: "local".to_owned(),
+            capabilities: vec!["processor:demo.predict".to_owned()],
+            labels: std::collections::HashMap::default(),
+        };
+        worker.labels.insert("cpu".to_owned(), "4".to_owned());
+        worker.labels.insert("memory_mb".to_owned(), "8192".to_owned());
+        registry.register(worker, sender).await;
+        let app = router_with_state(AppState::new(
+            jobs,
+            instances,
+            JobInstanceLogRepository::new(db.clone()),
+            JobInstanceAttemptRepository::new(db.clone()),
+            UserRepository::new(db.clone()),
+            ScriptRepository::new(db.clone()),
+            WorkflowRepository::new(db.clone()),
+            AuditLogRepository::new(db.clone()),
+            registry,
+            StandaloneCoordinator::shared("test-node"),
+        ));
+
+        let response = app
+            .clone()
+            .oneshot(admin_request_builder(app, "GET", format!("/api/v1/jobs/{}/scheduling-advice", job.id)).await)
+            .await
+            .unwrap_or_else(|error| panic!("advice route should respond: {error}"));
+        let status = response.status();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+
+        assert!(status.is_success(), "unexpected status {status}: {json}");
+        assert_eq!(json["data"]["history"]["completedInstances"], 2);
+        assert_eq!(json["data"]["history"]["averageDurationSeconds"], 20);
+        assert_eq!(json["data"]["history"]["p95DurationSeconds"], 30);
+        assert_eq!(json["data"]["prediction"]["estimatedDurationSeconds"], 30);
+        assert_eq!(json["data"]["prediction"]["recommendedConcurrency"], 1);
+        assert_eq!(json["data"]["prediction"]["workerCapacity"]["eligibleWorkerCount"], 1);
+        assert!(json["data"]["prediction"]["reasons"].as_array().unwrap().iter().any(|item| item.as_str().unwrap_or_default().contains("history")));
+    }
+
     #[tokio::test]
     async fn job_impact_api_reports_cross_workflow_upstream_and_downstream() {
         let db = connect_and_migrate("sqlite::memory:")
@@ -673,15 +780,15 @@
             .unwrap_or_else(|error| panic!("test storage should initialize: {error}"));
         let jobs = JobRepository::new(db.clone());
         let extract = jobs
-            .create_job(CreateJob { created_by: Some("admin".to_owned()), namespace: "default".to_owned(), app: "billing".to_owned(), name: "extract".to_owned(), schedule_type: "api".to_owned(), schedule_expr: None, processor_name: Some("billing.extract".to_owned()), script_id: None, enabled: true, canary_job_id: None, canary_percent: 0 })
+            .create_job(CreateJob { created_by: Some("admin".to_owned()), namespace: "default".to_owned(), app: "billing".to_owned(), name: "extract".to_owned(), schedule_type: "api".to_owned(), schedule_expr: None, processor_name: Some("billing.extract".to_owned()), processor_type: None, script_id: None, enabled: true, canary_job_id: None, canary_percent: 0 })
             .await
             .unwrap_or_else(|error| panic!("extract job should create: {error}"));
         let normalize = jobs
-            .create_job(CreateJob { created_by: Some("admin".to_owned()), namespace: "default".to_owned(), app: "billing".to_owned(), name: "normalize".to_owned(), schedule_type: "api".to_owned(), schedule_expr: None, processor_name: Some("billing.normalize".to_owned()), script_id: None, enabled: true, canary_job_id: None, canary_percent: 0 })
+            .create_job(CreateJob { created_by: Some("admin".to_owned()), namespace: "default".to_owned(), app: "billing".to_owned(), name: "normalize".to_owned(), schedule_type: "api".to_owned(), schedule_expr: None, processor_name: Some("billing.normalize".to_owned()), processor_type: None, script_id: None, enabled: true, canary_job_id: None, canary_percent: 0 })
             .await
             .unwrap_or_else(|error| panic!("normalize job should create: {error}"));
         let publish = jobs
-            .create_job(CreateJob { created_by: Some("admin".to_owned()), namespace: "default".to_owned(), app: "billing".to_owned(), name: "publish".to_owned(), schedule_type: "api".to_owned(), schedule_expr: None, processor_name: Some("billing.publish".to_owned()), script_id: None, enabled: true, canary_job_id: None, canary_percent: 0 })
+            .create_job(CreateJob { created_by: Some("admin".to_owned()), namespace: "default".to_owned(), app: "billing".to_owned(), name: "publish".to_owned(), schedule_type: "api".to_owned(), schedule_expr: None, processor_name: Some("billing.publish".to_owned()), processor_type: None, script_id: None, enabled: true, canary_job_id: None, canary_percent: 0 })
             .await
             .unwrap_or_else(|error| panic!("publish job should create: {error}"));
         let workflows = WorkflowRepository::new(db.clone());
@@ -748,7 +855,7 @@
             .unwrap_or_else(|error| panic!("test storage should initialize: {error}"));
         let jobs = JobRepository::new(db.clone());
         let job = jobs
-            .create_job(CreateJob { created_by: Some("admin".to_owned()), namespace: "default".to_owned(), app: "billing".to_owned(), name: "replay-job".to_owned(), schedule_type: "api".to_owned(), schedule_expr: None, processor_name: Some("billing.replay".to_owned()), script_id: None, enabled: true, canary_job_id: None, canary_percent: 0 })
+            .create_job(CreateJob { created_by: Some("admin".to_owned()), namespace: "default".to_owned(), app: "billing".to_owned(), name: "replay-job".to_owned(), schedule_type: "api".to_owned(), schedule_expr: None, processor_name: Some("billing.replay".to_owned()), processor_type: None, script_id: None, enabled: true, canary_job_id: None, canary_percent: 0 })
             .await
             .unwrap_or_else(|error| panic!("job should create: {error}"));
         let workflows = WorkflowRepository::new(db.clone());
@@ -827,6 +934,7 @@
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
                 processor_name: None,
+                processor_type: None,
                 script_id: Some("script-missing-runtime".to_owned()),
                 enabled: true,
                 canary_job_id: None,
@@ -988,6 +1096,172 @@
         assert_eq!(rolled_back["data"]["versionNumber"], 3);
         assert_eq!(rolled_back["data"]["name"], "versioned-job");
         assert_eq!(rolled_back["data"]["enabled"], true);
+    }
+
+    #[tokio::test]
+    async fn plugin_registry_supports_custom_processor_types_and_alert_channels() {
+        let db = connect_and_migrate("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("test storage should initialize: {error}"));
+        let app = router_with_state(AppState::new(
+            JobRepository::new(db.clone()),
+            JobInstanceRepository::new(db.clone()),
+            JobInstanceLogRepository::new(db.clone()),
+            JobInstanceAttemptRepository::new(db.clone()),
+            UserRepository::new(db.clone()),
+            ScriptRepository::new(db.clone()),
+            WorkflowRepository::new(db.clone()),
+            AuditLogRepository::new(db.clone()),
+            crate::tunnel::WorkerRegistry::default(),
+            StandaloneCoordinator::shared("test-node"),
+        ));
+
+        let created = app
+            .clone()
+            .oneshot(
+                admin_json_request_builder(
+                    app.clone(),
+                    "POST",
+                    "/api/v1/plugins",
+                    r#"{"name":"Ops Plugin","kind":"processor","processorTypes":[{"type":"sql","label":"SQL Processor","capability":"plugin-processor:sql","processorNames":["billing.sql-sync"],"description":"Runs governed SQL processor tasks"}],"alertChannelTypes":[{"type":"ops_webhook","label":"Ops Webhook","targetKind":"webhook","description":"Routes alerts to the ops bridge","template":{"headers":{"X-Tikee-Plugin":"ops"},"body":{"text":"{{message}}","resource":"{{resource_id}}"}}}],"enabled":true}"#,
+                )
+                .await,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("plugin route should respond: {error}"));
+        assert!(created.status().is_success());
+        let body = axum::body::to_bytes(created.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+        assert_eq!(json["code"], 0);
+        assert_eq!(json["data"]["processorTypes"][0]["capability"], "plugin-processor:sql");
+        assert_eq!(json["data"]["processorTypes"][0]["processorNames"][0], "billing.sql-sync");
+        assert_eq!(json["data"]["alertChannelTypes"][0]["type"], "ops_webhook");
+
+        let plugins = app
+            .clone()
+            .oneshot(admin_request_builder(app.clone(), "GET", "/api/v1/plugins").await)
+            .await
+            .unwrap_or_else(|error| panic!("plugin list should respond: {error}"));
+        assert!(plugins.status().is_success());
+        let body = axum::body::to_bytes(plugins.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+        assert_eq!(json["data"].as_array().map(Vec::len), Some(1));
+
+        let job = app
+            .clone()
+            .oneshot(
+                admin_json_request_builder(
+                    app.clone(),
+                    "POST",
+                    "/api/v1/jobs",
+                    r#"{"namespace":"default","app":"billing","name":"sql-sync","scheduleType":"api","processorType":"sql","processorName":"billing.sql-sync"}"#,
+                )
+                .await,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("job create should respond: {error}"));
+        assert!(job.status().is_success());
+        let body = axum::body::to_bytes(job.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+        assert_eq!(json["data"]["processorType"], "sql");
+
+        let invalid_job = app
+            .clone()
+            .oneshot(
+                admin_json_request_builder(
+                    app.clone(),
+                    "POST",
+                    "/api/v1/jobs",
+                    r#"{"namespace":"default","app":"billing","name":"bad-sql-sync","scheduleType":"api","processorType":"sql","processorName":"mixed.sql"}"#,
+                )
+                .await,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("invalid job create should respond: {error}"));
+        assert_eq!(invalid_job.status(), axum::http::StatusCode::BAD_REQUEST);
+        let body = axum::body::to_bytes(invalid_job.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let invalid_json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+        assert!(invalid_json["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("plugin processorName is not declared")));
+
+        let advice = app
+            .clone()
+            .oneshot(
+                admin_request_builder(
+                    app.clone(),
+                    "GET",
+                    format!(
+                        "/api/v1/jobs/{}/scheduling-advice",
+                        json["data"]["id"].as_str().unwrap_or_else(|| panic!("job id"))
+                    ),
+                )
+                .await,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("advice route should respond: {error}"));
+        assert!(advice.status().is_success());
+        let body = axum::body::to_bytes(advice.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+        assert_eq!(json["data"]["requiredCapability"], "plugin-processor:sql");
+
+        let status = app
+            .clone()
+            .oneshot(
+                admin_json_request_builder(
+                    app.clone(),
+                    "POST",
+                    "/api/v1/alert-rules",
+                    r#"{"name":"Ops plugin alert","severity":"warning","condition":{"type":"script_governance_failure","failure_class":"plugin_test","threshold":1},"channels":[{"type":"ops_webhook","url":"https://ops.example.invalid/hook","enabled":true}],"enabled":true,"dedupe_seconds":30}"#,
+                )
+                .await,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("alert rule route should respond: {error}"));
+        assert!(status.status().is_success());
+        let body = axum::body::to_bytes(status.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+        let rule_id = json["data"]["id"].as_str().unwrap_or_else(|| panic!("rule id"));
+
+        let readiness = app
+            .clone()
+            .oneshot(
+                admin_request_builder(
+                    app,
+                    "GET",
+                    format!("/api/v1/alert-rules/{rule_id}/delivery-status"),
+                )
+                .await,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("alert readiness route should respond: {error}"));
+        assert!(readiness.status().is_success());
+        let body = axum::body::to_bytes(readiness.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+        assert_eq!(json["data"]["ready"], true);
+        assert_eq!(json["data"]["channels"][0]["provider"], "ops_webhook");
+        assert_eq!(json["data"]["channels"][0]["transport_security"], "https");
     }
 
     #[tokio::test]

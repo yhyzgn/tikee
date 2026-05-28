@@ -48,6 +48,25 @@ pub struct JobInstanceStatusCounts {
     pub by_status: BTreeMap<String, u64>,
 }
 
+/// Historical duration statistics for one job.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct JobDurationHistory {
+    /// Total inspected instance rows.
+    pub inspected_instances: u64,
+    /// Terminal succeeded/failed rows used for duration statistics.
+    pub completed_instances: u64,
+    /// Failed terminal rows in inspected history.
+    pub failed_instances: u64,
+    /// Average duration over completed rows.
+    pub average_duration_seconds: u64,
+    /// Median duration over completed rows.
+    pub p50_duration_seconds: u64,
+    /// P95 duration over completed rows.
+    pub p95_duration_seconds: u64,
+    /// Maximum duration over completed rows.
+    pub max_duration_seconds: u64,
+}
+
 /// Job instance repository.
 #[derive(Debug, Clone)]
 pub struct JobInstanceRepository {
@@ -130,6 +149,49 @@ impl JobInstanceRepository {
             .await?;
 
         Ok(rows.into_iter().map(JobInstanceSummary::from).collect())
+    }
+
+    /// Summarize historical terminal durations for a job.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when database access fails.
+    pub async fn duration_history(
+        &self,
+        job_id: &str,
+        limit: u64,
+    ) -> Result<JobDurationHistory, sea_orm::DbErr> {
+        let rows = job_instance::Entity::find()
+            .filter(job_instance::Column::JobId.eq(job_id))
+            .order_by_desc(job_instance::Column::CreatedAt)
+            .limit(limit)
+            .all(&self.db)
+            .await?;
+        Ok(duration_history_from_rows(rows))
+    }
+
+    /// Test helper for deterministic duration statistics.
+    #[doc(hidden)]
+    pub async fn set_timestamps_for_test(
+        &self,
+        instance_id: &str,
+        created_at: &str,
+        updated_at: &str,
+    ) -> Result<(), sea_orm::DbErr> {
+        let result = job_instance::Entity::update_many()
+            .col_expr(
+                job_instance::Column::CreatedAt,
+                Expr::value(created_at.to_owned()),
+            )
+            .col_expr(
+                job_instance::Column::UpdatedAt,
+                Expr::value(updated_at.to_owned()),
+            )
+            .filter(job_instance::Column::Id.eq(instance_id.to_owned()))
+            .exec(&self.db)
+            .await?;
+        let _ = result;
+        Ok(())
     }
 
     /// Get one instance by id.
@@ -253,6 +315,56 @@ impl JobInstanceRepository {
             .await
             .map(|model| Some(JobInstanceSummary::from(model)))
     }
+}
+
+fn duration_history_from_rows(rows: Vec<job_instance::Model>) -> JobDurationHistory {
+    let inspected_instances = u64::try_from(rows.len()).unwrap_or(u64::MAX);
+    let mut durations = Vec::new();
+    let mut failed_instances = 0_u64;
+    for row in rows {
+        match row.status.as_str() {
+            "succeeded" => durations.push(elapsed_seconds(&row.created_at, &row.updated_at)),
+            "failed" => {
+                failed_instances = failed_instances.saturating_add(1);
+                durations.push(elapsed_seconds(&row.created_at, &row.updated_at));
+            }
+            _ => {}
+        }
+    }
+    durations.sort_unstable();
+    let completed_instances = u64::try_from(durations.len()).unwrap_or(u64::MAX);
+    let total = durations.iter().copied().sum::<u64>();
+    JobDurationHistory {
+        inspected_instances,
+        completed_instances,
+        failed_instances,
+        average_duration_seconds: total.checked_div(completed_instances).unwrap_or(0),
+        p50_duration_seconds: percentile(&durations, 50),
+        p95_duration_seconds: percentile(&durations, 95),
+        max_duration_seconds: durations.last().copied().unwrap_or(0),
+    }
+}
+
+fn percentile(values: &[u64], percentile: u64) -> u64 {
+    if values.is_empty() {
+        return 0;
+    }
+    let max_index = values.len().saturating_sub(1);
+    let index = (max_index * usize::try_from(percentile).unwrap_or(100)).div_ceil(100);
+    values[index.min(max_index)]
+}
+
+fn elapsed_seconds(start: &str, end: &str) -> u64 {
+    let Ok(start) =
+        time::OffsetDateTime::parse(start, &time::format_description::well_known::Rfc3339)
+    else {
+        return 0;
+    };
+    let Ok(end) = time::OffsetDateTime::parse(end, &time::format_description::well_known::Rfc3339)
+    else {
+        return 0;
+    };
+    u64::try_from((end - start).whole_seconds().max(0)).unwrap_or(0)
 }
 
 impl From<job_instance::Model> for JobInstanceSummary {

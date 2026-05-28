@@ -9,6 +9,44 @@ export interface Page<T> {
   nextPageToken: string | null;
 }
 
+
+export interface PluginProcessorTypeSummary {
+  type: string;
+  label: string;
+  capability: string;
+  processorNames: string[];
+  description: string | null;
+}
+
+export interface PluginAlertChannelTypeSummary {
+  type: string;
+  label: string;
+  targetKind: string;
+  description: string | null;
+  template: Record<string, unknown>;
+}
+
+export interface PluginSummary {
+  id: string;
+  name: string;
+  kind: string;
+  processorTypes: PluginProcessorTypeSummary[];
+  alertChannelTypes: PluginAlertChannelTypeSummary[];
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreatePluginRequest {
+  name: string;
+  kind: string;
+  processorTypes: PluginProcessorTypeSummary[];
+  alertChannelTypes: PluginAlertChannelTypeSummary[];
+  enabled: boolean;
+}
+
+export type UpdatePluginRequest = CreatePluginRequest;
+
 export interface JobSummary {
   id: string;
   namespace: string;
@@ -17,6 +55,7 @@ export interface JobSummary {
   scheduleType: string;
   scheduleExpr: string | null;
   processorName: string | null;
+  processorType: string | null;
   scriptId: string | null;
   enabled: boolean;
   canaryJobId: string | null;
@@ -41,6 +80,29 @@ export interface JobVersionSummary {
   created_at: string;
 }
 
+export interface JobSchedulingHistorySummary {
+  inspectedInstances: number;
+  completedInstances: number;
+  failedInstances: number;
+  averageDurationSeconds: number;
+  p50DurationSeconds: number;
+  p95DurationSeconds: number;
+  maxDurationSeconds: number;
+}
+
+export interface JobSchedulingWorkerCapacity {
+  eligibleWorkerCount: number;
+  advertisedCpuCores: number;
+  advertisedMemoryMb: number;
+}
+
+export interface JobSchedulingPrediction {
+  estimatedDurationSeconds: number;
+  recommendedConcurrency: number;
+  workerCapacity: JobSchedulingWorkerCapacity;
+  reasons: string[];
+}
+
 export interface JobSchedulingAdvice {
   ready: boolean;
   severity: 'ok' | 'warning' | 'error' | string;
@@ -49,6 +111,8 @@ export interface JobSchedulingAdvice {
   eligibleWorkers: string[];
   recentInstances: number;
   recentFailures: number;
+  history: JobSchedulingHistorySummary;
+  prediction: JobSchedulingPrediction;
 }
 
 export interface JobTopologyResponse {
@@ -134,6 +198,7 @@ export interface CreateJobRequest {
   scheduleType?: string;
   scheduleExpr?: string | null;
   processorName?: string | null;
+  processorType?: string | null;
   scriptId?: string | null;
   enabled?: boolean;
   canaryJobId?: string | null;
@@ -145,6 +210,7 @@ export interface UpdateJobRequest {
   scheduleType?: string;
   scheduleExpr?: string | null;
   processorName?: string | null;
+  processorType?: string | null;
   scriptId?: string | null;
   enabled?: boolean;
   canaryJobId?: string | null;
@@ -414,6 +480,28 @@ export async function me(): Promise<MeResponse> {
 export async function logout(): Promise<void> {
   await request<null>('/api/v1/auth/logout', { method: 'POST', allowNullData: true });
   setAuthToken(null);
+}
+
+export async function listPlugins(): Promise<PluginSummary[]> {
+  return request<PluginSummary[]>('/api/v1/plugins');
+}
+
+export async function createPlugin(payload: CreatePluginRequest): Promise<PluginSummary> {
+  return request<PluginSummary>('/api/v1/plugins', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updatePlugin(id: string, payload: UpdatePluginRequest): Promise<PluginSummary> {
+  return request<PluginSummary>(`/api/v1/plugins/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deletePlugin(id: string): Promise<void> {
+  await request<void>(`/api/v1/plugins/${encodeURIComponent(id)}`, { method: 'DELETE', allowNullData: true });
 }
 
 

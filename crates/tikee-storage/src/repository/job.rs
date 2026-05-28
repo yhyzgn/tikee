@@ -15,6 +15,8 @@ pub struct CreateJob {
     pub schedule_expr: Option<String>,
     /// Optional SDK worker processor binding. When absent, dispatch falls back to job name.
     pub processor_name: Option<String>,
+    /// Optional custom plugin processor type.
+    pub processor_type: Option<String>,
     /// Optional managed script binding. Mutually exclusive with `processor_name`.
     pub script_id: Option<String>,
     /// Whether the job is enabled.
@@ -38,6 +40,8 @@ pub struct UpdateJob {
     pub schedule_expr: Option<Option<String>>,
     /// Optional SDK worker processor binding. Outer `None` leaves unchanged; inner `None` clears it.
     pub processor_name: Option<Option<String>>,
+    /// Optional custom plugin processor type.
+    pub processor_type: Option<Option<String>>,
     /// Optional managed script binding. Outer `None` leaves unchanged; inner `None` clears it.
     pub script_id: Option<Option<String>>,
     /// Optional enabled flag.
@@ -67,6 +71,8 @@ pub struct JobSummary {
     pub schedule_expr: Option<String>,
     /// Optional SDK worker processor binding.
     pub processor_name: Option<String>,
+    /// Optional custom plugin processor type.
+    pub processor_type: Option<String>,
     /// Optional managed script binding.
     pub script_id: Option<String>,
     /// Enabled flag.

@@ -1270,3 +1270,131 @@ body {
 .workflow-edge__flow-dot--secondary {
   opacity: 0.64;
 }
+
+.scheduling-advice-intro.ant-typography {
+  margin-bottom: 16px;
+  line-height: 1.7;
+}
+
+.scheduling-advice-panel {
+  width: 100%;
+}
+
+.scheduling-advice-status.ant-alert {
+  border-radius: 14px;
+}
+
+.scheduling-advice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.scheduling-advice-stat-card.ant-card {
+  overflow: hidden;
+  border: 1px solid rgba(99, 102, 241, 0.14);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at top right, rgba(99, 102, 241, 0.12), transparent 38%),
+    linear-gradient(180deg, #ffffff, #f8fbff);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+}
+
+.scheduling-advice-stat-card .ant-card-body {
+  display: flex;
+  min-height: 116px;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+}
+
+.scheduling-advice-stat-label.ant-typography {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.scheduling-advice-stat-value {
+  color: #0f172a;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.scheduling-advice-stat-helper.ant-typography {
+  margin-top: auto;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.scheduling-advice-detail-card.ant-card {
+  border-color: rgba(15, 23, 42, 0.08);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+}
+
+.scheduling-advice-detail-card .ant-card-head {
+  min-height: 42px;
+  border-bottom-color: rgba(15, 23, 42, 0.06);
+}
+
+.scheduling-advice-detail-card .ant-card-head-title {
+  color: #1e1b4b;
+  font-weight: 800;
+}
+
+.scheduling-advice-metric-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.scheduling-advice-metric-row + .scheduling-advice-metric-row {
+  margin-top: 10px;
+}
+
+.scheduling-advice-metric-row span {
+  padding: 10px;
+  color: #475569;
+  background: #f8fafc;
+  border: 1px solid #eef2f7;
+  border-radius: 12px;
+  font-size: 12px;
+}
+
+.scheduling-advice-metric-row strong {
+  display: block;
+  margin-top: 4px;
+  color: #111827;
+  font-size: 18px;
+}
+
+.scheduling-advice-metric-row--muted span {
+  color: #64748b;
+  background: #fbfdff;
+}
+
+.scheduling-advice-reasons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.scheduling-advice-reasons .ant-typography {
+  padding: 10px 12px;
+  background: linear-gradient(90deg, rgba(99, 102, 241, 0.08), rgba(16, 185, 129, 0.06));
+  border: 1px solid rgba(99, 102, 241, 0.12);
+  border-radius: 12px;
+}
+
+@media (max-width: 767px) {
+  .scheduling-advice-grid,
+  .scheduling-advice-metric-row {
+    grid-template-columns: 1fr;
+  }
+}

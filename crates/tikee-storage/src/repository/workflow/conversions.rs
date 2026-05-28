@@ -100,6 +100,7 @@ where
         schedule_type: Set("api".to_owned()),
         schedule_expr: Set(None),
         processor_name: Set(Some(job_id.to_owned())),
+        processor_type: Set(None),
         script_id: Set(None),
         enabled: Set(true),
         canary_job_id: Set(None),

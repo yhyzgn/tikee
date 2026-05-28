@@ -21,6 +21,8 @@ pub struct Model {
     pub schedule_expr: Option<String>,
     /// Optional SDK worker processor binding.
     pub processor_name: Option<String>,
+    /// Optional custom plugin processor type for capability resolution.
+    pub processor_type: Option<String>,
     /// Optional managed script binding.
     pub script_id: Option<String>,
     /// Enabled flag.

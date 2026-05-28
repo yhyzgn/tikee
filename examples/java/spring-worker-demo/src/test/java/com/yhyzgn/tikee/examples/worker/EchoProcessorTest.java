@@ -8,12 +8,16 @@ import com.yhyzgn.tikee.examples.worker.processor.EchoTaskProcessor;
 import com.yhyzgn.tikee.examples.worker.processor.FailingTaskProcessor;
 import com.yhyzgn.tikee.examples.worker.processor.HeartbeatTaskProcessor;
 import com.yhyzgn.tikee.examples.worker.processor.ReportTaskProcessor;
+import com.yhyzgn.tikee.examples.worker.processor.SqlPluginTaskProcessor;
 import com.yhyzgn.tikee.examples.worker.processor.WorkflowStepTaskProcessor;
 import com.yhyzgn.tikee.processor.TaskContext;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 class EchoProcessorTest {
+    private static final Logger log = LoggerFactory.getLogger(EchoProcessorTest.class);
     @Test
     void echoTaskHandlesApiPayload() {
         assertThat(new EchoTaskProcessor().echo("hello")).isEqualTo("echo:hello");
@@ -46,6 +50,17 @@ class EchoProcessorTest {
 
         assertThat(outcome.success()).isFalse();
         assertThat(outcome.message()).isEqualTo("demo failure:bad-input");
+    }
+
+    @Test
+    void sqlPluginProcessorLogsAndReturnsPluginOutcome() {
+        String payload = "{\"tenant\":\"billing\",\"batch\":\"2026-05-28T14:00:00+08:00\"}";
+        log.info("[java-demo-plugin-test] invoking billing.sql-sync with payload={}", payload);
+
+        String result = new SqlPluginTaskProcessor().run(payload);
+
+        log.info("[java-demo-plugin-test] billing.sql-sync result={}", result);
+        assertThat(result).isEqualTo("sql-plugin-ok:" + payload);
     }
 
     private static TaskContext context(String processorName, String payload) {

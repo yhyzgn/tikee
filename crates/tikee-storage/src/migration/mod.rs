@@ -14,7 +14,7 @@ use self::{
     iden::{
         AlertDeliveryAttempts, AlertEvents, AlertRules, Apps, AuditLogs, AuthSessions,
         DispatchQueue, InstanceEvents, JobInstanceAttempts, JobInstanceLogs, JobInstances,
-        JobVersions, Jobs, Namespaces, OidcAuthStates, OidcIdentities, Permissions,
+        JobVersions, Jobs, Namespaces, OidcAuthStates, OidcIdentities, Permissions, Plugins,
         RaftAppliedCommands, RaftLogEntries, RaftMembers, RaftMembershipProposals, RaftMetadata,
         RaftSnapshots, RolePermissions, Roles, ScriptVersions, Scripts, SdkApiKeys, Users,
         WorkerLogicalInstances, WorkerPools, WorkerSessionEvents, WorkerSessions, WorkflowEdges,
@@ -54,6 +54,7 @@ impl MigrationTrait for CreateMetadataTables {
         create_sdk_api_keys(manager).await?;
         create_oidc_auth_states(manager).await?;
         create_oidc_identities(manager).await?;
+        create_plugins(manager).await?;
         create_scripts(manager).await?;
         create_script_versions(manager).await?;
         create_workflow_tables(manager).await?;
@@ -102,6 +103,7 @@ async fn drop_metadata_tables(manager: &SchemaManager<'_>) -> Result<(), DbErr> 
             ScriptVersions::Table.into_iden(),
             Scripts::Table.into_iden(),
             SdkApiKeys::Table.into_iden(),
+            Plugins::Table.into_iden(),
         ],
     )
     .await?;
@@ -326,6 +328,25 @@ async fn create_oidc_identities(manager: &SchemaManager<'_>) -> Result<(), DbErr
                 .col(string_null(OidcIdentities::WorkerPool))
                 .col(string_col(OidcIdentities::CreatedAt))
                 .col(string_col(OidcIdentities::UpdatedAt))
+                .to_owned(),
+        )
+        .await
+}
+
+async fn create_plugins(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    manager
+        .create_table(
+            Table::create()
+                .table(Plugins::Table)
+                .if_not_exists()
+                .col(string_pk(Plugins::Id))
+                .col(string_col(Plugins::Name))
+                .col(string_col(Plugins::Kind))
+                .col(text_col(Plugins::ProcessorTypesJson))
+                .col(text_col(Plugins::AlertChannelTypesJson))
+                .col(boolean_col(Plugins::Enabled))
+                .col(string_col(Plugins::CreatedAt))
+                .col(string_col(Plugins::UpdatedAt))
                 .to_owned(),
         )
         .await
@@ -1050,6 +1071,7 @@ async fn create_jobs(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
                 .col(string_col(Jobs::ScheduleType))
                 .col(string_null(Jobs::ScheduleExpr))
                 .col(string_null(Jobs::ProcessorName))
+                .col(string_null(Jobs::ProcessorType))
                 .col(string_null(Jobs::ScriptId))
                 .col(boolean_col(Jobs::Enabled))
                 .col(string_null(Jobs::CanaryJobId))
@@ -1074,6 +1096,7 @@ async fn create_job_versions(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
                 .col(string_col(JobVersions::ScheduleType))
                 .col(string_null(JobVersions::ScheduleExpr))
                 .col(string_null(JobVersions::ProcessorName))
+                .col(string_null(JobVersions::ProcessorType))
                 .col(string_null(JobVersions::ScriptId))
                 .col(boolean_col(JobVersions::Enabled))
                 .col(string_col(JobVersions::CreatedBy))

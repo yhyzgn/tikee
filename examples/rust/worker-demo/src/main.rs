@@ -24,6 +24,10 @@ async fn main() -> Result<(), WorkerSdkError> {
     if let Ok(worker_pool) = std::env::var("TIKEE_WORKER_POOL") {
         config.labels.insert("worker_pool".to_owned(), worker_pool);
     }
+    if enabled_env("TIKEE_ENABLE_PLUGIN_SQL") {
+        push_unique(&mut config.capabilities, "plugin-processor:sql".to_owned());
+        config.labels.insert("plugin_sql".to_owned(), "enabled".to_owned());
+    }
 
     let mut runners = ScriptRunnerRegistry::new();
     configure_script_runner(

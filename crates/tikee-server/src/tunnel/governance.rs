@@ -1,6 +1,6 @@
 //! Script execution governance audit materialization helpers.
 
-use crate::alert::{AlertDispatcher, AlertPayload, NotificationChannel, Severity};
+use crate::alert::{AlertDispatcher, AlertPayload, Severity, notification_channels_from_json};
 use tikee_storage::{
     AlertRepository, AuditLogRepository, CreateAuditLog, RecordAlertDeliveryAttempt,
 };
@@ -51,10 +51,14 @@ pub async fn materialize_script_governance_audit(
         let Some(rule) = alerts.get_rule(&event.rule_id).await? else {
             continue;
         };
-        let Ok(channels) = serde_json::from_str::<Vec<NotificationChannel>>(&rule.channels_json)
-        else {
-            continue;
-        };
+        let plugins = tikee_storage::PluginRepository::new(audit.db())
+            .list_plugins()
+            .await?
+            .into_iter()
+            .filter(|plugin| plugin.enabled)
+            .flat_map(|plugin| plugin.alert_channel_types)
+            .collect::<Vec<_>>();
+        let channels = notification_channels_from_json(&rule.channels_json, &plugins);
         let payload = AlertPayload {
             rule_name: event.rule_name,
             severity: severity_from_str(&event.severity),

@@ -22,22 +22,23 @@ pub use repository::{
     AuditLogRepository, AuditLogSummary, AuthSessionRepository, AuthSessionSummary,
     CompleteWorkflowShardInput, CompleteWorkflowShardResult, CreateAlertRule, CreateAuditLog,
     CreateAuthSession, CreateJob, CreateJobInstance, CreateJobInstanceAttempt, CreateOidcAuthState,
-    CreateScript, CreateSdkApiKey, CreateUser, CreateWorkflow, DispatchQueueClaim,
-    DispatchQueueSloSummary, DispatchQueueSummary, InstanceEventSummary,
+    CreatePlugin, CreateScript, CreateSdkApiKey, CreateUser, CreateWorkflow, DispatchQueueClaim,
+    DispatchQueueSloSummary, DispatchQueueSummary, InstanceEventSummary, JobDurationHistory,
     JobInstanceAttemptRepository, JobInstanceAttemptSummary, JobInstanceLogRepository,
     JobInstanceLogSummary, JobInstanceRepository, JobInstanceSummary, JobRepository, JobSummary,
     JobVersionRepository, JobVersionSummary, MaterializeWorkflowNodeResult, NamespaceSummary,
     OidcAuthStateRepository, OidcAuthStateSummary, OidcIdentityRepository, OidcIdentitySummary,
-    PermissionSummary, QueueOverview, RaftAppliedCommandSummary, RaftLogEntrySummary,
+    PermissionSummary, PluginAlertChannelTypeSummary, PluginProcessorTypeSummary, PluginRepository,
+    PluginSummary, QueueOverview, RaftAppliedCommandSummary, RaftLogEntrySummary,
     RaftMemberSummary, RaftMembershipProposalSummary, RaftMetadataSummary, RaftRepository,
     RaftSnapshotSummary, RbacRepository, RecordAlertDeliveryAttempt, RecordRaftAppliedCommand,
     RecordRaftMembershipProposal, RecoverWorkflowNodeInput, RecoverWorkflowNodeResult,
     RegisterWorkerSession, ScopeRepository, ScriptReleaseGrantEvidenceSummary,
     ScriptReleaseSignatureSummary, ScriptRepository, ScriptSummary, ScriptVersionRepository,
-    ScriptVersionSummary, SdkApiKeyRepository, SdkApiKeySummary, UpdateJob, UpdateScript,
-    UpdateSdkApiKey, UpdateUser, UpdateWorkflow, UpsertOidcIdentity, UpsertRaftLogEntry,
-    UpsertRaftMember, UpsertRaftMetadata, UpsertRaftSnapshot, UserRepository, UserSummary,
-    VerifiedScriptReleaseGrants, VerifiedScriptReleaseSignature, WorkerHeartbeat,
+    ScriptVersionSummary, SdkApiKeyRepository, SdkApiKeySummary, UpdateJob, UpdatePlugin,
+    UpdateScript, UpdateSdkApiKey, UpdateUser, UpdateWorkflow, UpsertOidcIdentity,
+    UpsertRaftLogEntry, UpsertRaftMember, UpsertRaftMetadata, UpsertRaftSnapshot, UserRepository,
+    UserSummary, VerifiedScriptReleaseGrants, VerifiedScriptReleaseSignature, WorkerHeartbeat,
     WorkerLifecycleRepository, WorkerPoolSummary, WorkerSessionEventSummary, WorkerSessionSummary,
     WorkflowDefinition, WorkflowEdgeSpec, WorkflowInstanceSummary, WorkflowJobResultOutcome,
     WorkflowNodeInstanceSummary, WorkflowNodeSpec, WorkflowRepository, WorkflowShardSummary,
@@ -95,6 +96,7 @@ async fn ensure_sqlite_schema_compatibility(db: &DatabaseConnection) -> Result<(
     ensure_oidc_identity_schema_compatibility(db).await?;
     ensure_rbac_schema_compatibility(db).await?;
     ensure_scope_schema_compatibility(db).await?;
+    ensure_plugin_schema_compatibility(db).await?;
     ensure_worker_lifecycle_schema_compatibility(db).await?;
     ensure_job_schema_compatibility(db).await?;
     ensure_scripts_schema_compatibility(db).await?;
@@ -104,6 +106,32 @@ async fn ensure_sqlite_schema_compatibility(db: &DatabaseConnection) -> Result<(
     ensure_workflow_schema_compatibility(db).await?;
     ensure_raft_schema_compatibility(db).await?;
     remove_sqlite_foreign_keys(db).await
+}
+
+async fn ensure_plugin_schema_compatibility(db: &DatabaseConnection) -> Result<(), sea_orm::DbErr> {
+    if db.get_database_backend() != DatabaseBackend::Sqlite {
+        return Ok(());
+    }
+    db.execute(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        r"CREATE TABLE IF NOT EXISTS plugins (
+            id varchar NOT NULL PRIMARY KEY,
+            name varchar NOT NULL,
+            kind varchar NOT NULL,
+            processor_types_json text NOT NULL,
+            alert_channel_types_json text NOT NULL,
+            enabled boolean NOT NULL,
+            created_at varchar NOT NULL,
+            updated_at varchar NOT NULL
+        )",
+    ))
+    .await?;
+    db.execute(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_plugins_name ON plugins (name)",
+    ))
+    .await?;
+    Ok(())
 }
 
 async fn ensure_scope_schema_compatibility(db: &DatabaseConnection) -> Result<(), sea_orm::DbErr> {
@@ -213,6 +241,13 @@ async fn ensure_job_schema_compatibility(db: &DatabaseConnection) -> Result<(), 
         ))
         .await?;
     }
+    if !sqlite_column_exists(db, "jobs", "processor_type").await? {
+        db.execute(Statement::from_string(
+            DatabaseBackend::Sqlite,
+            "ALTER TABLE jobs ADD COLUMN processor_type varchar",
+        ))
+        .await?;
+    }
     if !sqlite_column_exists(db, "jobs", "script_id").await? {
         db.execute(Statement::from_string(
             DatabaseBackend::Sqlite,
@@ -244,6 +279,7 @@ async fn ensure_job_schema_compatibility(db: &DatabaseConnection) -> Result<(), 
             schedule_type varchar NOT NULL,
             schedule_expr varchar,
             processor_name varchar,
+            processor_type varchar,
             script_id varchar,
             enabled boolean NOT NULL,
             created_by varchar NOT NULL,
@@ -253,6 +289,13 @@ async fn ensure_job_schema_compatibility(db: &DatabaseConnection) -> Result<(), 
         )",
     ))
     .await?;
+    if !sqlite_column_exists(db, "job_versions", "processor_type").await? {
+        db.execute(Statement::from_string(
+            DatabaseBackend::Sqlite,
+            "ALTER TABLE job_versions ADD COLUMN processor_type varchar",
+        ))
+        .await?;
+    }
     db.execute(Statement::from_string(
         DatabaseBackend::Sqlite,
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_job_versions_job_number ON job_versions (job_id, version_number)",
@@ -1073,6 +1116,7 @@ async fn remove_sqlite_foreign_keys(db: &DatabaseConnection) -> Result<(), sea_o
             schedule_type varchar NOT NULL,
             schedule_expr varchar,
             processor_name varchar,
+            processor_type varchar,
             script_id varchar,
             enabled boolean NOT NULL,
             created_at varchar NOT NULL,
@@ -1086,6 +1130,7 @@ async fn remove_sqlite_foreign_keys(db: &DatabaseConnection) -> Result<(), sea_o
             "schedule_type",
             "schedule_expr",
             "processor_name",
+            "processor_type",
             "script_id",
             "enabled",
             "created_at",
@@ -1340,6 +1385,7 @@ mod tests {
                 schedule_type varchar NOT NULL,
                 schedule_expr varchar,
                 processor_name varchar,
+                processor_type varchar,
                 script_id varchar,
                 enabled boolean NOT NULL,
                 created_at varchar NOT NULL,

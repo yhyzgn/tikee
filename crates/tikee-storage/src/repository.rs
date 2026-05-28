@@ -17,6 +17,7 @@ mod job_version;
 mod log;
 mod oidc;
 mod oidc_identity;
+mod plugin;
 mod raft;
 mod scope;
 mod script;
@@ -39,13 +40,19 @@ pub use audit::{
 pub use auth::{
     AuthSessionRepository, AuthSessionSummary, CreateAuthSession, PermissionSummary, RbacRepository,
 };
-pub use instance::{CreateJobInstance, JobInstanceRepository, JobInstanceSummary};
+pub use instance::{
+    CreateJobInstance, JobDurationHistory, JobInstanceRepository, JobInstanceSummary,
+};
 pub use job::{CreateJob, JobSummary, UpdateJob};
 pub use job_repo::JobRepository;
 pub use job_version::{JobVersionRepository, JobVersionSummary};
 pub use log::{AppendJobInstanceLog, JobInstanceLogRepository, JobInstanceLogSummary};
 pub use oidc::{CreateOidcAuthState, OidcAuthStateRepository, OidcAuthStateSummary};
 pub use oidc_identity::{OidcIdentityRepository, OidcIdentitySummary, UpsertOidcIdentity};
+pub use plugin::{
+    CreatePlugin, PluginAlertChannelTypeSummary, PluginProcessorTypeSummary, PluginRepository,
+    PluginSummary, UpdatePlugin,
+};
 pub use raft::{
     RaftAppliedCommandSummary, RaftLogEntrySummary, RaftMemberSummary,
     RaftMembershipProposalSummary, RaftMetadataSummary, RaftRepository, RaftSnapshotSummary,
@@ -95,6 +102,55 @@ mod tests {
     use super::JobRepository;
 
     #[tokio::test]
+    async fn plugin_repository_resolves_custom_processor_and_alert_channel_types() {
+        let db = crate::connect_and_migrate("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("sqlite memory db should connect: {error}"));
+        let repository = crate::repository::PluginRepository::new(db);
+        let created = repository
+            .create_plugin(crate::repository::CreatePlugin {
+                name: "Ops Plugin".to_owned(),
+                kind: "mixed".to_owned(),
+                processor_types: vec![crate::repository::PluginProcessorTypeSummary {
+                    r#type: "sql".to_owned(),
+                    label: "SQL Processor".to_owned(),
+                    capability: "plugin-processor:sql".to_owned(),
+                    processor_names: vec!["billing.sql-sync".to_owned()],
+                    description: Some("custom SQL handler".to_owned()),
+                }],
+                alert_channel_types: vec![crate::repository::PluginAlertChannelTypeSummary {
+                    r#type: "ops_webhook".to_owned(),
+                    label: "Ops Webhook".to_owned(),
+                    target_kind: "webhook".to_owned(),
+                    description: None,
+                    template: serde_json::json!({"body":{"text":"{{message}}"}}),
+                }],
+                enabled: true,
+            })
+            .await
+            .unwrap_or_else(|error| panic!("plugin should create: {error}"));
+
+        assert_eq!(
+            created.processor_types[0].capability,
+            "plugin-processor:sql"
+        );
+        assert!(
+            repository
+                .resolve_processor_type("sql")
+                .await
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            repository
+                .resolve_alert_channel_type("ops_webhook")
+                .await
+                .unwrap()
+                .is_some()
+        );
+    }
+
+    #[tokio::test]
     async fn job_version_history_tracks_updates_and_rollbacks() {
         let db = crate::connect_and_migrate("sqlite::memory:")
             .await
@@ -109,6 +165,7 @@ mod tests {
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
                 processor_name: Some("demo.echo".to_owned()),
+                processor_type: None,
                 script_id: None,
                 enabled: true,
                 canary_job_id: None,
@@ -846,6 +903,7 @@ mod tests {
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
                 processor_name: None,
+                processor_type: None,
                 script_id: None,
                 enabled: true,
                 canary_job_id: None,
@@ -890,6 +948,7 @@ mod tests {
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
                 processor_name: None,
+                processor_type: None,
                 script_id: None,
                 enabled: true,
                 canary_job_id: None,
@@ -948,6 +1007,7 @@ mod tests {
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
                 processor_name: None,
+                processor_type: None,
                 script_id: None,
                 enabled: true,
                 canary_job_id: None,
@@ -1109,6 +1169,7 @@ mod tests {
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
                 processor_name: None,
+                processor_type: None,
                 script_id: None,
                 enabled: true,
                 canary_job_id: None,
@@ -1125,6 +1186,7 @@ mod tests {
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
                 processor_name: None,
+                processor_type: None,
                 script_id: None,
                 enabled: true,
                 canary_job_id: None,
@@ -1234,6 +1296,7 @@ mod tests {
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
                 processor_name: None,
+                processor_type: None,
                 script_id: None,
                 enabled: true,
                 canary_job_id: None,
@@ -1289,6 +1352,7 @@ mod tests {
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
                 processor_name: None,
+                processor_type: None,
                 script_id: None,
                 enabled: true,
                 canary_job_id: None,
@@ -1390,6 +1454,7 @@ mod tests {
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
                 processor_name: None,
+                processor_type: None,
                 script_id: None,
                 enabled: true,
                 canary_job_id: None,
@@ -1517,6 +1582,7 @@ mod tests {
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
                 processor_name: None,
+                processor_type: None,
                 script_id: None,
                 enabled: true,
                 canary_job_id: None,

@@ -54,5 +54,21 @@ public final class DemoJobManagementController {
         return new ManagedJobExample(created, instance);
     }
 
+    @PostMapping("/plugin/sql")
+    public ManagedJobExample createAndTriggerSqlPluginJob() {
+        JobDefinition created = jobClient.createJob(CreateJobRequest.apiPlugin(
+                "demo managed sql plugin",
+                "sql",
+                "billing.sql-sync"));
+        log.info(
+                "[demo.management] created plugin job id={} processorType={} processorName={}",
+                created.id(),
+                created.processorType(),
+                created.processorName());
+        JobInstance instance = jobClient.triggerJob(created.id(), TriggerJobRequest.api());
+        log.info("[demo.management] triggered plugin job id={} instance={}", created.id(), instance.id());
+        return new ManagedJobExample(created, instance);
+    }
+
     public record ManagedJobExample(JobDefinition job, JobInstance instance) {}
 }

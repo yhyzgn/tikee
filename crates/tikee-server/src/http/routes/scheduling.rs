@@ -5,11 +5,13 @@ use axum::{
     extract::{Path, State},
     http::HeaderMap,
 };
+use tikee_storage::JobDurationHistory;
 
 use crate::http::{
     AppState, auth,
     dto::{
         ApiResponse, ErrorResponse, JobSchedulingAdviceApiResponse, JobSchedulingAdviceResponse,
+        JobSchedulingHistorySummary, JobSchedulingPrediction, JobSchedulingWorkerCapacity,
     },
     error::ApiError,
 };
@@ -61,9 +63,15 @@ pub async fn job_scheduling_advice(
             required_capability.as_deref(),
         )
         .await;
+    let worker_capacity = worker_capacity(&state, &eligible_workers).await;
     let instances = state
         .instances
         .list_by_job(&job_summary.id)
+        .await
+        .map_err(|error| ApiError::storage(&error))?;
+    let history = state
+        .instances
+        .duration_history(&job_summary.id, 500)
         .await
         .map_err(|error| ApiError::storage(&error))?;
     let recent_instances = instances.len().min(20);
@@ -73,6 +81,8 @@ pub async fn job_scheduling_advice(
         .filter(|instance| instance.status.to_string() == "failed")
         .count();
     let (ready, severity, reason) = advice_status(&eligible_workers, recent_failures);
+    let history_summary = history_summary(history);
+    let prediction = prediction(&history_summary, worker_capacity);
 
     Ok(Json(ApiResponse::success(JobSchedulingAdviceResponse {
         ready,
@@ -82,6 +92,8 @@ pub async fn job_scheduling_advice(
         eligible_workers,
         recent_instances: u64::try_from(recent_instances).unwrap_or(u64::MAX),
         recent_failures: u64::try_from(recent_failures).unwrap_or(u64::MAX),
+        history: history_summary,
+        prediction,
     })))
 }
 
@@ -93,6 +105,14 @@ fn required_capability_for_job(job: &tikee_storage::JobSummary) -> Option<String
     {
         return Some("script".to_owned());
     }
+    if let Some(processor_type) = job
+        .processor_type
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && *value != "sdk")
+    {
+        return Some(format!("plugin-processor:{processor_type}"));
+    }
     let processor = job
         .processor_name
         .as_deref()
@@ -100,6 +120,82 @@ fn required_capability_for_job(job: &tikee_storage::JobSummary) -> Option<String
         .filter(|value| !value.is_empty())
         .unwrap_or(&job.name);
     Some(format!("processor:{processor}"))
+}
+
+async fn worker_capacity(
+    state: &AppState,
+    eligible_workers: &[String],
+) -> JobSchedulingWorkerCapacity {
+    let mut advertised_cpu_cores = 0_u64;
+    let mut advertised_memory_mb = 0_u64;
+    for worker_id in eligible_workers {
+        let Some(worker) = state.registry.get(worker_id).await else {
+            continue;
+        };
+        advertised_cpu_cores =
+            advertised_cpu_cores.saturating_add(label_u64(&worker.labels, "cpu"));
+        advertised_memory_mb =
+            advertised_memory_mb.saturating_add(label_u64(&worker.labels, "memory_mb"));
+    }
+    JobSchedulingWorkerCapacity {
+        eligible_worker_count: u64::try_from(eligible_workers.len()).unwrap_or(u64::MAX),
+        advertised_cpu_cores,
+        advertised_memory_mb,
+    }
+}
+
+fn history_summary(history: JobDurationHistory) -> JobSchedulingHistorySummary {
+    JobSchedulingHistorySummary {
+        inspected_instances: history.inspected_instances,
+        completed_instances: history.completed_instances,
+        failed_instances: history.failed_instances,
+        average_duration_seconds: history.average_duration_seconds,
+        p50_duration_seconds: history.p50_duration_seconds,
+        p95_duration_seconds: history.p95_duration_seconds,
+        max_duration_seconds: history.max_duration_seconds,
+    }
+}
+
+fn prediction(
+    history: &JobSchedulingHistorySummary,
+    worker_capacity: JobSchedulingWorkerCapacity,
+) -> JobSchedulingPrediction {
+    let estimated_duration_seconds = if history.p95_duration_seconds > 0 {
+        history.p95_duration_seconds
+    } else {
+        history.average_duration_seconds.max(1)
+    };
+    let recommended_concurrency = if worker_capacity.eligible_worker_count == 0 {
+        0
+    } else if estimated_duration_seconds >= 300 {
+        1
+    } else {
+        worker_capacity.eligible_worker_count.min(4).max(1)
+    };
+    let mut reasons = Vec::new();
+    reasons.push(format!(
+        "history uses {} completed instance(s); p95={}s average={}s",
+        history.completed_instances, history.p95_duration_seconds, history.average_duration_seconds
+    ));
+    reasons.push(format!(
+        "capacity sees {} eligible worker(s), {} cpu core(s), {} MiB memory",
+        worker_capacity.eligible_worker_count,
+        worker_capacity.advertised_cpu_cores,
+        worker_capacity.advertised_memory_mb
+    ));
+    JobSchedulingPrediction {
+        estimated_duration_seconds,
+        recommended_concurrency,
+        worker_capacity,
+        reasons,
+    }
+}
+
+fn label_u64(labels: &std::collections::HashMap<String, String>, key: &str) -> u64 {
+    labels
+        .get(key)
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .unwrap_or(0)
 }
 
 fn advice_status(eligible_workers: &[String], recent_failures: usize) -> (bool, String, String) {

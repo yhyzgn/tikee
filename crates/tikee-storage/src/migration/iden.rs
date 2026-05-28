@@ -255,6 +255,19 @@ pub(super) enum OidcIdentities {
 }
 
 #[derive(DeriveIden)]
+pub(super) enum Plugins {
+    Table,
+    Id,
+    Name,
+    Kind,
+    ProcessorTypesJson,
+    AlertChannelTypesJson,
+    Enabled,
+    CreatedAt,
+    UpdatedAt,
+}
+
+#[derive(DeriveIden)]
 pub(super) enum Scripts {
     Table,
     Id,
@@ -497,6 +510,7 @@ pub(super) enum Jobs {
     ScheduleType,
     ScheduleExpr,
     ProcessorName,
+    ProcessorType,
     ScriptId,
     Enabled,
     CanaryJobId,
@@ -515,6 +529,7 @@ pub(super) enum JobVersions {
     ScheduleType,
     ScheduleExpr,
     ProcessorName,
+    ProcessorType,
     ScriptId,
     Enabled,
     CreatedBy,

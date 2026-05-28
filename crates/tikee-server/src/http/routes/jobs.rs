@@ -112,6 +112,12 @@ pub async fn create_job(
         ));
     }
     let schedule_type = parse_schedule_type(request.schedule_type.as_deref().unwrap_or("api"))?;
+    validate_plugin_processor_binding(
+        &state,
+        request.processor_type.as_deref(),
+        request.processor_name.as_deref(),
+    )
+    .await?;
     if has_concrete_binding(request.processor_name.as_ref())
         && has_concrete_binding(request.script_id.as_ref())
     {
@@ -128,6 +134,7 @@ pub async fn create_job(
             schedule_type: schedule_type.to_string(),
             schedule_expr: request.schedule_expr.clone(),
             processor_name: request.processor_name.clone(),
+            processor_type: request.processor_type.clone(),
             script_id: request.script_id.clone(),
             enabled: request.enabled.unwrap_or(true),
             canary_job_id: None,
@@ -325,6 +332,26 @@ pub async fn update_job(
             "processorName and scriptId are mutually exclusive",
         ));
     }
+    let final_processor_type = request
+        .processor_type
+        .clone()
+        .unwrap_or_else(|| current.processor_type.clone());
+    let final_processor_name = request
+        .processor_name
+        .clone()
+        .unwrap_or_else(|| current.processor_name.clone());
+    let final_script_id = request
+        .script_id
+        .clone()
+        .unwrap_or_else(|| current.script_id.clone());
+    if !has_concrete_binding(final_script_id.as_ref()) {
+        validate_plugin_processor_binding(
+            &state,
+            final_processor_type.as_deref(),
+            final_processor_name.as_deref(),
+        )
+        .await?;
+    }
     let updated = state
         .jobs
         .update_job(
@@ -334,6 +361,7 @@ pub async fn update_job(
                 schedule_type,
                 schedule_expr: request.schedule_expr.clone(),
                 processor_name: request.processor_name.clone(),
+                processor_type: request.processor_type.clone(),
                 script_id: request.script_id.clone(),
                 enabled: request.enabled,
                 canary_job_id: request.canary_job_id.clone(),
@@ -589,6 +617,55 @@ fn canary_sample(_job_id: &str, percent: i32) -> bool {
     bucket < u8::try_from(percent).unwrap_or(0)
 }
 
+async fn validate_plugin_processor_binding(
+    state: &Arc<AppState>,
+    processor_type: Option<&str>,
+    processor_name: Option<&str>,
+) -> Result<(), ApiError> {
+    let Some(processor_type) = processor_type
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(());
+    };
+    if processor_type == "sdk" || processor_type == "script" {
+        return Ok(());
+    }
+    let Some(processor) = state
+        .plugins
+        .resolve_processor_type(processor_type)
+        .await
+        .map_err(|error| ApiError::storage(&error))?
+    else {
+        return Err(ApiError::bad_request(format!(
+            "plugin processor type is not registered or enabled: {processor_type}"
+        )));
+    };
+    if processor.processor_names.is_empty() {
+        return Err(ApiError::bad_request(
+            "plugin processor type has no processorNames; maintain candidates in plugin management first",
+        ));
+    }
+    let Some(processor_name) = processor_name
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return Err(ApiError::bad_request(
+            "plugin processorName is required and must come from plugin processorNames",
+        ));
+    };
+    if !processor
+        .processor_names
+        .iter()
+        .any(|candidate| candidate == processor_name)
+    {
+        return Err(ApiError::bad_request(format!(
+            "plugin processorName is not declared for processorType {processor_type}: {processor_name}"
+        )));
+    }
+    Ok(())
+}
+
 fn has_auth_header(headers: &HeaderMap) -> bool {
     headers.contains_key(axum::http::header::AUTHORIZATION)
         || headers.contains_key("x-tikee-token")
@@ -760,6 +837,7 @@ impl From<tikee_storage::JobSummary> for JobSummary {
             schedule_type: value.schedule_type,
             schedule_expr: value.schedule_expr,
             processor_name: value.processor_name,
+            processor_type: value.processor_type,
             script_id: value.script_id,
             version_number: value.version_number,
             enabled: value.enabled,

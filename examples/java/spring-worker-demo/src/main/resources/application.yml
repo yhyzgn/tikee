@@ -19,6 +19,7 @@ tikee:
     capabilities:
       - java
       - spring-boot
+      - plugin-processor:sql
     labels:
       runtime: java
       demo: spring-worker

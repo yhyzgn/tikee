@@ -1,9 +1,9 @@
 import { Alert, Button, Card, Drawer, Form, Input, InputNumber, Popconfirm, Select, Space, Switch, Table, Tag, Timeline, Typography, message } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { createJob, deleteJob, getJobSchedulingAdvice, listJobs, listJobVersions, listScripts, listWorkers, rollbackJob, triggerJob, updateJob, type CreateJobRequest, type JobSchedulingAdvice, type JobSummary, type JobVersionSummary, type ScriptSummary, type UpdateJobRequest, type WorkerSummary } from '../api/client';
+import { createJob, deleteJob, getJobSchedulingAdvice, listJobs, listJobVersions, listPlugins, listScripts, listWorkers, rollbackJob, triggerJob, updateJob, type CreateJobRequest, type JobSchedulingAdvice, type JobSummary, type PluginSummary, type JobVersionSummary, type ScriptSummary, type UpdateJobRequest, type WorkerSummary } from '../api/client';
 import { PermissionGate, useCan } from '../components/Permission';
 import { ROUTE_META } from '../routes';
 import { useUrlQueryState } from '../hooks/useUrlQueryState';
@@ -18,10 +18,11 @@ export function JobsPage() {
   const { query, setQuery } = useUrlQueryState(queryDefaults);
   const [jobs, setJobs] = useState<JobSummary[]>([]);
   const [scripts, setScripts] = useState<ScriptSummary[]>([]);
+  const [plugins, setPlugins] = useState<PluginSummary[]>([]);
   const [workers, setWorkers] = useState<WorkerSummary[]>([]);
   const [loading, setLoading] = useState(false);
-  const [form] = Form.useForm<CreateJobRequest & { executorKind?: 'sdk' | 'script'; fixedRateValue?: number; fixedRateUnit?: string }>();
-  const [editForm] = Form.useForm<UpdateJobRequest & { executorKind?: 'sdk' | 'script'; fixedRateValue?: number; fixedRateUnit?: string }>();
+  const [form] = Form.useForm<CreateJobRequest & { executorKind?: 'sdk' | 'script' | 'plugin'; fixedRateValue?: number; fixedRateUnit?: string }>();
+  const [editForm] = Form.useForm<UpdateJobRequest & { executorKind?: 'sdk' | 'script' | 'plugin'; fixedRateValue?: number; fixedRateUnit?: string }>();
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<JobSummary | null>(null);
   const [versionJob, setVersionJob] = useState<JobSummary | null>(null);
@@ -36,14 +37,16 @@ export function JobsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [page, scriptPage, workerPage] = await Promise.all([
+      const [page, scriptPage, workerPage, pluginItems] = await Promise.all([
         listJobs(),
         listScripts(),
         listWorkers().catch(() => ({ online: 0, items: [] })),
+        listPlugins().catch(() => []),
       ]);
       setJobs(page.items);
       setScripts(scriptPage.items);
       setWorkers(workerPage.items);
+      setPlugins(pluginItems);
     } catch (err) {
       message.error(err instanceof Error ? err.message : '加载失败');
     } finally {
@@ -60,6 +63,28 @@ export function JobsPage() {
   )).sort();
   const isScriptCapability = (value?: string | null) => String(value ?? '').trim().startsWith('script:');
   const processorNameFromCapability = (capability: string) => capability.slice('processor:'.length).trim();
+  const pluginProcessorOptions = plugins
+    .filter((plugin) => plugin.enabled)
+    .flatMap((plugin) => plugin.processorTypes.map((processor) => ({
+      value: processor.type,
+      label: `${plugin.name} · ${processor.label} · ${processor.capability}`,
+      processor,
+      plugin,
+    })));
+  const pluginProcessorNameOptions = (processorType?: string | null) => {
+    const selected = pluginProcessorOptions.find((option) => option.value === processorType);
+    return (selected?.processor.processorNames ?? []).map((value) => ({ value, label: value }));
+  };
+  const applyPluginProcessorSelection = (
+    targetForm: typeof form | typeof editForm,
+    processorType?: string | null,
+    _currentProcessorName?: string | null,
+  ) => {
+    void _currentProcessorName;
+    const options = pluginProcessorNameOptions(processorType);
+    targetForm.setFieldsValue({ processorName: options[0]?.value ?? undefined });
+  };
+
   const sdkProcessorOptions = (search: string, currentValue?: string | null) => {
     const sdkValues = new Set<string>();
     for (const capability of capabilityValues('processor:')) {
@@ -105,8 +130,9 @@ export function JobsPage() {
       scheduleType: job.scheduleType,
       scheduleExpr: job.scheduleType === 'cron' ? job.scheduleExpr : undefined,
       ...fixedRate,
-      executorKind: job.scriptId ? 'script' : 'sdk',
+      executorKind: job.scriptId ? 'script' : job.processorType ? 'plugin' : 'sdk',
       processorName: job.processorName ?? undefined,
+      processorType: job.processorType ?? undefined,
       scriptId: job.scriptId ?? undefined,
       canaryJobId: job.canaryJobId ?? undefined,
       canaryPercent: job.canaryPercent ?? 0,
@@ -114,15 +140,29 @@ export function JobsPage() {
     });
   };
 
-  const normalizeExecutor = <T extends { executorKind?: 'sdk' | 'script'; processorName?: string | null; scriptId?: string | null }>(values: T) => {
-    const { executorKind: _ignoredExecutorKind, ...rest } = values;
-    void _ignoredExecutorKind;
-    return values.executorKind === 'script'
-      ? { ...rest, processorName: null }
-      : { ...rest, scriptId: null };
+  const validatePluginExecutor = (processorType?: string | null, processorName?: string | null) => {
+    const selected = pluginProcessorOptions.find((option) => option.value === processorType);
+    if (!selected) throw new Error('请选择插件管理中已启用的处理器类型');
+    const candidates = selected.processor.processorNames;
+    if (candidates.length === 0) throw new Error('请先在插件管理中维护任务处理器名候选');
+    if (!processorName?.trim()) throw new Error('请选择插件管理中声明的任务处理器名');
+    if (!candidates.includes(processorName.trim())) {
+      throw new Error('任务处理器名必须来自插件管理中的候选项');
+    }
   };
 
-  const handleEditSubmit = async (values: UpdateJobRequest & { executorKind?: 'sdk' | 'script'; fixedRateValue?: number; fixedRateUnit?: string }) => {
+  const normalizeExecutor = <T extends { executorKind?: 'sdk' | 'script' | 'plugin'; processorName?: string | null; scriptId?: string | null; processorType?: string | null }>(values: T) => {
+    const { executorKind: _ignoredExecutorKind, ...rest } = values;
+    void _ignoredExecutorKind;
+    if (values.executorKind === 'script') return { ...rest, processorName: null, processorType: null };
+    if (values.executorKind === 'plugin') {
+      validatePluginExecutor(values.processorType, values.processorName);
+      return { ...rest, scriptId: null };
+    }
+    return { ...rest, scriptId: null, processorType: null };
+  };
+
+  const handleEditSubmit = async (values: UpdateJobRequest & { executorKind?: 'sdk' | 'script' | 'plugin'; fixedRateValue?: number; fixedRateUnit?: string }) => {
     if (!editingJob) return;
     if (!canWriteJobs) { message.error('当前账号无权限编辑任务'); return; }
     try {
@@ -202,11 +242,19 @@ export function JobsPage() {
     return matchesKeyword && matchesSchedule;
   }), [jobs, query.keyword, query.scheduleType]);
 
+  const renderAdviceStat = (label: string, value: ReactNode, helper?: ReactNode) => (
+    <Card size="small" className="scheduling-advice-stat-card">
+      <Typography.Text className="scheduling-advice-stat-label">{label}</Typography.Text>
+      <div className="scheduling-advice-stat-value">{value}</div>
+      {helper ? <Typography.Text className="scheduling-advice-stat-helper">{helper}</Typography.Text> : null}
+    </Card>
+  );
+
   const columns: ColumnsType<JobSummary> = [
     { title: 'Name', dataIndex: 'name' },
     { title: 'Namespace / App', render: (_, job) => <Space direction="vertical" size={0}><strong>{job.namespace}</strong><Typography.Text type="secondary" style={{ fontSize: 12 }}>{job.app}</Typography.Text></Space> },
     { title: 'Schedule', dataIndex: 'scheduleType', render: (value: string, job) => <Space><Tag color="blue" className="soft-tag">{value}</Tag><Tag>v{job.versionNumber}</Tag>{job.canaryPercent > 0 ? <Tag color="orange">canary {job.canaryPercent}%</Tag> : null}</Space> },
-    { title: '执行器', render: (_, job) => job.scriptId ? <Tag color="purple">脚本 · {job.scriptId}</Tag> : <Typography.Text code>{job.processorName || job.name}</Typography.Text> },
+    { title: '执行器', render: (_, job) => job.scriptId ? <Tag color="purple">脚本 · {job.scriptId}</Tag> : job.processorType ? <Tag color="geekblue">插件 · {job.processorType} · {job.processorName || job.name}</Tag> : <Typography.Text code>{job.processorName || job.name}</Typography.Text> },
     {
       title: 'Enabled',
       dataIndex: 'enabled',
@@ -316,10 +364,12 @@ export function JobsPage() {
           <Form.Item name="namespace" label="Namespace" rules={[{ required: true }]}><Input placeholder="default" /></Form.Item>
           <Form.Item name="app" label="App" rules={[{ required: true }]}><Input placeholder="default" /></Form.Item>
           <Form.Item name="name" label="任务名称" rules={[{ required: true }]}><Input placeholder="demo.echo" /></Form.Item>
-          <Form.Item name="executorKind" label="执行方式" rules={[{ required: true }]}><Select options={[{ value: 'sdk', label: 'SDK Processor' }, { value: 'script', label: '脚本（沙箱自动执行）' }]} /></Form.Item>
+          <Form.Item name="executorKind" label="执行方式" rules={[{ required: true }]}><Select options={[{ value: 'sdk', label: 'SDK Processor' }, { value: 'plugin', label: '插件处理器' }, { value: 'script', label: '脚本（沙箱自动执行）' }]} /></Form.Item>
           <Form.Item noStyle shouldUpdate={(prev, next) => prev.executorKind !== next.executorKind}>
             {({ getFieldValue }) => getFieldValue('executorKind') === 'script' ? (
               <Form.Item name="scriptId" label="具体脚本" extra="选择已审批脚本即可；Server 会按脚本语言匹配具备 script:<language> 或 script:* 能力的沙箱 Worker。" rules={[{ required: true, message: '请选择具体脚本' }]}><Select showSearch optionFilterProp="label" placeholder="选择已审批脚本" options={scriptOptions} /></Form.Item>
+            ) : getFieldValue('executorKind') === 'plugin' ? (
+              <><Form.Item name="processorType" label="插件处理器类型" rules={[{ required: true, message: '请选择插件处理器类型' }]}><Select placeholder="选择插件处理器类型" options={pluginProcessorOptions} onChange={(value) => applyPluginProcessorSelection(form, value)} /></Form.Item><Form.Item noStyle shouldUpdate={(prev, next) => prev.processorType !== next.processorType || prev.processorName !== next.processorName}>{({ getFieldValue }) => <Form.Item name="processorName" label="任务处理器名" extra="来自插件管理中声明的“任务处理器名候选”；未声明时需要先回到插件管理补齐。" rules={[{ required: true, message: '请选择任务处理器名候选' }]}><Select placeholder="自动选择任务处理器名" options={pluginProcessorNameOptions(getFieldValue('processorType'))} /></Form.Item>}</Form.Item></>
             ) : (
               <Form.Item name="processorName" label="SDK Processor" extra="只能选择普通 SDK processor；script:* 能力不会出现在这里。Java demo/Spring Worker 通过 @TikeeProcessor 注册，例如 demo.echo。" rules={[{ validator: (_, value) => isScriptCapability(value) ? Promise.reject(new Error('SDK Processor 不能选择 script:* 执行器')) : Promise.resolve() }]}><Select allowClear showSearch placeholder="输入或选择 SDK Processor" options={sdkProcessorOptions(createProcessorSearch, form.getFieldValue('processorName'))} filterOption={(input, option) => String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())} onSearch={setCreateProcessorSearch} onChange={(value) => setCreateProcessorSearch(String(value ?? ''))} /></Form.Item>
             )}
@@ -351,10 +401,12 @@ export function JobsPage() {
         <Form form={editForm} layout="vertical" onFinish={(values) => void handleEditSubmit(values)}>
           <Form.Item label="Namespace / App"><Typography.Text code>{editingJob ? `${editingJob.namespace}/${editingJob.app}` : '-'}</Typography.Text></Form.Item>
           <Form.Item name="name" label="任务名称" rules={[{ required: true }]}><Input /></Form.Item>
-          <Form.Item name="executorKind" label="执行方式" rules={[{ required: true }]}><Select options={[{ value: 'sdk', label: 'SDK Processor' }, { value: 'script', label: '脚本（沙箱自动执行）' }]} /></Form.Item>
+          <Form.Item name="executorKind" label="执行方式" rules={[{ required: true }]}><Select options={[{ value: 'sdk', label: 'SDK Processor' }, { value: 'plugin', label: '插件处理器' }, { value: 'script', label: '脚本（沙箱自动执行）' }]} /></Form.Item>
           <Form.Item noStyle shouldUpdate={(prev, next) => prev.executorKind !== next.executorKind}>
             {({ getFieldValue }) => getFieldValue('executorKind') === 'script' ? (
               <Form.Item name="scriptId" label="具体脚本" extra="选择已审批脚本即可；Server 会按脚本语言匹配具备 script:<language> 或 script:* 能力的沙箱 Worker。" rules={[{ required: true, message: '请选择具体脚本' }]}><Select showSearch optionFilterProp="label" placeholder="选择已审批脚本" options={scriptOptions} /></Form.Item>
+            ) : getFieldValue('executorKind') === 'plugin' ? (
+              <><Form.Item name="processorType" label="插件处理器类型" rules={[{ required: true, message: '请选择插件处理器类型' }]}><Select placeholder="选择插件处理器类型" options={pluginProcessorOptions} onChange={(value) => applyPluginProcessorSelection(editForm, value)} /></Form.Item><Form.Item noStyle shouldUpdate={(prev, next) => prev.processorType !== next.processorType || prev.processorName !== next.processorName}>{({ getFieldValue }) => <Form.Item name="processorName" label="任务处理器名" extra="来自插件管理中声明的“任务处理器名候选”；未声明时需要先回到插件管理补齐。" rules={[{ required: true, message: '请选择任务处理器名候选' }]}><Select placeholder="自动选择任务处理器名" options={pluginProcessorNameOptions(getFieldValue('processorType'))} /></Form.Item>}</Form.Item></>
             ) : (
               <Form.Item name="processorName" label="SDK Processor" extra="只能选择普通 SDK processor；script:* 能力不会出现在这里。Java demo/Spring Worker 通过 @TikeeProcessor 注册，例如 demo.echo。" rules={[{ validator: (_, value) => isScriptCapability(value) ? Promise.reject(new Error('SDK Processor 不能选择 script:* 执行器')) : Promise.resolve() }]}><Select allowClear showSearch placeholder="输入或选择 SDK Processor" options={sdkProcessorOptions(editProcessorSearch, editForm.getFieldValue('processorName'))} filterOption={(input, option) => String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())} onSearch={setEditProcessorSearch} onChange={(value) => setEditProcessorSearch(String(value ?? ''))} /></Form.Item>
             )}
@@ -414,16 +466,59 @@ export function JobsPage() {
         title={adviceJob ? `调度建议 - ${adviceJob.name}` : '调度建议'}
         open={adviceJob !== null}
         onClose={() => { setAdviceJob(null); setSchedulingAdvice(null); }}
-        width={520}
+        width={720}
       >
-        <Typography.Paragraph type="secondary">基于当前 Job 绑定、在线 Worker 能力和最近实例状态给出触发前建议；只读展示，不改变调度行为。</Typography.Paragraph>
+        <Typography.Paragraph className="scheduling-advice-intro" type="secondary">基于当前 Job 绑定、在线 Worker 能力和最近实例状态给出触发前建议；只读展示，不改变调度行为。</Typography.Paragraph>
         {adviceLoading ? <Typography.Text type="secondary">加载调度建议...</Typography.Text> : null}
         {schedulingAdvice ? (
-          <Space direction="vertical" size={12} style={{ width: '100%' }}>
-            <Alert type={schedulingAdvice.severity === 'error' ? 'error' : schedulingAdvice.severity === 'warning' ? 'warning' : 'success'} showIcon message={schedulingAdvice.ready ? '当前可调度' : '当前不可调度'} description={schedulingAdvice.reason} />
-            <Typography.Text>Required capability: <Typography.Text code>{schedulingAdvice.requiredCapability ?? 'none'}</Typography.Text></Typography.Text>
-            <Typography.Text>Eligible workers: {schedulingAdvice.eligibleWorkers.length ? schedulingAdvice.eligibleWorkers.map((worker) => <Tag key={worker}>{worker}</Tag>) : <Tag color="red">0</Tag>}</Typography.Text>
-            <Typography.Text>Recent window: {schedulingAdvice.recentInstances} instances · {schedulingAdvice.recentFailures} failures</Typography.Text>
+          <Space direction="vertical" size={16} className="scheduling-advice-panel">
+            <Alert
+              className="scheduling-advice-status"
+              type={schedulingAdvice.severity === 'error' ? 'error' : schedulingAdvice.severity === 'warning' ? 'warning' : 'success'}
+              showIcon
+              message={schedulingAdvice.ready ? '当前可调度' : '当前不可调度'}
+              description={schedulingAdvice.reason}
+            />
+
+            <div className="scheduling-advice-grid">
+              {renderAdviceStat('Required capability', <Typography.Text code>{schedulingAdvice.requiredCapability ?? 'none'}</Typography.Text>, 'Worker 调度匹配所需能力')}
+              {renderAdviceStat('Eligible workers', schedulingAdvice.eligibleWorkers.length ? (
+                <Space size={[4, 4]} wrap>
+                  {schedulingAdvice.eligibleWorkers.map((worker) => <Tag key={worker}>{worker}</Tag>)}
+                </Space>
+              ) : <Tag color="red">0</Tag>, '当前在线且满足能力约束')}
+              {renderAdviceStat('Recent window', `${schedulingAdvice.recentInstances} instances`, `${schedulingAdvice.recentFailures} failures in window`)}
+              {renderAdviceStat('Estimated duration', `${schedulingAdvice.prediction.estimatedDurationSeconds}s`, '基于完整历史耗时估算')}
+              {renderAdviceStat('recommendedConcurrency', schedulingAdvice.prediction.recommendedConcurrency, '推荐触发并发上限')}
+              {renderAdviceStat('Worker capacity', (
+                <Space size={4} wrap>
+                  <Tag color="blue">{schedulingAdvice.prediction.workerCapacity.eligibleWorkerCount} workers</Tag>
+                  <Tag>{schedulingAdvice.prediction.workerCapacity.advertisedCpuCores} CPU</Tag>
+                  <Tag>{schedulingAdvice.prediction.workerCapacity.advertisedMemoryMb}MiB</Tag>
+                </Space>
+              ), 'Worker 广告资源汇总')}
+            </div>
+
+            <Card size="small" title="历史耗时" className="scheduling-advice-detail-card">
+              <div className="scheduling-advice-metric-row">
+                <span>avg <strong>{schedulingAdvice.history.averageDurationSeconds}s</strong></span>
+                <span>p50 <strong>{schedulingAdvice.history.p50DurationSeconds}s</strong></span>
+                <span>p95 <strong>{schedulingAdvice.history.p95DurationSeconds}s</strong></span>
+                <span>max <strong>{schedulingAdvice.history.maxDurationSeconds}s</strong></span>
+              </div>
+              <div className="scheduling-advice-metric-row scheduling-advice-metric-row--muted">
+                <span>已检查 {schedulingAdvice.history.inspectedInstances}</span>
+                <span>完成 {schedulingAdvice.history.completedInstances}</span>
+                <span>失败 {schedulingAdvice.history.failedInstances}</span>
+              </div>
+            </Card>
+
+            <Card size="small" title="资源预测" className="scheduling-advice-detail-card">
+              <Typography.Text strong>预测依据</Typography.Text>
+              <div className="scheduling-advice-reasons">
+                {schedulingAdvice.prediction.reasons.map((reason) => <Typography.Text key={reason} type="secondary">{reason}</Typography.Text>)}
+              </div>
+            </Card>
           </Space>
         ) : null}
       </Drawer>

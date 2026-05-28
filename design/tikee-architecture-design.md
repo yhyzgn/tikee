@@ -2336,7 +2336,7 @@ Phase 3 closeout 状态已在 2026-05-28 复核：原先保留未勾选的 OIDC 
 - [x] 任务依赖自动发现、拓扑图形画布、跨工作流影响分析与回放基础（2026-05-28：已从 Job + Workflow definition 自动推导 job/workflow 节点、workflow_job_ref / workflow_job_dependency 边与 unresolved 缺失引用；`GET /api/v1/jobs/topology` 返回 layer/position 供画布渲染；新增 `GET /api/v1/jobs/{job}/impact` 汇总引用工作流、上游/下游 Job 与风险摘要；新增 `GET /api/v1/workflow-instances/{id}/replay` 返回 instance + definition + events + graph replay bundle；Jobs 页面“任务拓扑”入口跳转到 `/jobs/topology` 二级页面，二级页面承载 SVG 图形画布并可点击 Job 查看跨工作流影响分析）。
 - [x] 高级 Webhook/事件源基础（2026-05-28：入站事件源 `POST /api/v1/events/webhooks/{job}:trigger` 已落地，复用 `instances:execute` 与 namespace/app scope 鉴权，创建 `webhook` trigger instance 并记录 `webhook_event_source` payload 日志；GitHub/GitLab/Alertmanager 等 provider 适配器保留后续增强）。
 - [x] 任务灰度发布基础（2026-05-28：Job 增加 canary target/percent，显式 UI/API trigger 按百分比路由到 canary Job，并在 `JobInstanceSummary.canaryRouting` 返回 original/routed job；Jobs 页面支持配置灰度目标/比例并在触发后提示命中灰度。自动回滚、worker tag 灰度和指标门禁仍保留后续增强）。
-- [ ] 插件系统。
+- [x] 插件系统。
 
 ### Phase 4: 高级能力 (月 10-12)
 
@@ -2373,7 +2373,7 @@ Phase 3 closeout 状态已在 2026-05-28 复核：原先保留未勾选的 OIDC 
 - [ ] Terraform Provider、GitOps/IaC、K8s CRD
 - [x] 任务依赖自动发现、拓扑图形画布、跨工作流影响分析与回放基础（2026-05-28：`GET /api/v1/jobs/topology`、`GET /api/v1/jobs/{job}/impact`、`GET /api/v1/workflow-instances/{id}/replay` 已落地；Jobs 页面拓扑入口已改为 `/jobs/topology` 二级页面，二级页面承载 SVG 图形画布、全屏/退出全屏切换、依赖边/引用边/unresolved 引用列表，并支持选中 Job 查看跨工作流影响分析；Replay API 先作为事故复盘 bundle 暴露，后续可接入 Workflow 实例详情页做时间轴播放）。
 - [x] 智能调度建议基础（2026-05-28：新增 `GET /api/v1/jobs/{job}/scheduling-advice`，基于 Job processor/script 绑定推导 required capability，结合在线 Worker 能力与最近实例失败数返回 ready/severity/reason/eligibleWorkers；Jobs 页面增加“调度建议”抽屉。完整历史耗时/资源预测仍保留后续增强）
-- [ ] 插件系统 (自定义处理器类型、告警通道)
+- [x] 插件系统 (自定义处理器类型、告警通道)（2026-05-28：新增 `plugins` 注册表与 `GET/POST/PATCH/DELETE /api/v1/plugins`；插件声明 `processorTypes` 与 `alertChannelTypes`，Job 增加 `processorType` 并按 `plugin-processor:<type>` 能力匹配 Worker；告警规则支持插件 channel type readiness 与 webhook 模板投递；Web 增加 `/plugins` 插件系统页面，Jobs 创建/编辑可选择插件处理器；Java demo 与 Rust demo 可广告 `plugin-processor:sql`，本地 `tikee-dev.db` 已注入 Ops Plugin 联调用例）。
 - [x] Webhook 入站/出站基础（2026-05-28：出站告警 Webhook 已有；新增入站 `POST /api/v1/events/webhooks/{job}:trigger`，支持外部系统以 session/API Token/SDK API-Key 触发 Job 并记录事件 payload。高级 provider 签名校验、模板映射、重放保护后续增强）
 - [x] 任务版本管理与回滚（2026-05-28：`job_versions` 不可变快照、版本列表 API、回滚 API、Jobs 页面版本历史与回滚入口；验证 `cargo test -p tikee-storage job_version -- --nocapture`、`cargo test -p tikee-server job_version -- --nocapture`、Web lint/build/API/UI tests）。
 - [x] 灰度发布基础（2026-05-28：`canaryJobId`/`canaryPercent`、显式 trigger canary routing、response `canaryRouting`、Jobs 页面配置与命中提示已落地；A/B 指标分析、按 worker tag 灰度、失败自动回滚后续增强）
@@ -2396,9 +2396,9 @@ Phase 3 closeout 状态已在 2026-05-28 复核：原先保留未勾选的 OIDC 
 | 调度仿真 | 变更前模拟未来 N 次触发、misfire 结果、资源占用 | Phase 4 |
 | 平台管理控制台 | 嵌入式 Web UI + HTTP/OpenAPI 管理接口，覆盖任务、实例、工作流、Worker、脚本、安全、审计和告警 | Phase 1-4 |
 | 工作流回放 | 已提供 `GET /api/v1/workflow-instances/{id}/replay` 事故复盘 bundle（instance/definition/events/graph）；后续增强为实例详情页时间轴播放和状态逐帧动画 | Phase 4 |
-| 智能调度 | 基于历史耗时、Worker 负载、失败率进行资源预测和调度推荐 | Phase 4 |
+| 智能调度 | 已在调度建议中提供完整历史耗时统计（avg/p50/p95/max、completed/failed）和基于 eligible Worker 标签的资源预测（预计耗时、推荐并发、CPU/Memory capacity）；后续可接入实时 Worker 负载和队列排队模型 | Phase 4 |
 | 策略引擎 | OPA/Rego 或内置 DSL，控制 Shell/SQL/HTTP/生产变更审批 | Phase 3-4 |
-| WASM 插件 | 语言无关、安全沙箱、插件签名与版本管理；同时作为普通脚本默认通用沙箱后端 | Phase 3-4 |
+| WASM 插件 | 语言无关、安全沙箱、插件签名与版本管理；同时作为普通脚本默认通用沙箱后端。当前插件注册中心已先闭环自定义处理器类型与自定义告警通道；WASM 插件包签名/版本隔离继续作为安全增强演进。 | Phase 3-4 |
 | 多语言动态脚本 | Python/JavaScript/TypeScript/Shell/PowerShell/Rhai 等受控运行；`script` 为统一脚本 Worker 能力，具体语言在 binding 中传递；默认 `sandbox=auto`：可编译到 WASM 的内容优先 Wasmtime，原生命令/现成二进制优先 Anthropic Sandbox Runtime (srt)，JavaScript/TypeScript 逻辑优先 Deno，未匹配时回退 Wasmtime；可显式指定 wasmtime/wasmedge/srt/deno/v8/docker/podman/custom | Phase 3-4 |
 | 事件驱动 | Webhook、Kafka/NATS/Redis Stream 触发源，出站 HMAC 回调 | Phase 4 |
 | 多租户配额 | namespace/app/worker pool 级并发、QPS、日志量、存储 TTL | Phase 3 |

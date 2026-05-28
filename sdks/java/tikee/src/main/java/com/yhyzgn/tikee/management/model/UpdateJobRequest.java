@@ -8,14 +8,27 @@ public record UpdateJobRequest(
         String name,
         String scheduleType,
         String scheduleExpr,
+        String processorType,
         String processorName,
         String scriptId,
         Boolean enabled) {
     public static UpdateJobRequest disable() {
-        return new UpdateJobRequest(null, null, null, null, null, false);
+        return new UpdateJobRequest(null, null, null, null, null, null, false);
     }
 
     public static UpdateJobRequest enable() {
-        return new UpdateJobRequest(null, null, null, null, null, true);
+        return new UpdateJobRequest(null, null, null, null, null, null, true);
+    }
+
+    public static UpdateJobRequest apiPlugin(String name, String processorType, String processorName) {
+        return new UpdateJobRequest(name, JobScheduleType.API.value(), null, processorType, processorName, null, true);
+    }
+
+    public static UpdateJobRequest cronPlugin(
+            String name,
+            String scheduleExpr,
+            String processorType,
+            String processorName) {
+        return new UpdateJobRequest(name, JobScheduleType.CRON.value(), scheduleExpr, processorType, processorName, null, true);
     }
 }

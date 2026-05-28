@@ -145,6 +145,14 @@ pub(super) fn api_router() -> Router<Arc<AppState>> {
             axum::routing::post(auth::rotate_api_token),
         )
         .route(
+            "/plugins",
+            get(routes::list_plugins).post(routes::create_plugin),
+        )
+        .route(
+            "/plugins/{id}",
+            axum::routing::patch(routes::update_plugin).delete(routes::delete_plugin),
+        )
+        .route(
             "/management/api-keys",
             get(sdk_api_keys::list_sdk_api_keys).post(sdk_api_keys::create_sdk_api_key),
         )

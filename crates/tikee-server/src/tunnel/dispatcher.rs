@@ -197,7 +197,7 @@ async fn dispatch_single_instances(
             scripts,
             instance.id.clone(),
             instance.job_id.clone(),
-            executor,
+            executor.clone(),
         )
         .await?
         {
@@ -214,7 +214,7 @@ async fn dispatch_single_instances(
             }
         };
 
-        let required_capability = required_task_capability(&task);
+        let required_capability = required_task_capability_for_executor(&task, &executor);
         let eligible_workers = registry
             .find_eligible_workers_with_capability(
                 &job.namespace,
@@ -289,13 +289,16 @@ async fn dispatch_broadcast_attempts(
         let executor = if let Some(job) = jobs.get(&instance.job_id).await? {
             resolve_job_executor(workflows, &instance.id, &job).await?
         } else {
-            JobExecutor::SdkProcessor(instance.job_id.clone())
+            JobExecutor::SdkProcessor {
+                processor_name: instance.job_id.clone(),
+                processor_type: None,
+            }
         };
         let task = match build_dispatch_task(
             scripts,
             attempt.instance_id.clone(),
             instance.job_id.clone(),
-            executor,
+            executor.clone(),
         )
         .await?
         {
@@ -313,7 +316,7 @@ async fn dispatch_broadcast_attempts(
             }
         };
 
-        let required_capability = required_task_capability(&task);
+        let required_capability = required_task_capability_for_executor(&task, &executor);
         if !registry
             .worker_supports_capability(&attempt.worker_id, required_capability.as_deref())
             .await
@@ -445,8 +448,13 @@ async fn append_script_governance_log(
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum JobExecutor {
-    SdkProcessor(String),
-    Script { script_id: String },
+    SdkProcessor {
+        processor_name: String,
+        processor_type: Option<String>,
+    },
+    Script {
+        script_id: String,
+    },
 }
 
 async fn build_dispatch_task(
@@ -509,7 +517,7 @@ async fn build_dispatch_task(
                 },
             )
         }
-        JobExecutor::SdkProcessor(processor_name) => (processor_name, None),
+        JobExecutor::SdkProcessor { processor_name, .. } => (processor_name, None),
     };
 
     Ok(DispatchTaskBuild::Built(DispatchTask {
@@ -520,6 +528,21 @@ async fn build_dispatch_task(
         processor_binding,
         assignment_token: String::new(),
     }))
+}
+
+fn required_task_capability_for_executor(
+    task: &DispatchTask,
+    executor: &JobExecutor,
+) -> Option<String> {
+    match executor {
+        JobExecutor::SdkProcessor {
+            processor_type: Some(processor_type),
+            ..
+        } if !processor_type.trim().is_empty() && processor_type != "sdk" => {
+            Some(format!("plugin-processor:{}", processor_type.trim()))
+        }
+        _ => required_task_capability(task),
+    }
 }
 
 fn required_task_capability(task: &DispatchTask) -> Option<String> {
@@ -712,7 +735,10 @@ async fn resolve_job_executor(
         .processor_name_for_job_instance(instance_id)
         .await?
     {
-        return Ok(JobExecutor::SdkProcessor(processor_name));
+        return Ok(JobExecutor::SdkProcessor {
+            processor_name,
+            processor_type: None,
+        });
     }
     if let Some(script_id) = job
         .script_id
@@ -724,14 +750,16 @@ async fn resolve_job_executor(
             script_id: script_id.to_owned(),
         });
     }
-    Ok(JobExecutor::SdkProcessor(
-        job.processor_name
+    Ok(JobExecutor::SdkProcessor {
+        processor_name: job
+            .processor_name
             .as_deref()
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .unwrap_or(&job.name)
             .to_owned(),
-    ))
+        processor_type: job.processor_type.clone(),
+    })
 }
 
 #[cfg(test)]
@@ -775,6 +803,7 @@ mod tests {
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
                 processor_name: Some("billing.manual".to_owned()),
+                processor_type: None,
                 script_id: None,
                 enabled: true,
                 canary_job_id: None,
@@ -865,6 +894,7 @@ mod tests {
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
                 processor_name: Some("demo.blocked".to_owned()),
+                processor_type: None,
                 script_id: None,
                 enabled: true,
                 canary_job_id: None,
@@ -891,6 +921,7 @@ mod tests {
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
                 processor_name: Some("demo.echo".to_owned()),
+                processor_type: None,
                 script_id: None,
                 enabled: true,
                 canary_job_id: None,
@@ -1026,6 +1057,7 @@ mod tests {
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
                 processor_name: None,
+                processor_type: None,
                 script_id: Some(script.id),
                 enabled: true,
                 canary_job_id: None,
@@ -1132,6 +1164,7 @@ mod tests {
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
                 processor_name: None,
+                processor_type: None,
                 script_id: Some(script.id.clone()),
                 enabled: true,
                 canary_job_id: None,
@@ -1228,6 +1261,7 @@ mod tests {
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
                 processor_name: None,
+                processor_type: None,
                 script_id: None,
                 enabled: true,
                 canary_job_id: None,
@@ -1336,6 +1370,7 @@ mod tests {
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
                 processor_name: None,
+                processor_type: None,
                 script_id: None,
                 enabled: true,
                 canary_job_id: None,
@@ -1406,6 +1441,7 @@ mod tests {
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
                 processor_name: None,
+                processor_type: None,
                 script_id: None,
                 enabled: true,
                 canary_job_id: None,
@@ -1469,6 +1505,7 @@ mod tests {
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
                 processor_name: Some("job.default".to_owned()),
+                processor_type: None,
                 script_id: None,
                 enabled: true,
                 canary_job_id: None,
@@ -1604,6 +1641,7 @@ mod tests {
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
                 processor_name: None,
+                processor_type: None,
                 script_id: Some(script.id.clone()),
                 enabled: true,
                 canary_job_id: None,

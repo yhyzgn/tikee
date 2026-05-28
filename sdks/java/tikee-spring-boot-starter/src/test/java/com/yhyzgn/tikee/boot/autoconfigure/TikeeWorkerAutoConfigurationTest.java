@@ -9,6 +9,7 @@ import com.yhyzgn.tikee.spring.processor.TikeeProcessorRegistry;
 import com.yhyzgn.tikee.worker.client.NoopTikeeWorkerClient;
 import com.yhyzgn.tikee.worker.client.TikeeWorkerClient;
 import java.nio.file.Path;
+import java.util.logging.Logger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -16,6 +17,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 class TikeeWorkerAutoConfigurationTest {
+    private static final Logger log = Logger.getLogger(TikeeWorkerAutoConfigurationTest.class.getName());
     @TempDir
     Path stateDir;
 
@@ -180,6 +182,29 @@ class TikeeWorkerAutoConfigurationTest {
         contextRunner.withPropertyValues("tikee.worker.state-dir=" + stateDir).run(context -> {
             assertThat(context).doesNotHaveBean(TikeeJobClient.class);
         });
+    }
+
+    @Test
+    void customPluginProcessorCapabilityIsAdvertisedFromWorkerProperties() throws Exception {
+        installFakeWasmtime(stateDir);
+        log.info(() -> "[java-sdk-plugin-test] verifying worker registration advertises plugin processor capability from properties");
+
+        contextRunner.withPropertyValues(
+                "tikee.worker.state-dir=" + stateDir,
+                "tikee.worker.capabilities[0]=java",
+                "tikee.worker.capabilities[1]=spring-boot",
+                "tikee.worker.capabilities[2]=plugin-processor:sql",
+                "tikee.worker.labels.plugin.sql=enabled")
+                .run(context -> {
+                    NoopTikeeWorkerClient noop = context.getBean(NoopTikeeWorkerClient.class);
+                    log.info(() -> "[java-sdk-plugin-test] registration capabilities="
+                            + noop.registration().capabilities());
+                    log.info(() -> "[java-sdk-plugin-test] registration labels="
+                            + noop.registration().labels());
+                    assertThat(noop.registration().capabilities())
+                            .contains("java", "spring-boot", "plugin-processor:sql");
+                    assertThat(noop.registration().labels()).containsEntry("plugin.sql", "enabled");
+                });
     }
 
     @Test

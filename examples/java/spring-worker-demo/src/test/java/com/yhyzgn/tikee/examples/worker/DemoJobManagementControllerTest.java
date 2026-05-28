@@ -14,6 +14,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -27,6 +29,7 @@ import org.springframework.context.annotation.Primary;
         "tikee.management.enabled=true"
 })
 class DemoJobManagementControllerTest {
+    private static final Logger log = LoggerFactory.getLogger(DemoJobManagementControllerTest.class);
     @LocalServerPort
     private int port;
 
@@ -46,6 +49,14 @@ class DemoJobManagementControllerTest {
         assertThat(scriptExample)
                 .contains("demo managed script")
                 .contains("\"scriptId\":\"script-demo\"")
+                .contains("\"triggerType\":\"api\"");
+
+        String pluginExample = httpPost("/demo/jobs/plugin/sql");
+        log.info("[java-demo-plugin-test] plugin management response={}", pluginExample);
+        assertThat(pluginExample)
+                .contains("demo managed sql plugin")
+                .contains("\"processorType\":\"sql\"")
+                .contains("\"processorName\":\"billing.sql-sync\"")
                 .contains("\"triggerType\":\"api\"");
     }
 
@@ -81,14 +92,19 @@ class DemoJobManagementControllerTest {
         @Override
         public JobDefinition createJob(CreateJobRequest request) {
             assertThat(request.scheduleType()).isEqualTo("api");
-            if (request.scriptId() == null) {
+            if (request.processorType() != null) {
+                log.info("[java-demo-plugin-test] fake create plugin job name={} processorType={} processorName={}",
+                        request.name(), request.processorType(), request.processorName());
+                assertThat(request.processorType()).isEqualTo("sql");
+                assertThat(request.processorName()).isEqualTo("billing.sql-sync");
+            } else if (request.scriptId() == null) {
                 assertThat(request.processorName()).isEqualTo("demo.echo");
             } else {
                 assertThat(request.processorName()).isNull();
                 assertThat(request.scriptId()).isEqualTo("script-demo");
             }
             return new JobDefinition("job-created", "default", "default", request.name(), "api", null,
-                    request.processorName(), request.scriptId(), true);
+                    request.processorType(), request.processorName(), request.scriptId(), true);
         }
 
         @Override
@@ -106,7 +122,7 @@ class DemoJobManagementControllerTest {
         }
 
         private static JobDefinition job(String id, String name, String processorName, boolean enabled) {
-            return new JobDefinition(id, "default", "default", name, "api", null, processorName, null, enabled);
+            return new JobDefinition(id, "default", "default", name, "api", null, null, processorName, null, enabled);
         }
     }
 }

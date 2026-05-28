@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 
-import { ApiClientError, createAppScope, createJob, createNamespace, createWorkerPool, dryRunWorkflow, getAuthToken, listInstanceLogs, getJobImpact, getJobSchedulingAdvice, getJobTopology, getWorkflowReplay, listJobVersions, listJobs, listNamespaces, listWorkerPools, login, rollbackJob, setAuthErrorHandler, setAuthToken, triggerJob, triggerJobWebhookEvent, updateSdkApiKey, updateWorkflow } from './client';
+import { ApiClientError, createAppScope, createJob, createNamespace, createPlugin, createWorkerPool, deletePlugin, dryRunWorkflow, getAuthToken, listInstanceLogs, getJobImpact, getJobSchedulingAdvice, getJobTopology, getWorkflowReplay, listJobVersions, listJobs, listNamespaces, listPlugins, listWorkerPools, login, rollbackJob, setAuthErrorHandler, setAuthToken, triggerJob, triggerJobWebhookEvent, updatePlugin, updateSdkApiKey, updateWorkflow } from './client';
 
 const originalFetch = globalThis.fetch;
 
@@ -171,6 +171,72 @@ describe('api client envelope handling', () => {
     expect((headers as Headers).get('authorization')).toBe('Bearer atk_test_token');
   });
 
+  test('manages plugin registry through CRUD endpoints', async () => {
+    const calls: Array<{ method: string; url: string; body?: unknown }> = [];
+    globalThis.fetch = mock(async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({
+        method: init?.method ?? 'GET',
+        url: String(url),
+        body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      });
+      if ((init?.method ?? 'GET') === 'GET') {
+        return new Response(JSON.stringify({
+          code: 0,
+          message: 'success',
+          data: [{
+            id: 'plugin_ops',
+            name: 'Ops Plugin',
+            kind: 'mixed',
+            processorTypes: [{ type: 'sql', label: 'SQL Processor', capability: 'plugin-processor:sql', processorNames: ['billing.sql-sync'], description: null }],
+            alertChannelTypes: [{ type: 'ops_webhook', label: 'Ops Webhook', targetKind: 'webhook', description: null, template: { body: { text: '{{message}}' } } }],
+            enabled: true,
+            createdAt: 'now',
+            updatedAt: 'now',
+          }],
+        }));
+      }
+      if (init?.method === 'DELETE') {
+        return new Response(JSON.stringify({ code: 0, message: 'success', data: {} }));
+      }
+      return new Response(JSON.stringify({
+        code: 0,
+        message: 'success',
+        data: {
+          id: 'plugin_ops',
+          name: 'Ops Plugin',
+          kind: 'mixed',
+          processorTypes: [{ type: 'sql', label: 'SQL Processor', capability: 'plugin-processor:sql', processorNames: ['billing.sql-sync'], description: null }],
+          alertChannelTypes: [{ type: 'ops_webhook', label: 'Ops Webhook', targetKind: 'webhook', description: null, template: { body: { text: '{{message}}' } } }],
+          enabled: true,
+          createdAt: 'now',
+          updatedAt: 'now',
+        },
+      }));
+    }) as unknown as typeof fetch;
+
+    const payload = {
+      name: 'Ops Plugin',
+      kind: 'mixed',
+      enabled: true,
+      processorTypes: [{ type: 'sql', label: 'SQL Processor', capability: 'plugin-processor:sql', processorNames: ['billing.sql-sync'], description: null }],
+      alertChannelTypes: [{ type: 'ops_webhook', label: 'Ops Webhook', targetKind: 'webhook', description: null, template: { body: { text: '{{message}}' } } }],
+    };
+
+    await expect(listPlugins()).resolves.toHaveLength(1);
+    await expect(createPlugin(payload)).resolves.toMatchObject({ id: 'plugin_ops' });
+    await expect(updatePlugin('plugin_ops', { ...payload, enabled: false })).resolves.toMatchObject({ id: 'plugin_ops' });
+    await expect(deletePlugin('plugin_ops')).resolves.toBeUndefined();
+
+    expect(calls.map((call) => `${call.method} ${call.url}`)).toEqual([
+      'GET /api/v1/plugins',
+      'POST /api/v1/plugins',
+      'PATCH /api/v1/plugins/plugin_ops',
+      'DELETE /api/v1/plugins/plugin_ops',
+    ]);
+    expect(calls[1].body).toMatchObject({ processorTypes: [{ type: 'sql' }], alertChannelTypes: [{ type: 'ops_webhook' }] });
+    expect(calls[2].body).toMatchObject({ enabled: false });
+  });
+
 
 
   test('loads and creates tenant scope resources through management endpoints', async () => {
@@ -297,10 +363,10 @@ describe('api client envelope handling', () => {
     globalThis.fetch = mock(async () => new Response(JSON.stringify({
       code: 0,
       message: 'success',
-      data: { ready: true, severity: 'ok', reason: '1 eligible worker online', requiredCapability: 'processor:demo.echo', eligibleWorkers: ['worker-1'], recentInstances: 3, recentFailures: 0 },
+      data: { ready: true, severity: 'ok', reason: '1 eligible worker online', requiredCapability: 'processor:demo.echo', eligibleWorkers: ['worker-1'], recentInstances: 3, recentFailures: 0, history: { inspectedInstances: 3, completedInstances: 2, failedInstances: 0, averageDurationSeconds: 20, p50DurationSeconds: 10, p95DurationSeconds: 30, maxDurationSeconds: 30 }, prediction: { estimatedDurationSeconds: 30, recommendedConcurrency: 1, workerCapacity: { eligibleWorkerCount: 1, advertisedCpuCores: 4, advertisedMemoryMb: 8192 }, reasons: ['history uses 2 completed instance(s)'] } },
     }))) as unknown as typeof fetch;
 
-    await expect(getJobSchedulingAdvice('job_advice')).resolves.toMatchObject({ ready: true, requiredCapability: 'processor:demo.echo' });
+    await expect(getJobSchedulingAdvice('job_advice')).resolves.toMatchObject({ ready: true, requiredCapability: 'processor:demo.echo', history: { p95DurationSeconds: 30 }, prediction: { estimatedDurationSeconds: 30 } });
     expect(fetch).toHaveBeenCalledWith('/api/v1/jobs/job_advice/scheduling-advice', expect.any(Object));
   });
 
