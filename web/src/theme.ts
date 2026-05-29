@@ -3,17 +3,25 @@ import { createContext, useContext } from 'react';
 export const DEFAULT_PRIMARY_COLOR = '#2563eb';
 export const DEFAULT_INFO_COLOR = '#0ea5e9';
 export const PRIMARY_COLOR_STORAGE_KEY = 'tikee.primaryColor';
+export const THEME_MODE_STORAGE_KEY = 'tikee.themeMode';
+export type ThemeMode = 'light' | 'dark';
 
 export interface ThemeSettings {
   primaryColor: string;
+  mode: ThemeMode;
   setPrimaryColor: (color: string) => void;
   resetPrimaryColor: () => void;
+  setMode: (mode: ThemeMode) => void;
+  toggleMode: () => void;
 }
 
 export const ThemeSettingsContext = createContext<ThemeSettings>({
   primaryColor: DEFAULT_PRIMARY_COLOR,
+  mode: 'light',
   setPrimaryColor: () => undefined,
   resetPrimaryColor: () => undefined,
+  setMode: () => undefined,
+  toggleMode: () => undefined,
 });
 
 export function useThemeSettings(): ThemeSettings {
@@ -26,4 +34,8 @@ export function normalizeHexColor(value: string | null | undefined): string | nu
   if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) return trimmed.toLowerCase();
   if (/^[0-9a-fA-F]{6}$/.test(trimmed)) return `#${trimmed.toLowerCase()}`;
   return null;
+}
+
+export function normalizeThemeMode(value: string | null | undefined): ThemeMode {
+  return value === 'dark' ? 'dark' : 'light';
 }

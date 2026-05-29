@@ -96,7 +96,7 @@ Java/Rust SDK 是当前最成熟部分。脚本/wasm 已有大量基础设施，
 
 | 功能 | 当前状态 | 代码证据 | 已实现内容 | 未覆盖/风险 | 建议优先级 |
 |---|---|---|---|---|---|
-| Web 控制台 | 🟡 部分覆盖 | `web/src/pages/*` 覆盖 Jobs/Instances/Workers/Workflows/Scripts/Plugins/Scopes/Alerts/Audit 等；`web/src/theme` 和 AppShell | 内置 React 控制台、主要管理页面、主题色、分页等已实现 | 暗色模式、移动端适配未见完整验收；部分交互近期仍在修正，需 UX 回归 | P1 |
+| Web 控制台 | 🟡 部分覆盖 | `web/src/pages/*` 覆盖 Jobs/Instances/Workers/Workflows/Scripts/Plugins/Scopes/Alerts/Audit 等；`web/src/theme` 和 AppShell；`ThemeMode.test.ts` | 内置 React 控制台、主要管理页面、主题色、分页等已实现；新增可持久化 light/dark 模式，接入 Ant Design `darkAlgorithm`、`data-theme` CSS 和顶栏开关 | 移动端适配仍需完整验收；部分交互近期仍在修正，需 UX 回归 | P1 |
 | OpenAPI | ✅ 已覆盖 | `crates/tikee-server/src/http/openapi.rs` 使用 `utoipa::OpenApi` 汇总 routes/schema | REST OpenAPI 已生成，覆盖 jobs/workflows/scripts/auth/alerts/metrics 等 | gRPC reflection 未确认 | P2 |
 | 实时日志 | ✅ 已覆盖 | `worker.proto` 有 `TaskLog` 和 `SubscribeTaskLogs`；`jobs.rs` 有 instance logs API；Java/Rust SDK 有 task log 上报；UI 实例日志展示；`tunnel::service::tests::subscribe_task_logs_replays_existing_and_streams_live_logs` | gRPC 流式日志、日志持久化查询、历史 replay 与 live stream 已有服务端测试固化；脚本/SDK 日志可进入实例日志 | 对象存储归档属于长期日志归档增强，可后续作为运维扩展；背压压测仍可补充 | P2 |
 | 工作流可视化 | 🟡 部分覆盖 | `web/src/pages/WorkflowsPage.tsx` 可视化节点编辑、dry-run/validate/run/SSE；`workflow.rs` 支持定义/运行/恢复 | 拖拽/节点配置、JSON-ish/YAML-ish 文本展示、SSE 事件和恢复入口存在 | YAML/JSON 双模式、diff、仿真、回放不完整；Runtime 节点覆盖不足 | P1 |

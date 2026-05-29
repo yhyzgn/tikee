@@ -8,7 +8,7 @@ import { AuthGuard, RequirePermission } from './components/AuthGuard';
 import { ForbiddenPage } from './components/ForbiddenPage';
 import { RouteFallback } from './components/RouteFallback';
 import { ROUTE_META } from './routes';
-import { DEFAULT_INFO_COLOR, DEFAULT_PRIMARY_COLOR, PRIMARY_COLOR_STORAGE_KEY, ThemeSettingsContext, normalizeHexColor } from './theme';
+import { DEFAULT_INFO_COLOR, DEFAULT_PRIMARY_COLOR, PRIMARY_COLOR_STORAGE_KEY, THEME_MODE_STORAGE_KEY, ThemeSettingsContext, normalizeHexColor, normalizeThemeMode, type ThemeMode } from './theme';
 
 const Dashboard = lazy(() => import('./pages/Dashboard').then((module) => ({ default: module.Dashboard })));
 const InstancesPage = lazy(() => import('./pages/InstancesPage').then((module) => ({ default: module.InstancesPage })));
@@ -90,6 +90,10 @@ export function App() {
     if (typeof window === 'undefined') return DEFAULT_PRIMARY_COLOR;
     return normalizeHexColor(window.localStorage.getItem(PRIMARY_COLOR_STORAGE_KEY)) ?? DEFAULT_PRIMARY_COLOR;
   });
+  const [mode, setModeState] = useState<ThemeMode>(() => {
+    if (typeof window === 'undefined') return 'light';
+    return normalizeThemeMode(window.localStorage.getItem(THEME_MODE_STORAGE_KEY));
+  });
 
   const setPrimaryColor = (color: string) => {
     const normalized = normalizeHexColor(color) ?? DEFAULT_PRIMARY_COLOR;
@@ -102,23 +106,32 @@ export function App() {
     window.localStorage.removeItem(PRIMARY_COLOR_STORAGE_KEY);
   };
 
+  const setMode = (nextMode: ThemeMode) => {
+    const normalized = normalizeThemeMode(nextMode);
+    setModeState(normalized);
+    window.localStorage.setItem(THEME_MODE_STORAGE_KEY, normalized);
+  };
+
+  const toggleMode = () => setMode(mode === 'dark' ? 'light' : 'dark');
+
   useEffect(() => {
     document.documentElement.style.setProperty('--app-primary-color', primaryColor);
     document.documentElement.style.setProperty('--app-info-color', DEFAULT_INFO_COLOR);
-  }, [primaryColor]);
+    document.documentElement.dataset.theme = mode;
+  }, [primaryColor, mode]);
 
-  const themeSettings = useMemo(() => ({ primaryColor, setPrimaryColor, resetPrimaryColor }), [primaryColor]);
+  const themeSettings = useMemo(() => ({ primaryColor, mode, setPrimaryColor, resetPrimaryColor, setMode, toggleMode }), [primaryColor, mode]);
 
   return (
     <ThemeSettingsContext.Provider value={themeSettings}>
       <ConfigProvider
         theme={{
-          algorithm: theme.defaultAlgorithm,
+          algorithm: mode === 'dark' ? theme.darkAlgorithm : theme.defaultAlgorithm,
           token: {
             colorPrimary: primaryColor,
             colorInfo: DEFAULT_INFO_COLOR,
-            colorBgBase: '#f6f8fc',
-            colorTextBase: '#172033',
+            colorBgBase: mode === 'dark' ? '#0f172a' : '#f6f8fc',
+            colorTextBase: mode === 'dark' ? '#e2e8f0' : '#172033',
             borderRadius: 12,
             fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
           },

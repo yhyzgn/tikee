@@ -1398,3 +1398,39 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+html[data-theme='dark'] {
+  color: #e2e8f0;
+  background: #0f172a;
+}
+
+html[data-theme='dark'] body {
+  background:
+    radial-gradient(circle at 10% 0%, color-mix(in srgb, var(--app-primary-color) 18%, transparent), transparent 30%),
+    radial-gradient(circle at 90% 8%, rgba(14, 165, 233, 0.16), transparent 26%),
+    #0f172a;
+}
+
+html[data-theme='dark'] .app-shell__sider,
+html[data-theme='dark'] .app-shell__header,
+html[data-theme='dark'] .clean-card,
+html[data-theme='dark'] .ant-card {
+  background: rgba(15, 23, 42, 0.92) !important;
+  border-color: rgba(148, 163, 184, 0.22) !important;
+  color: #e2e8f0;
+}
+
+html[data-theme='dark'] .app-shell__subtitle,
+html[data-theme='dark'] .app-shell__brand-subtitle,
+html[data-theme='dark'] .section-description,
+html[data-theme='dark'] .ant-typography-secondary {
+  color: #94a3b8 !important;
+}
+
+html[data-theme='dark'] .app-shell__title,
+html[data-theme='dark'] .app-shell__brand-title,
+html[data-theme='dark'] .ant-typography,
+html[data-theme='dark'] .ant-table,
+html[data-theme='dark'] .ant-form-item-label > label {
+  color: #e2e8f0;
+}
