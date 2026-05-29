@@ -25,6 +25,47 @@ need_cmd() {
 need_cmd cargo
 need_cmd bun
 need_cmd curl
+need_cmd python3
+
+extract_sqlite_db_path() {
+  python3 -c 'import re, sys
+path = sys.argv[1]
+try:
+    text = open(path, encoding="utf-8").read()
+except OSError:
+    sys.exit(0)
+match = re.search(r"^\s*database_url\s*=\s*\"(sqlite://[^\"]+)\"", text, re.M)
+if not match:
+    sys.exit(0)
+url = match.group(1)[len("sqlite://"):]
+url = url.split("?", 1)[0]
+print(url)' "$CONFIG_FILE"
+}
+
+backup_malformed_sqlite_db() {
+  local db_path="$1"
+  [[ -n "$db_path" && -f "$db_path" ]] || return 0
+  if ! command -v sqlite3 >/dev/null 2>&1; then
+    return 0
+  fi
+  local check_output
+  check_output="$(sqlite3 "$db_path" 'PRAGMA integrity_check;' 2>&1 || true)"
+  if [[ "$check_output" != "ok" ]]; then
+    local stamp backup_dir base
+    stamp="$(date +%Y%m%d-%H%M%S)"
+    backup_dir="$LOG_DIR/db-backups"
+    base="$(basename "$db_path")"
+    mkdir -p "$backup_dir"
+    echo "检测到 dev SQLite schema 损坏，自动备份并重建：$check_output" >&2
+    for suffix in "" "-shm" "-wal"; do
+      if [[ -f "$db_path$suffix" ]]; then
+        cp -a "$db_path$suffix" "$backup_dir/$base$suffix.$stamp.bak" || true
+        rm -f "$db_path$suffix"
+      fi
+    done
+    echo "损坏数据库已备份到：$backup_dir" >&2
+  fi
+}
 
 cleanup() {
   local code=$?
@@ -46,6 +87,12 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   echo "配置文件不存在：$CONFIG_FILE" >&2
   exit 1
 fi
+
+DB_PATH="$(extract_sqlite_db_path)"
+if [[ -n "$DB_PATH" && "$DB_PATH" != /* ]]; then
+  DB_PATH="$ROOT_DIR/$DB_PATH"
+fi
+backup_malformed_sqlite_db "$DB_PATH"
 
 if [[ ! -d "$ROOT_DIR/web/node_modules" ]]; then
   echo "首次启动：安装 Web 依赖..."
