@@ -508,3 +508,83 @@
             }),
         ))
     }
+
+    #[tokio::test]
+    async fn gitops_manifest_exports_yaml_and_reports_drift_diff() {
+        let app = router().await;
+        let created = app
+            .clone()
+            .oneshot(
+                admin_json_request_builder(
+                    app.clone(),
+                    "POST",
+                    "/api/v1/jobs",
+                    r#"{"namespace":"default","app":"billing","name":"gitops.echo","scheduleType":"api","processorType":"sdk","processorName":"demo.echo","enabled":true}"#,
+                )
+                .await,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("job create should respond: {error}"));
+        assert!(created.status().is_success());
+
+        let exported = app
+            .clone()
+            .oneshot(
+                admin_request_builder(
+                    app.clone(),
+                    "GET",
+                    "/api/v1/gitops/manifest?namespace=default&app=billing&format=yaml",
+                )
+                .await,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("gitops export should respond: {error}"));
+        assert!(exported.status().is_success());
+        let body = axum::body::to_bytes(exported.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("export body should collect: {error}"));
+        let mut json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("export body should be JSON: {error}"));
+        assert_eq!(json["code"], 0);
+        assert_eq!(json["data"]["format"], "yaml");
+        assert!(json["data"]["checksum"].as_str().is_some_and(|value| value.starts_with("sha256:")));
+        assert!(json["data"]["manifestYaml"].as_str().is_some_and(|value| value.contains("apiVersion")));
+        let job = json["data"]["manifest"]["resources"]
+            .as_array_mut()
+            .unwrap_or_else(|| panic!("manifest should contain resources"))
+            .iter_mut()
+            .find(|resource| resource["kind"] == "Job")
+            .unwrap_or_else(|| panic!("manifest should export job resource"));
+        assert_eq!(job["metadata"]["name"], "gitops.echo");
+        job["spec"]["enabled"] = serde_json::Value::Bool(false);
+
+        let desired = serde_json::json!({"manifest": json["data"]["manifest"].clone()});
+        let diff = app
+            .clone()
+            .oneshot(
+                admin_json_request_builder(
+                    app.clone(),
+                    "POST",
+                    "/api/v1/gitops/diff",
+                    &desired.to_string(),
+                )
+                .await,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("gitops diff should respond: {error}"));
+        assert!(diff.status().is_success());
+        let body = axum::body::to_bytes(diff.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("diff body should collect: {error}"));
+        let diff_json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("diff body should be JSON: {error}"));
+        assert_eq!(diff_json["code"], 0);
+        assert_eq!(diff_json["data"]["summary"]["update"], 1);
+        assert!(diff_json["data"]["changes"]
+            .as_array()
+            .unwrap_or_else(|| panic!("diff should contain changes"))
+            .iter()
+            .any(|change| change["action"] == "update"
+                && change["kind"] == "Job"
+                && change["diff"].as_str().is_some_and(|value| value.contains("enabled"))));
+    }

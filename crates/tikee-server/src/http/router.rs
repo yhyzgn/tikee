@@ -152,6 +152,11 @@ pub(super) fn api_router() -> Router<Arc<AppState>> {
             "/plugins/{id}",
             axum::routing::patch(routes::update_plugin).delete(routes::delete_plugin),
         )
+        .route("/gitops/manifest", get(routes::export_gitops_manifest))
+        .route(
+            "/gitops/diff",
+            axum::routing::post(routes::diff_gitops_manifest),
+        )
         .route(
             "/management/api-keys",
             get(sdk_api_keys::list_sdk_api_keys).post(sdk_api_keys::create_sdk_api_key),

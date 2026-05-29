@@ -1118,3 +1118,84 @@ impl From<tikee_storage::AuditLogSummary> for AuditLogSummary {
         }
     }
 }
+
+pub type GitOpsManifestApiResponse = ApiResponse<GitOpsManifestResponse>;
+pub type GitOpsDiffApiResponse = ApiResponse<GitOpsDiffResponse>;
+
+#[derive(Debug, Clone, Default, Deserialize, ToSchema, utoipa::IntoParams)]
+#[serde(rename_all = "camelCase")]
+#[into_params(parameter_in = Query)]
+pub struct GitOpsExportQuery {
+    pub namespace: Option<String>,
+    pub app: Option<String>,
+    pub format: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GitOpsManifestResponse {
+    pub manifest: GitOpsManifest,
+    pub format: String,
+    pub manifest_yaml: Option<String>,
+    pub checksum: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GitOpsManifest {
+    pub api_version: String,
+    pub kind: String,
+    pub scope: GitOpsScope,
+    pub resources: Vec<GitOpsResource>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GitOpsScope {
+    pub namespace: Option<String>,
+    pub app: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GitOpsResource {
+    pub kind: String,
+    pub metadata: GitOpsMetadata,
+    pub spec: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GitOpsMetadata {
+    pub id: Option<String>,
+    pub name: String,
+    pub namespace: Option<String>,
+    pub app: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GitOpsDiffRequest {
+    pub manifest: GitOpsManifest,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GitOpsDiffResponse {
+    pub current_checksum: String,
+    pub desired_checksum: String,
+    pub summary: BTreeMap<String, u64>,
+    pub changes: Vec<GitOpsDiffChange>,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GitOpsDiffChange {
+    pub action: String,
+    pub key: String,
+    pub kind: String,
+    pub name: String,
+    pub before: Option<GitOpsResource>,
+    pub after: Option<GitOpsResource>,
+    pub diff: String,
+}

@@ -8,7 +8,7 @@
 
 当前实现已经覆盖了 tikee 的核心骨架和本轮 P1 功能闭环：任务 CRUD/API 触发、Cron/FixedRate/Daily/Calendar tick、单机/广播派发、Worker Tunnel、Java/Rust SDK、脚本/wasm/动态语言治理、工作流 DAG 执行与可视化回放、Web 控制台、OpenAPI、RBAC/OIDC/API Token/Service Account、多租户基础模型、告警、Prometheus/OTLP、审计日志和基础部署材料。
 
-严格按设计文档中 `tikee` 列全部为 ✅ 的目标评估，当前仍有少量 P2 缺口：非 Java SDK parity（Go/Python/Node 已明确后续）与 GitOps/IaC 深度能力。迁移工具与非 Java SDK/Demo 按当前任务边界不在本轮实现范围。
+严格按设计文档中 `tikee` 列全部为 ✅ 的目标评估，当前仍有少量 P2 缺口：非 Java SDK parity（Go/Python/Node 已明确后续）。迁移工具与非 Java SDK/Demo 按当前任务边界不在本轮实现范围。
 
 ### 总览统计
 
@@ -17,8 +17,8 @@
 | 2.1 调度能力 | 9 | 9 | 0 | 0 | 调度主干已覆盖；生命周期维护/冻结窗口和节假日排除已进入正式 Job schema/API/tick 路径 |
 | 2.2 执行模式 | 8 | 8 | 0 | 0 | 广播策略、队列治理、分片恢复、MapReduce reduce 分片、长任务取消/checkpoint、补偿节点、安全表达式和审批 SLA 已补齐主干 |
 | 2.3 处理器类型 | 11 | 10 | 1 | 0 | Java/Rust/脚本/动态语言、外部 JAR/容器和内置 HTTP/gRPC/SQL/文件清理/Webhook 主路径已补齐；非 Java SDK parity 为 P2 |
-| 2.4 管理与平台能力 | 10 | 9 | 0 | 1 | 平台能力框架齐全，Web 暗色/移动端基础、租户配额、Secret Store、Service Account、审计、告警去重/静默已接入；GitOps/IaC 仍为 P2 |
-| **合计** | **38** | **36** | **1** | **1** | **P1 已清空；剩余为非 Java SDK parity 与 GitOps/IaC 等 P2 范围** |
+| 2.4 管理与平台能力 | 10 | 10 | 0 | 0 | 平台能力框架齐全，Web 暗色/移动端基础、租户配额、Secret Store、Service Account、审计、告警去重/静默和 GitOps/IaC manifest diff 均已接入 |
+| **合计** | **38** | **37** | **1** | **0** | **P1 已清空；剩余为非 Java SDK parity（已明确后续）** |
 
 ## 2. 状态定义
 
@@ -105,11 +105,11 @@ Java/Rust SDK 是当前最成熟部分。脚本/wasm 已有大量基础设施，
 | 告警通知 | ✅ 已覆盖 | `crates/tikee-server/src/alert.rs`、`alert/email.rs`、`alert/retry.rs`、`routes/alerts.rs`；Web `AlertDeliveryPage`；`alert_rules_apply_threshold_dedupe_window_and_silence` | 邮件、飞书、钉钉、企微、Slack、PagerDuty、Webhook、插件告警、重试/DLQ 基础存在；`dedupe_seconds` 已接入实际窗口化去重/阈值计数，`silenced_until` 会生成 silenced 历史事件且不投递 | 复杂告警表达式、分组聚合和升级策略可后续增强 | P2 |
 | 指标监控 | ✅ 已覆盖 | `/metrics` router；`routes/metrics.rs`；`observability/prometheus/*`；`observability/grafana/*`；`observability/tracing.rs` | Prometheus 指标、业务 SLO 汇总、Grafana/Prometheus 配套、OTLP tracing 基础存在 | 指标命名稳定性和 Dashboard 完整性需运维回归 | P2 |
 | 审计日志 | ✅ 已覆盖 | `audit_logs` schema；`routes/audit_logs.rs`；多处 CRUD/trigger/login/script gate 写审计；`AuditLogsPage`；`tenant_secret_store_creates_lists_and_deletes_scoped_secret_refs`；`workflow_approval_advance_records_audit_log`；`user_management_and_rbac_integration`；`tenant_scope_management_api_creates_and_lists_namespaces_apps_and_worker_pools`；`tenant_scope_delete_rejects_non_empty_parents_and_deletes_empty_worker_pool`；`sdk_api_key_lifecycle_uses_header_and_app_scope` | 审计日志表、查询/导出和关键管理/执行操作审计已存在；Secret Store 创建/读取/删除、用户 create/update/delete、租户范围 create/update/delete、实例 cancel、Job rollback、脚本 publish/rollback、工作流审批/advance、SDK API-Key create/update/revoke/use 均已通过 audit API 固化 | 后续新增管理路由必须同步补审计断言；当前设计矩阵中的核心审计覆盖已闭环 | P2 |
-| GitOps/IaC | ❌ 未覆盖 | `Dockerfile`、`docker-compose.yml`、`deploy/compose`、`deploy/systemd`、`deploy/k8s/tikee.yaml` | 有 Compose/Systemd/K8s baseline 部署材料 | 未见 CRD、Terraform Provider、GitOps diff/import-export 等平台能力；不能按设计标记完成 | P2 |
+| GitOps/IaC | ✅ 已覆盖 | `routes/gitops.rs`；`GET /api/v1/gitops/manifest`；`POST /api/v1/gitops/diff`；`GitOpsPage.tsx`；`deploy/gitops/tikee-manifest.example.yaml`；`deploy/k8s/crd/tikee-manifest-crd.yaml`；`deploy/terraform/tikee_gitops_manifest.tf`；`gitops_manifest_exports_yaml_and_reports_drift_diff` | Job/Workflow/Script/Plugin/AlertRule 可导出为声明式 Manifest，支持 YAML/JSON、canonical checksum、desired manifest drift diff；Web 有 GitOps/IaC 页面；部署目录提供 CRD 和 Terraform contract 样例 | Bulk apply 仍应走 typed CRUD 审批链，避免未审查批量变更；非迁移工具范围 | P2 |
 
 ### 管理与平台能力结论
 
-平台管理能力已具雏形，Web/OpenAPI/Metrics/工作流可视化/RBAC 与 Service Account 较完整；但设计中面向企业级治理的“全链路隔离、全量审计、GitOps/IaC、对象存储日志归档”等仍未闭环。
+平台管理能力已具雏形，Web/OpenAPI/Metrics/工作流可视化/RBAC、Service Account 与 GitOps/IaC manifest diff 已闭环；对象存储日志归档、复杂租户公平调度等可作为后续运维增强。
 
 ---
 
@@ -128,7 +128,6 @@ Java/Rust SDK 是当前最成熟部分。脚本/wasm 已有大量基础设施，
 1. Calendar Schedule 的集中式节假日/维护日历管理增强。
 2. Go SDK 完整 parity；Python/Node SDK 实现。
 3. 暗色模式/移动端验收。
-4. CRD/Terraform Provider/GitOps diff。
 
 ---
 
@@ -196,6 +195,7 @@ Java/Rust SDK 是当前最成熟部分。脚本/wasm 已有大量基础设施，
 - `deploy/systemd/*`：Systemd 部署。
 - `deploy/bare-metal/*`：裸机部署辅助。
 - `deploy/k8s/tikee.yaml`、`deploy/k8s/README.md`：K8s baseline。
+- `deploy/gitops/tikee-manifest.example.yaml`、`deploy/k8s/crd/tikee-manifest-crd.yaml`、`deploy/terraform/tikee_gitops_manifest.tf`：GitOps/IaC manifest、CRD 与 Terraform contract 样例。
 - `observability/prometheus/*`、`observability/grafana/*`、`docs/operations/prometheus-grafana-runbook.md`：监控运维材料。
 
 ---
@@ -204,4 +204,4 @@ Java/Rust SDK 是当前最成熟部分。脚本/wasm 已有大量基础设施，
 
 按当前代码实际功能，tikee 已经具备“核心调度平台 + Java/Rust Worker SDK + Web 管理台 + 工作流 DAG/回放 + 脚本/wasm/动态语言治理 + Service Account/RBAC + 可观测性/审计”的可联调基础。
 
-本轮 P1 缺口已清空。仍未完全覆盖设计表全部 ✅ 的部分集中在 P2：非 Java SDK parity（Go/Python/Node 已明确后续）与 GitOps/IaC 深度能力；这些应继续保留在路线图/Phase 清单中。
+本轮 P1 缺口已清空。仍未完全覆盖设计表全部 ✅ 的部分集中在 P2：非 Java SDK parity（Go/Python/Node 已明确后续）；这些应继续保留在路线图/Phase 清单中。

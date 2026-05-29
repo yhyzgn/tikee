@@ -51,6 +51,56 @@ export interface CreatePluginRequest {
 
 export type UpdatePluginRequest = CreatePluginRequest;
 
+
+export interface GitOpsScope {
+  namespace: string | null;
+  app: string | null;
+}
+
+export interface GitOpsMetadata {
+  id: string | null;
+  name: string;
+  namespace: string | null;
+  app: string | null;
+}
+
+export interface GitOpsResource {
+  kind: string;
+  metadata: GitOpsMetadata;
+  spec: Record<string, unknown>;
+}
+
+export interface GitOpsManifest {
+  apiVersion: string;
+  kind: string;
+  scope: GitOpsScope;
+  resources: GitOpsResource[];
+}
+
+export interface GitOpsManifestResponse {
+  manifest: GitOpsManifest;
+  format: string;
+  manifestYaml: string | null;
+  checksum: string;
+}
+
+export interface GitOpsDiffChange {
+  action: string;
+  key: string;
+  kind: string;
+  name: string;
+  before: GitOpsResource | null;
+  after: GitOpsResource | null;
+  diff: string;
+}
+
+export interface GitOpsDiffResponse {
+  currentChecksum: string;
+  desiredChecksum: string;
+  summary: Record<string, number>;
+  changes: GitOpsDiffChange[];
+}
+
 export interface JobSummary {
   id: string;
   namespace: string;
@@ -547,6 +597,23 @@ export async function deletePlugin(id: string): Promise<void> {
   await request<void>(`/api/v1/plugins/${encodeURIComponent(id)}`, { method: 'DELETE', allowNullData: true });
 }
 
+
+
+export async function exportGitOpsManifest(params: { namespace?: string; app?: string; format?: 'json' | 'yaml' } = {}): Promise<GitOpsManifestResponse> {
+  const query = new URLSearchParams();
+  if (params.namespace) query.set('namespace', params.namespace);
+  if (params.app) query.set('app', params.app);
+  if (params.format) query.set('format', params.format);
+  const suffix = query.toString() ? `?${query}` : '';
+  return request<GitOpsManifestResponse>(`/api/v1/gitops/manifest${suffix}`);
+}
+
+export async function diffGitOpsManifest(manifest: GitOpsManifest): Promise<GitOpsDiffResponse> {
+  return request<GitOpsDiffResponse>('/api/v1/gitops/diff', {
+    method: 'POST',
+    body: JSON.stringify({ manifest }),
+  });
+}
 
 export async function listSdkApiKeys(): Promise<SdkApiKeySummary[]> {
   return request<SdkApiKeySummary[]>('/api/v1/management/api-keys');

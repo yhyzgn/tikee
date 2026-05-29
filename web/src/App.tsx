@@ -25,6 +25,7 @@ const UsersPage = lazy(() => import('./pages/UsersPage').then((module) => ({ def
 const ScopesPage = lazy(() => import('./pages/ScopesPage').then((module) => ({ default: module.ScopesPage })));
 const PluginsPage = lazy(() => import('./pages/PluginsPage').then((module) => ({ default: module.PluginsPage })));
 const ApiKeysPage = lazy(() => import('./pages/ApiKeysPage').then((module) => ({ default: module.ApiKeysPage })));
+const GitOpsPage = lazy(() => import('./pages/GitOpsPage').then((module) => ({ default: module.GitOpsPage })));
 const WorkersPage = lazy(() => import('./pages/WorkersPage').then((module) => ({ default: module.WorkersPage })));
 
 function GuardedRoute({ route, children }: { route: { permission?: { resource: string; action: string } }; children: React.ReactNode }) {
@@ -74,6 +75,7 @@ function AppLayout() {
           <Route path={ROUTE_META.scopes.path} element={<GuardedRoute route={ROUTE_META.scopes}><ScopesPage /></GuardedRoute>} />
           <Route path={ROUTE_META.plugins.path} element={<GuardedRoute route={ROUTE_META.plugins}><PluginsPage /></GuardedRoute>} />
           <Route path={ROUTE_META.apiKeys.path} element={<GuardedRoute route={ROUTE_META.apiKeys}><ApiKeysPage /></GuardedRoute>} />
+          <Route path={ROUTE_META.gitops.path} element={<GuardedRoute route={ROUTE_META.gitops}><GitOpsPage /></GuardedRoute>} />
           <Route path={ROUTE_META.scripts.path} element={<GuardedRoute route={ROUTE_META.scripts}><ScriptsPage /></GuardedRoute>} />
           <Route path={ROUTE_META.scriptEdit.path} element={<GuardedRoute route={ROUTE_META.scriptEdit}><ScriptEditorPage /></GuardedRoute>} />
           <Route path={ROUTE_META.alerts.path} element={<GuardedRoute route={ROUTE_META.alerts}><AlertDeliveryPage /></GuardedRoute>} />

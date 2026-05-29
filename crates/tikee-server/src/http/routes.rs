@@ -5,6 +5,7 @@ pub(crate) mod alerts;
 pub(crate) mod audit;
 pub(crate) mod common;
 pub(crate) mod event_sources;
+pub(crate) mod gitops;
 pub(crate) mod jobs;
 pub(crate) mod metrics;
 pub(crate) mod observability;
@@ -28,6 +29,7 @@ pub use alerts::{
 };
 pub use audit::{export_audit_logs, list_audit_logs};
 pub use event_sources::trigger_inbound_webhook;
+pub use gitops::{diff_gitops_manifest, export_gitops_manifest};
 pub use jobs::{
     cancel_job_instance, create_job, delete_job, get_job_instance, list_instance_attempts, list_instance_logs,
     list_job_instances, list_job_versions, list_jobs, rollback_job, trigger_job, update_job,
