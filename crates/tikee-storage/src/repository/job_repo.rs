@@ -31,6 +31,11 @@ impl JobRepository {
         &self.versions
     }
 
+    #[must_use]
+    pub fn db(&self) -> DatabaseConnection {
+        self.db.clone()
+    }
+
     /// List jobs ordered by creation order.
     ///
     /// # Errors

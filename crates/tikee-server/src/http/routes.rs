@@ -3,6 +3,7 @@
 
 pub(crate) mod alerts;
 pub(crate) mod audit;
+pub(crate) mod calendars;
 pub(crate) mod common;
 pub(crate) mod event_sources;
 pub(crate) mod gitops;
@@ -28,6 +29,7 @@ pub use alerts::{
     resolve_alert_event, retry_due_alert_delivery_attempts,
 };
 pub use audit::{export_audit_logs, list_audit_logs};
+pub use calendars::{delete_calendar, list_calendars, upsert_calendar};
 pub use event_sources::trigger_inbound_webhook;
 pub use gitops::{diff_gitops_manifest, export_gitops_manifest};
 pub use jobs::{

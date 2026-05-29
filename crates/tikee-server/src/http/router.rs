@@ -270,6 +270,8 @@ pub(super) fn api_router() -> Router<Arc<AppState>> {
         .route("/apps/{id}", axum::routing::delete(routes::delete_app))
         .route("/secrets", get(routes::list_secrets).post(routes::create_secret))
         .route("/secrets/{id}", axum::routing::delete(routes::delete_secret))
+        .route("/calendars", get(routes::list_calendars).post(routes::upsert_calendar))
+        .route("/calendars/{id}", axum::routing::delete(routes::delete_calendar))
         .route(
             "/worker-pools",
             get(routes::list_worker_pools).post(routes::create_worker_pool),

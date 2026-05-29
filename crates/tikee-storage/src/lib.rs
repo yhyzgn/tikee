@@ -20,7 +20,7 @@ pub use repository::{
     AlertDeliveryAttemptSummary, AlertEventFilters, AlertEventSummary, AlertRepository,
     AlertRuleSummary, AppSummary, AppendJobInstanceLog, AuditLogFilters, AuditLogPageSummary,
     AuditLogRepository, AuditLogSummary, AuthSessionRepository, AuthSessionSummary,
-    CompleteWorkflowShardInput, CompleteWorkflowShardResult, CreateAlertRule, CreateAuditLog,
+    CalendarRepository, CalendarSummary, CalendarWindowSummary, CompleteWorkflowShardInput, CompleteWorkflowShardResult, CreateAlertRule, CreateAuditLog,
     CreateAuthSession, CreateJob, CreateJobInstance, CreateJobInstanceAttempt, CreateOidcAuthState,
     CreatePlugin, CreateScript, CreateSdkApiKey, CreateSecret, CreateUser, CreateWorkflow, DispatchQueueClaim,
     DispatchQueueSloSummary, DispatchQueueSummary, InstanceEventSummary, JobDurationHistory,
@@ -38,7 +38,7 @@ pub use repository::{
     ScriptReleaseSignatureSummary, ScriptRepository, ScriptSummary, ScriptVersionRepository,
     ScriptVersionSummary, SdkApiKeyRepository, SdkApiKeySummary, UpdateJob, UpdatePlugin,
     UpdateScript, UpdateSdkApiKey, UpdateUser, UpdateWorkerPoolQuota, UpdateWorkflow,
-    UpsertOidcIdentity, UpsertRaftLogEntry, UpsertRaftMember, UpsertRaftMetadata,
+    UpsertCalendar, UpsertOidcIdentity, UpsertRaftLogEntry, UpsertRaftMember, UpsertRaftMetadata,
     UpsertRaftSnapshot, UserRepository, UserSummary, VerifiedScriptReleaseGrants,
     VerifiedScriptReleaseSignature, WorkerHeartbeat, WorkerLifecycleRepository, WorkerPoolSummary,
     WorkerSessionEventSummary, WorkerSessionSummary, WorkflowDefinition, WorkflowEdgeSpec,
@@ -98,6 +98,7 @@ async fn ensure_sqlite_schema_compatibility(db: &DatabaseConnection) -> Result<(
     ensure_oidc_identity_schema_compatibility(db).await?;
     ensure_rbac_schema_compatibility(db).await?;
     ensure_scope_schema_compatibility(db).await?;
+    ensure_calendar_schema_compatibility(db).await?;
     ensure_plugin_schema_compatibility(db).await?;
     ensure_worker_lifecycle_schema_compatibility(db).await?;
     ensure_job_schema_compatibility(db).await?;
@@ -108,6 +109,36 @@ async fn ensure_sqlite_schema_compatibility(db: &DatabaseConnection) -> Result<(
     ensure_workflow_schema_compatibility(db).await?;
     ensure_raft_schema_compatibility(db).await?;
     remove_sqlite_foreign_keys(db).await
+}
+
+async fn ensure_calendar_schema_compatibility(db: &DatabaseConnection) -> Result<(), sea_orm::DbErr> {
+    if db.get_database_backend() != DatabaseBackend::Sqlite {
+        return Ok(());
+    }
+    db.execute(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        r"CREATE TABLE IF NOT EXISTS calendars (
+            id varchar NOT NULL PRIMARY KEY,
+            namespace varchar NOT NULL,
+            app varchar NOT NULL,
+            name varchar NOT NULL,
+            timezone varchar NOT NULL,
+            excluded_dates_json text NOT NULL,
+            holidays_json text NOT NULL,
+            maintenance_windows_json text NOT NULL,
+            freeze_windows_json text NOT NULL,
+            created_by varchar NOT NULL,
+            created_at varchar NOT NULL,
+            updated_at varchar NOT NULL
+        )",
+    ))
+    .await?;
+    db.execute(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_calendars_scope_name ON calendars (namespace, app, name)",
+    ))
+    .await?;
+    Ok(())
 }
 
 async fn ensure_plugin_schema_compatibility(db: &DatabaseConnection) -> Result<(), sea_orm::DbErr> {

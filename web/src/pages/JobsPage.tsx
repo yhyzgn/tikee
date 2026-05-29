@@ -3,7 +3,7 @@ import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { createJob, deleteJob, getJobSchedulingAdvice, listJobs, listJobVersions, listPlugins, listScripts, listWorkers, rollbackJob, triggerJob, updateJob, type BroadcastSelectorRequest, type CreateJobRequest, type JobSchedulingAdvice, type JobSummary, type PluginSummary, type JobVersionSummary, type ScriptSummary, type UpdateJobRequest, type WorkerSummary } from '../api/client';
+import { createJob, deleteJob, getJobSchedulingAdvice, listCalendars, listJobs, listJobVersions, listPlugins, listScripts, listWorkers, rollbackJob, triggerJob, updateJob, type BroadcastSelectorRequest, type CalendarSummary, type CreateJobRequest, type JobSchedulingAdvice, type JobSummary, type PluginSummary, type JobVersionSummary, type ScriptSummary, type UpdateJobRequest, type WorkerSummary } from '../api/client';
 import { PermissionGate, useCan } from '../components/Permission';
 import { ROUTE_META } from '../routes';
 import { useUrlQueryState } from '../hooks/useUrlQueryState';
@@ -19,10 +19,11 @@ export function JobsPage() {
   const [jobs, setJobs] = useState<JobSummary[]>([]);
   const [scripts, setScripts] = useState<ScriptSummary[]>([]);
   const [plugins, setPlugins] = useState<PluginSummary[]>([]);
+  const [calendars, setCalendars] = useState<CalendarSummary[]>([]);
   const [workers, setWorkers] = useState<WorkerSummary[]>([]);
   const [loading, setLoading] = useState(false);
-  const [form] = Form.useForm<CreateJobRequest & { executorKind?: 'sdk' | 'script' | 'plugin'; fixedRateValue?: number; fixedRateUnit?: string; fixedRateJitterValue?: number; fixedRateJitterUnit?: string }>();
-  const [editForm] = Form.useForm<UpdateJobRequest & { executorKind?: 'sdk' | 'script' | 'plugin'; fixedRateValue?: number; fixedRateUnit?: string; fixedRateJitterValue?: number; fixedRateJitterUnit?: string }>();
+  const [form] = Form.useForm<CreateJobRequest & { executorKind?: 'sdk' | 'script' | 'plugin'; fixedRateValue?: number; fixedRateUnit?: string; fixedRateJitterValue?: number; fixedRateJitterUnit?: string; scheduleCalendarRef?: string | null }>();
+  const [editForm] = Form.useForm<UpdateJobRequest & { executorKind?: 'sdk' | 'script' | 'plugin'; fixedRateValue?: number; fixedRateUnit?: string; fixedRateJitterValue?: number; fixedRateJitterUnit?: string; scheduleCalendarRef?: string | null }>();
   const [broadcastForm] = Form.useForm<{ tags?: string[]; region?: string; cluster?: string; labelsText?: string }>();
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<JobSummary | null>(null);
@@ -49,16 +50,18 @@ export function JobsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [page, scriptPage, workerPage, pluginItems] = await Promise.all([
+      const [page, scriptPage, workerPage, pluginItems, calendarItems] = await Promise.all([
         listJobs(),
         listScripts(),
         listWorkers().catch(() => ({ online: 0, items: [] })),
         listPlugins().catch(() => []),
+        listCalendars().catch(() => []),
       ]);
       setJobs(page.items);
       setScripts(scriptPage.items);
       setWorkers(workerPage.items);
       setPlugins(pluginItems);
+      setCalendars(calendarItems);
     } catch (err) {
       message.error(err instanceof Error ? err.message : '加载失败');
     } finally {
@@ -109,6 +112,13 @@ export function JobsPage() {
     if (current && !isScriptCapability(current)) sdkValues.add(current);
     return Array.from(sdkValues).sort().map((value) => ({ value, label: value }));
   };
+  const calendarOptions = calendars.map((calendar) => ({ value: calendar.name, label: `${calendar.namespace}/${calendar.app} · ${calendar.name}` }));
+  const calendarRefValue = (name?: string | null) => name ? { calendarRef: name } : null;
+  const parseCalendarRef = (value?: unknown) => {
+    if (!value || typeof value !== 'object') return undefined;
+    const ref = (value as { calendarRef?: unknown }).calendarRef;
+    return typeof ref === 'string' ? ref : undefined;
+  };
   const scriptOptions = scripts
     .filter((script) => script.status === 'approved')
     .map((script) => ({ value: script.id, label: `${script.name} · ${script.language} · ${script.id}` }));
@@ -126,7 +136,7 @@ export function JobsPage() {
       fixedRateJitterUnit: jitterMatch?.[2] ?? 's',
     };
   };
-  const normalizeSchedule = <T extends { scheduleType?: string; scheduleExpr?: string | null; fixedRateValue?: number; fixedRateUnit?: string; fixedRateJitterValue?: number; fixedRateJitterUnit?: string }>(values: T) => {
+  const normalizeSchedule = <T extends { scheduleType?: string; scheduleExpr?: string | null; fixedRateValue?: number; fixedRateUnit?: string; fixedRateJitterValue?: number; fixedRateJitterUnit?: string; scheduleCalendarRef?: string | null }>(values: T) => {
     if (values.scheduleType === 'api') return { ...values, scheduleExpr: null };
     if (values.scheduleType === 'fixed_rate') {
       const interval = durationExpr(values.fixedRateValue, values.fixedRateUnit);
@@ -134,7 +144,7 @@ export function JobsPage() {
       return { ...values, scheduleExpr: jitter ? `${interval};jitter=${jitter}` : interval };
     }
     if (values.scheduleType === 'fixed_delay') return { ...values, scheduleExpr: durationExpr(values.fixedRateValue, values.fixedRateUnit) };
-    return values;
+    return { ...values, scheduleCalendar: calendarRefValue(values.scheduleCalendarRef) };
   };
   const openCreateDrawer = () => {
     form.resetFields();
@@ -155,6 +165,7 @@ export function JobsPage() {
       misfirePolicy: job.misfirePolicy ?? 'fire_once',
       scheduleStartAt: job.scheduleStartAt ?? undefined,
       scheduleEndAt: job.scheduleEndAt ?? undefined,
+      scheduleCalendarRef: parseCalendarRef(job.scheduleCalendar),
       executorKind: job.scriptId ? 'script' : job.processorType ? 'plugin' : 'sdk',
       processorName: job.processorName ?? undefined,
       processorType: job.processorType ?? undefined,
@@ -217,13 +228,16 @@ export function JobsPage() {
     return { ...rest, scriptId: null, processorType: null };
   };
 
-  const handleEditSubmit = async (values: UpdateJobRequest & { executorKind?: 'sdk' | 'script' | 'plugin'; fixedRateValue?: number; fixedRateUnit?: string }) => {
+  const handleEditSubmit = async (values: UpdateJobRequest & { executorKind?: 'sdk' | 'script' | 'plugin'; fixedRateValue?: number; fixedRateUnit?: string; fixedRateJitterValue?: number; fixedRateJitterUnit?: string; scheduleCalendarRef?: string | null }) => {
     if (!editingJob) return;
     if (!canWriteJobs) { message.error('当前账号无权限编辑任务'); return; }
     try {
-      const { fixedRateValue: _ignoredFixedRateValue, fixedRateUnit: _ignoredFixedRateUnit, ...scheduled } = normalizeSchedule(values);
+      const { fixedRateValue: _ignoredFixedRateValue, fixedRateUnit: _ignoredFixedRateUnit, fixedRateJitterValue: _ignoredJitterValue, fixedRateJitterUnit: _ignoredJitterUnit, scheduleCalendarRef: _ignoredCalendarRef, ...scheduled } = normalizeSchedule(values);
       void _ignoredFixedRateValue;
       void _ignoredFixedRateUnit;
+      void _ignoredJitterValue;
+      void _ignoredJitterUnit;
+      void _ignoredCalendarRef;
       const payload = normalizeExecutor(scheduled);
       const updated = await updateJob(editingJob.id, payload);
       setJobs((current) => current.map((item) => item.id === updated.id ? updated : item));
@@ -430,8 +444,10 @@ export function JobsPage() {
           </Form.Item>
           <Form.Item name="misfirePolicy" label="Misfire 策略"><Select options={[{ value: 'fire_once', label: '补触发一次' }, { value: 'do_nothing', label: '跳过错过触发' }, { value: 'catch_up_limited', label: '有限追赶' }, { value: 'reschedule', label: '重排到当前' }, { value: 'latest_only', label: '仅保留最近一次' }]} /></Form.Item>
           <Space.Compact block><Form.Item name="scheduleStartAt" label="生命周期开始" style={{ flex: 1 }}><Input allowClear placeholder="可选 RFC3339" /></Form.Item><Form.Item name="scheduleEndAt" label="生命周期结束" style={{ flex: 1 }}><Input allowClear placeholder="可选 RFC3339" /></Form.Item></Space.Compact>
+          <Form.Item name="scheduleCalendarRef" label="调度日历" extra="可选：引用集中式 Calendar，自动排除节假日/维护窗口/冻结窗口。"><Select allowClear showSearch optionFilterProp="label" placeholder="选择 Calendar" options={calendarOptions} /></Form.Item>
           <Form.Item name="misfirePolicy" label="Misfire 策略"><Select options={[{ value: 'fire_once', label: '补触发一次' }, { value: 'do_nothing', label: '跳过错过触发' }, { value: 'catch_up_limited', label: '有限追赶' }, { value: 'reschedule', label: '重排到当前' }, { value: 'latest_only', label: '仅保留最近一次' }]} /></Form.Item>
           <Space.Compact block><Form.Item name="scheduleStartAt" label="生命周期开始" style={{ flex: 1 }}><Input allowClear placeholder="可选 RFC3339" /></Form.Item><Form.Item name="scheduleEndAt" label="生命周期结束" style={{ flex: 1 }}><Input allowClear placeholder="可选 RFC3339" /></Form.Item></Space.Compact>
+          <Form.Item name="scheduleCalendarRef" label="调度日历" extra="可选：引用集中式 Calendar，自动排除节假日/维护窗口/冻结窗口。"><Select allowClear showSearch optionFilterProp="label" placeholder="选择 Calendar" options={calendarOptions} /></Form.Item>
           <Form.Item name="canaryJobId" label="灰度目标任务" extra="可选：显式触发当前任务时，按灰度比例路由到目标任务。"><Select allowClear showSearch optionFilterProp="label" placeholder="选择同 App 下的 canary 任务" options={jobs.map((item) => ({ value: item.id, label: `${item.name} · ${item.id}` }))} /></Form.Item>
           <Form.Item name="canaryPercent" label="灰度比例"><InputNumber min={0} max={100} precision={0} addonAfter="%" style={{ width: '100%' }} /></Form.Item>
           <Form.Item name="enabled" label="启用" valuePropName="checked"><Switch /></Form.Item>

@@ -52,6 +52,38 @@ export interface CreatePluginRequest {
 export type UpdatePluginRequest = CreatePluginRequest;
 
 
+
+export interface CalendarWindowSummary {
+  start: string;
+  end: string;
+}
+
+export interface CalendarSummary {
+  id: string;
+  namespace: string;
+  app: string;
+  name: string;
+  timezone: string;
+  excludedDates: string[];
+  holidays: string[];
+  maintenanceWindows: CalendarWindowSummary[];
+  freezeWindows: CalendarWindowSummary[];
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpsertCalendarRequest {
+  namespace: string;
+  app: string;
+  name: string;
+  timezone?: string | null;
+  excludedDates?: string[];
+  holidays?: string[];
+  maintenanceWindows?: CalendarWindowSummary[];
+  freezeWindows?: CalendarWindowSummary[];
+}
+
 export interface GitOpsScope {
   namespace: string | null;
   app: string | null;
@@ -111,6 +143,7 @@ export interface JobSummary {
   misfirePolicy: string;
   scheduleStartAt: string | null;
   scheduleEndAt: string | null;
+  scheduleCalendar: Record<string, unknown> | null;
   processorName: string | null;
   processorType: string | null;
   scriptId: string | null;
@@ -260,6 +293,7 @@ export interface CreateJobRequest {
   misfirePolicy?: string | null;
   scheduleStartAt?: string | null;
   scheduleEndAt?: string | null;
+  scheduleCalendar?: Record<string, unknown> | null;
   processorName?: string | null;
   processorType?: string | null;
   scriptId?: string | null;
@@ -275,6 +309,7 @@ export interface UpdateJobRequest {
   misfirePolicy?: string | null;
   scheduleStartAt?: string | null;
   scheduleEndAt?: string | null;
+  scheduleCalendar?: Record<string, unknown> | null;
   processorName?: string | null;
   processorType?: string | null;
   scriptId?: string | null;
@@ -598,6 +633,23 @@ export async function deletePlugin(id: string): Promise<void> {
 }
 
 
+
+
+export async function listCalendars(params: { namespace?: string; app?: string } = {}): Promise<CalendarSummary[]> {
+  const query = new URLSearchParams();
+  if (params.namespace) query.set('namespace', params.namespace);
+  if (params.app) query.set('app', params.app);
+  const suffix = query.toString() ? `?${query}` : '';
+  return request<CalendarSummary[]>(`/api/v1/calendars${suffix}`);
+}
+
+export async function createCalendar(payload: UpsertCalendarRequest): Promise<CalendarSummary> {
+  return request<CalendarSummary>('/api/v1/calendars', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function deleteCalendar(id: string): Promise<void> {
+  await request<void>(`/api/v1/calendars/${encodeURIComponent(id)}`, { method: 'DELETE', allowNullData: true });
+}
 
 export async function exportGitOpsManifest(params: { namespace?: string; app?: string; format?: 'json' | 'yaml' } = {}): Promise<GitOpsManifestResponse> {
   const query = new URLSearchParams();

@@ -5,6 +5,7 @@ pub mod alert_event;
 pub mod alert_rule;
 pub mod app;
 pub mod audit_log;
+pub mod calendar;
 pub mod auth_session;
 pub mod dispatch_queue;
 pub mod instance_event;

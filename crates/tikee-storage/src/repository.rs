@@ -9,6 +9,7 @@
 mod alert;
 mod attempt;
 mod audit;
+mod calendar;
 mod auth;
 mod instance;
 mod job;
@@ -38,6 +39,7 @@ pub use attempt::{
 pub use audit::{
     AuditLogFilters, AuditLogPageSummary, AuditLogRepository, AuditLogSummary, CreateAuditLog,
 };
+pub use calendar::{CalendarRepository, CalendarSummary, CalendarWindowSummary, UpsertCalendar};
 pub use auth::{
     AuthSessionRepository, AuthSessionSummary, CreateAuthSession, PermissionSummary, RbacRepository,
 };

@@ -8,7 +8,7 @@ use cron::Schedule;
 use tikee_core::{ExecutionMode, MisfirePolicy, ScheduleType, TriggerType};
 
 use crate::cluster::SharedClusterCoordinator;
-use tikee_storage::{CreateJobInstance, JobInstanceRepository, JobRepository, JobSummary};
+use tikee_storage::{CalendarRepository, CalendarSummary, CreateJobInstance, JobInstanceRepository, JobRepository, JobSummary};
 use tokio::sync::Mutex;
 use tracing::{debug, warn};
 
@@ -63,7 +63,7 @@ async fn tick_once(
     now: DateTime<Utc>,
 ) -> Result<(), tikee_storage::DbErr> {
     for job in jobs.list_enabled_scheduled_jobs().await? {
-        let decision = match due_triggers(&job, instances, state, now).await {
+        let decision = match due_triggers(jobs, &job, instances, state, now).await {
             Ok(decision) => decision,
             Err(error) => {
                 warn!(job_id = %job.id, %error, "schedule decision failed");
@@ -95,12 +95,13 @@ struct ScheduleDecision {
 }
 
 async fn due_triggers(
+    jobs: &JobRepository,
     job: &JobSummary,
     instances: &JobInstanceRepository,
     state: &ScheduleState,
     now: DateTime<Utc>,
 ) -> Result<ScheduleDecision, ScheduleDecisionError> {
-    if !within_lifecycle_window(job, now)? {
+    if !within_lifecycle_window(jobs, job, now).await? {
         return Ok(ScheduleDecision::default());
     }
     let schedule_type = ScheduleType::from_str(&job.schedule_type)
@@ -460,7 +461,8 @@ fn misfire_decision(
     }
 }
 
-fn within_lifecycle_window(
+async fn within_lifecycle_window(
+    jobs: &JobRepository,
     job: &JobSummary,
     now: DateTime<Utc>,
 ) -> Result<bool, ScheduleDecisionError> {
@@ -482,20 +484,18 @@ fn within_lifecycle_window(
             return Ok(false);
         }
     }
-    if schedule_calendar_blocks(job.schedule_calendar_json.as_deref(), now)? {
+    if schedule_calendar_blocks(jobs, job, now).await? {
         return Ok(false);
     }
     Ok(true)
 }
 
-fn schedule_calendar_blocks(
-    schedule_calendar_json: Option<&str>,
+async fn schedule_calendar_blocks(
+    jobs: &JobRepository,
+    job: &JobSummary,
     now: DateTime<Utc>,
 ) -> Result<bool, ScheduleDecisionError> {
-    let Some(calendar) = schedule_calendar_json
-        .filter(|value| !value.trim().is_empty())
-        .and_then(|value| serde_json::from_str::<serde_json::Value>(value).ok())
-    else {
+    let Some(calendar) = resolve_schedule_calendar(jobs, job).await? else {
         return Ok(false);
     };
     if date_list_contains(&calendar, "excludedDates", now)
@@ -509,6 +509,39 @@ fn schedule_calendar_blocks(
         }
     }
     Ok(false)
+}
+
+async fn resolve_schedule_calendar(
+    jobs: &JobRepository,
+    job: &JobSummary,
+) -> Result<Option<serde_json::Value>, ScheduleDecisionError> {
+    let Some(raw) = job.schedule_calendar_json.as_deref().filter(|value| !value.trim().is_empty()) else {
+        return Ok(None);
+    };
+    let calendar = serde_json::from_str::<serde_json::Value>(raw)
+        .map_err(|error| ScheduleDecisionError::InvalidExpression(error.to_string()))?;
+    let Some(name) = calendar.get("calendarRef").and_then(serde_json::Value::as_str).map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(Some(calendar));
+    };
+    let Some(stored) = CalendarRepository::new(jobs.db())
+        .get_by_name(&job.namespace, &job.app, name)
+        .await?
+    else {
+        return Err(ScheduleDecisionError::InvalidExpression(format!(
+            "calendarRef not found: {}/{}/{}", job.namespace, job.app, name
+        )));
+    };
+    Ok(Some(calendar_summary_to_value(stored)))
+}
+
+fn calendar_summary_to_value(calendar: CalendarSummary) -> serde_json::Value {
+    serde_json::json!({
+        "timezone": calendar.timezone,
+        "excludedDates": calendar.excluded_dates,
+        "holidays": calendar.holidays,
+        "maintenanceWindows": calendar.maintenance_windows,
+        "freezeWindows": calendar.freeze_windows,
+    })
 }
 
 fn date_list_contains(calendar: &serde_json::Value, key: &str, now: DateTime<Utc>) -> bool {
@@ -663,6 +696,59 @@ mod tests {
             schedule_start_at: None,
             schedule_end_at: None,
             schedule_calendar_json: Some(calendar.to_string()),
+            processor_name: None,
+            processor_type: None,
+            script_id: None,
+            enabled: true,
+            canary_job_id: None,
+            canary_percent: 0,
+        })
+        .await
+        .unwrap_or_else(|error| panic!("job should create: {error}"));
+
+        tick_once(&jobs, &instances, &ScheduleState::default(), now)
+            .await
+            .unwrap_or_else(|error| panic!("tick should run: {error}"));
+        let listed = instances
+            .list_by_job(&job.id)
+            .await
+            .unwrap_or_else(|error| panic!("instances should list: {error}"));
+        assert!(listed.is_empty());
+    }
+
+
+    #[tokio::test]
+    async fn lifecycle_window_resolves_centralized_calendar_ref() {
+        let (jobs, instances) = repositories().await;
+        tikee_storage::CalendarRepository::new(jobs.db())
+            .upsert(tikee_storage::UpsertCalendar {
+                namespace: "default".to_owned(),
+                app: "billing".to_owned(),
+                name: "cn-maintenance".to_owned(),
+                timezone: "Asia/Shanghai".to_owned(),
+                excluded_dates: vec!["2026-05-29".to_owned()],
+                holidays: Vec::new(),
+                maintenance_windows: Vec::new(),
+                freeze_windows: Vec::new(),
+                created_by: "test".to_owned(),
+            })
+            .await
+            .unwrap_or_else(|error| panic!("calendar should upsert: {error}"));
+        let now = Utc
+            .with_ymd_and_hms(2026, 5, 29, 10, 0, 0)
+            .single()
+            .unwrap_or_else(|| panic!("valid time"));
+        let job = jobs.create_job(CreateJob {
+            created_by: None,
+            namespace: "default".to_owned(),
+            app: "billing".to_owned(),
+            name: "calendar-ref-blocked".to_owned(),
+            schedule_type: "fixed_rate".to_owned(),
+            schedule_expr: Some("1s".to_owned()),
+            misfire_policy: "fire_once".to_owned(),
+            schedule_start_at: None,
+            schedule_end_at: None,
+            schedule_calendar_json: Some(serde_json::json!({"calendarRef":"cn-maintenance"}).to_string()),
             processor_name: None,
             processor_type: None,
             script_id: None,

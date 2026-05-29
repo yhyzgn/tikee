@@ -11,6 +11,7 @@ import {
   DeploymentUnitOutlined,
   SafetyCertificateOutlined,
   PartitionOutlined,
+  ScheduleOutlined,
   ThunderboltOutlined,
   UserOutlined,
 } from '@ant-design/icons';
@@ -41,6 +42,7 @@ export const ROUTE_META = {
   workers: { path: '/workers', menuKey: '/workers', label: 'Worker 集群', icon: <ApiOutlined />, permission: { resource: 'workers', action: 'read' }, menu: true, group: 'main' },
   users: { path: '/users', menuKey: '/users', label: '用户管理', icon: <UserOutlined />, permission: { resource: 'users', action: 'read' }, menu: true, group: 'governance' },
   scopes: { path: '/scopes', menuKey: '/scopes', label: '租户范围', icon: <PartitionOutlined />, permission: { resource: 'tenants', action: 'read' }, menu: true, group: 'governance' },
+  calendars: { path: '/calendars', menuKey: '/calendars', label: '调度日历', icon: <ScheduleOutlined />, permission: { resource: 'tenants', action: 'read' }, menu: true, group: 'governance' },
   scripts: { path: '/scripts', menuKey: '/scripts', label: '脚本管理', icon: <CodeOutlined />, permission: { resource: 'scripts', action: 'read' }, menu: true, group: 'governance' },
   plugins: { path: '/plugins', menuKey: '/plugins', label: '插件系统', icon: <AppstoreAddOutlined />, permission: { resource: 'tenants', action: 'read' }, menu: true, group: 'governance' },
   apiKeys: { path: '/api-keys', menuKey: '/api-keys', label: 'API-Key', icon: <KeyOutlined />, permission: { resource: 'tenants', action: 'manage' }, menu: true, group: 'governance' },

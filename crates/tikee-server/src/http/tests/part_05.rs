@@ -588,3 +588,50 @@
                 && change["kind"] == "Job"
                 && change["diff"].as_str().is_some_and(|value| value.contains("enabled"))));
     }
+
+    #[tokio::test]
+    async fn calendar_management_crud_lists_and_audits_upsert() {
+        let app = router().await;
+        let created = app
+            .clone()
+            .oneshot(
+                admin_json_request_builder(
+                    app.clone(),
+                    "POST",
+                    "/api/v1/calendars",
+                    r#"{"namespace":"default","app":"billing","name":"cn-maintenance","timezone":"Asia/Shanghai","excludedDates":["2026-05-29"],"maintenanceWindows":[{"start":"2026-05-29T01:00:00Z","end":"2026-05-29T02:00:00Z"}]}"#,
+                )
+                .await,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("calendar create should respond: {error}"));
+        assert!(created.status().is_success());
+        let body = axum::body::to_bytes(created.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("calendar body should collect: {error}"));
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("calendar body should be JSON: {error}"));
+        let id = json["data"]["id"].as_str().unwrap_or_else(|| panic!("calendar should have id")).to_owned();
+        assert_eq!(json["data"]["timezone"], "Asia/Shanghai");
+
+        let listed = app
+            .clone()
+            .oneshot(admin_request_builder(app.clone(), "GET", "/api/v1/calendars?namespace=default&app=billing").await)
+            .await
+            .unwrap_or_else(|error| panic!("calendar list should respond: {error}"));
+        assert!(listed.status().is_success());
+        let body = axum::body::to_bytes(listed.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("calendar list body should collect: {error}"));
+        let json: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("calendar list body should be JSON: {error}"));
+        assert_eq!(json["data"].as_array().map(Vec::len), Some(1));
+        assert_eq!(json["data"][0]["name"], "cn-maintenance");
+
+        let audit = app
+            .clone()
+            .oneshot(admin_request_builder(app.clone(), "GET", format!("/api/v1/audit-logs?action=upsert&resource_type=calendar&resource_id={id}&page_size=1")).await)
+            .await
+            .unwrap_or_else(|error| panic!("calendar audit should respond: {error}"));
+        assert!(audit.status().is_success());
+    }
