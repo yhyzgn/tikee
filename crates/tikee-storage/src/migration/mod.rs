@@ -265,6 +265,8 @@ async fn create_sdk_api_keys(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
                 .col(string_col(SdkApiKeys::KeyPrefix))
                 .col(string_col(SdkApiKeys::Namespace))
                 .col(string_col(SdkApiKeys::App))
+                .col(string_col(SdkApiKeys::ServiceAccountId))
+                .col(string_col(SdkApiKeys::ServiceAccountName))
                 .col(text_col(SdkApiKeys::Scopes))
                 .col(string_col(SdkApiKeys::Status))
                 .col(string_null(SdkApiKeys::ExpiresAt))

@@ -1607,6 +1607,7 @@
         assert_sdk_api_key_list_redacted(app.clone(), &admin, &api_key, &key_id).await;
         seed_sdk_key_scope_jobs(app.clone(), &admin).await;
         assert_sdk_key_lists_only_bound_app(app.clone(), &api_key).await;
+        assert_sdk_key_authentication_is_audited(app.clone(), &admin, &key_id).await;
         assert_sdk_key_cannot_write_other_app(app.clone(), &api_key).await;
         update_sdk_api_key(app.clone(), &admin, &key_id).await;
         assert_sdk_key_lists_only_bound_app(app.clone(), &api_key).await;
@@ -1667,7 +1668,7 @@
                     .uri("/api/v1/management/api-keys")
                     .header("authorization", format!("Bearer {admin}"))
                     .header("content-type", "application/json")
-                    .body(Body::from(r#"{"name":"java demo","namespace":"default","app":"billing","scopes":["jobs:read","jobs:write","instances:execute"]}"#))
+                    .body(Body::from(r#"{"name":"java demo","namespace":"default","app":"billing","service_account_name":"java-demo-sa","scopes":["jobs:read","jobs:write","instances:execute"]}"#))
                     .unwrap_or_else(|error| panic!("request should build: {error}")),
             )
             .await
@@ -1689,6 +1690,11 @@
         assert!(api_key[3..].chars().all(|ch| ch.is_ascii_alphanumeric()));
         assert_eq!(created["data"]["key"]["namespace"], "default");
         assert_eq!(created["data"]["key"]["app"], "billing");
+        assert_eq!(created["data"]["key"]["service_account_name"], "java-demo-sa");
+        let service_account_id = created["data"]["key"]["service_account_id"]
+            .as_str()
+            .unwrap_or_else(|| panic!("service account id should be present"));
+        assert!(service_account_id.starts_with("sa-"));
         let key_id = created["data"]["key"]["id"]
             .as_str()
             .unwrap_or_else(|| panic!("key id should be present"))
@@ -1718,6 +1724,7 @@
         let list_json: Value = serde_json::from_str(&list_text)
             .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
         assert_eq!(list_json["data"][0]["id"], key_id);
+        assert_eq!(list_json["data"][0]["service_account_name"], "java-demo-sa");
     }
 
     async fn seed_sdk_key_scope_jobs(app: axum::Router, admin: &str) {
@@ -1759,6 +1766,22 @@
             .unwrap_or_else(|| panic!("items should be an array"));
         assert!(visible_items.iter().any(|item| item["name"] == "sdk-visible"));
         assert!(visible_items.iter().all(|item| item["name"] != "sdk-hidden"));
+    }
+
+
+    async fn assert_sdk_key_authentication_is_audited(app: axum::Router, admin: &str, key_id: &str) {
+        let audit = get_json_with_auth(
+            app,
+            &format!("/api/v1/audit-logs?action=sdk_api_key_authenticate&resource_type=sdk_api_key&resource_id={key_id}&page_size=1"),
+            admin,
+        )
+        .await;
+        assert_eq!(audit["data"]["items"][0]["resource_type"], "sdk_api_key");
+        assert_eq!(audit["data"]["items"][0]["resource_id"], key_id);
+        assert!(audit["data"]["items"][0]["actor"]
+            .as_str()
+            .unwrap_or_default()
+            .starts_with("service_account:sa-"));
     }
 
     async fn assert_sdk_key_cannot_write_other_app(app: axum::Router, api_key: &str) {

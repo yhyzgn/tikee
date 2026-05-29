@@ -405,6 +405,8 @@ export interface SdkApiKeySummary {
   key_prefix: string;
   namespace: string;
   app: string;
+  service_account_id: string;
+  service_account_name: string;
   scopes: string[];
   status: string;
   expires_at: string | null;
@@ -420,6 +422,7 @@ export interface CreateSdkApiKeyRequest {
   name: string;
   namespace: string;
   app: string;
+  service_account_name: string;
   scopes: string[];
   expires_at?: string | null;
 }

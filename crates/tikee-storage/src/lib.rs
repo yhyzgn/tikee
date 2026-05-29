@@ -1008,6 +1008,8 @@ async fn ensure_sdk_api_key_schema_compatibility(
             key_prefix varchar NOT NULL,
             namespace varchar NOT NULL,
             app varchar NOT NULL,
+            service_account_id varchar NOT NULL,
+            service_account_name varchar NOT NULL,
             scopes text NOT NULL,
             status varchar NOT NULL,
             expires_at varchar,
@@ -1020,6 +1022,20 @@ async fn ensure_sdk_api_key_schema_compatibility(
         )",
     ))
     .await?;
+    if !sqlite_column_exists(db, "sdk_api_keys", "service_account_id").await? {
+        db.execute(Statement::from_string(
+            DatabaseBackend::Sqlite,
+            "ALTER TABLE sdk_api_keys ADD COLUMN service_account_id varchar NOT NULL DEFAULT ''",
+        ))
+        .await?;
+    }
+    if !sqlite_column_exists(db, "sdk_api_keys", "service_account_name").await? {
+        db.execute(Statement::from_string(
+            DatabaseBackend::Sqlite,
+            "ALTER TABLE sdk_api_keys ADD COLUMN service_account_name varchar NOT NULL DEFAULT ''",
+        ))
+        .await?;
+    }
     db.execute(Statement::from_string(
         DatabaseBackend::Sqlite,
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_sdk_api_keys_hash ON sdk_api_keys (key_hash)",

@@ -36,6 +36,8 @@ pub struct CreateSdkApiKeyRequest {
     pub namespace: String,
     /// App scope granted to this SDK key.
     pub app: String,
+    /// Human-readable service account name represented by this SDK key.
+    pub service_account_name: String,
     /// Permission scopes in `resource:action` form.
     pub scopes: Vec<String>,
     /// Optional RFC3339 expiration timestamp.
@@ -89,6 +91,8 @@ pub async fn create_sdk_api_key(
             key_prefix: display_prefix(&plaintext),
             namespace: request.namespace,
             app: request.app,
+            service_account_id: new_service_account_id(),
+            service_account_name: request.service_account_name,
             scopes: request.scopes,
             expires_at: request.expires_at,
             created_by: principal.username.clone(),
@@ -224,6 +228,14 @@ pub(super) async fn authenticate_sdk_api_key(
         .mark_used(&summary.id)
         .await
         .map_err(|error| ApiError::storage(&error))?;
+    audit_sdk_api_key(
+        state,
+        &format!("service_account:{}", summary.service_account_id),
+        "sdk_api_key_authenticate",
+        &summary.id,
+        headers,
+    )
+    .await;
     Ok(Some(sdk_principal(summary)))
 }
 
@@ -233,6 +245,7 @@ fn validate_create_request(
     request.name = request.name.trim().to_owned();
     request.namespace = request.namespace.trim().to_owned();
     request.app = request.app.trim().to_owned();
+    request.service_account_name = request.service_account_name.trim().to_owned();
     request.scopes = validate_scopes(request.scopes)?;
     request.expires_at = validate_expires_at(request.expires_at)?;
     if request.name.is_empty() {
@@ -241,6 +254,11 @@ fn validate_create_request(
     if request.namespace.is_empty() || request.app.is_empty() {
         return Err(ApiError::bad_request(
             "sdk api key namespace and app are required",
+        ));
+    }
+    if request.service_account_name.is_empty() {
+        return Err(ApiError::bad_request(
+            "sdk api key service_account_name is required",
         ));
     }
     Ok(request)
@@ -297,8 +315,12 @@ fn sdk_api_key_header(headers: &HeaderMap) -> Result<Option<String>, ApiError> {
 fn sdk_principal(summary: SdkApiKeySummary) -> MeResponse {
     let permissions = permissions_from_scopes(&summary.scopes);
     MeResponse {
-        username: format!("sdk_api_key:{}", summary.id),
-        roles: vec!["sdk_api_key".to_owned(), "app_service".to_owned()],
+        username: format!("service_account:{}", summary.service_account_id),
+        roles: vec![
+            "service_account".to_owned(),
+            "sdk_api_key".to_owned(),
+            "app_service".to_owned(),
+        ],
         permissions,
         scope_limited: true,
         token_scopes: summary.scopes,
@@ -321,6 +343,10 @@ fn permissions_from_scopes(scopes: &[String]) -> Vec<PermissionSummary> {
             })
         })
         .collect()
+}
+
+fn new_service_account_id() -> String {
+    format!("sa-{}", uuid::Uuid::now_v7())
 }
 
 fn generate_api_key() -> Result<String, ApiError> {

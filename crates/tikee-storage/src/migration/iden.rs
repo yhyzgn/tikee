@@ -210,6 +210,8 @@ pub(super) enum SdkApiKeys {
     KeyPrefix,
     Namespace,
     App,
+    ServiceAccountId,
+    ServiceAccountName,
     Scopes,
     Status,
     ExpiresAt,

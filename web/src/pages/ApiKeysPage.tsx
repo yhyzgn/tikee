@@ -11,6 +11,7 @@ interface ApiKeyFormValues {
   name: string;
   namespace: string;
   app: string;
+  serviceAccountName: string;
   scopes: string[];
   expiresAt?: Dayjs | null;
 }
@@ -54,6 +55,7 @@ export function ApiKeysPage() {
       name: values.name,
       namespace: values.namespace,
       app: values.app,
+      service_account_name: values.serviceAccountName,
       scopes: values.scopes,
       expires_at: values.expiresAt?.toISOString() ?? null,
     });
@@ -108,7 +110,7 @@ export function ApiKeysPage() {
           type="info"
           showIcon
           style={{ marginBottom: 16 }}
-          message="API-Key 是后台手动签发给 SDK 的 app 作用域凭证；列表只展示两端明文、中间脱敏的值。操作栏编辑可调整作用域和有效期，不会改变 Key 值。"
+          message="API-Key 是后台手动签发给 Service Account 的 app 作用域凭证；鉴权主体显示为 service_account:<id>，列表只展示两端明文、中间脱敏的值。操作栏编辑可调整作用域和有效期，不会改变 Key 值。"
         />
         <Table<SdkApiKeySummary>
           rowKey="id"
@@ -124,6 +126,7 @@ export function ApiKeysPage() {
               render: (value: string) => <Typography.Text className="api-key-masked-text">{value}</Typography.Text>,
             },
             { title: '范围', width: 180, render: (_, item) => `${item.namespace}/${item.app}` },
+            { title: 'Service Account', width: 240, render: (_, item) => <Space direction="vertical" size={0}><Typography.Text>{item.service_account_name}</Typography.Text><Typography.Text type="secondary">{item.service_account_id}</Typography.Text></Space> },
             { title: 'Scopes', width: 260, render: (_, item) => <Space wrap>{item.scopes.map((scope) => <Tag key={scope}>{scope}</Tag>)}</Space> },
             { title: '状态', dataIndex: 'status', width: 100, render: (status) => <Tag color={status === 'active' ? 'green' : 'default'}>{status}</Tag> },
             { title: '有效期', dataIndex: 'expires_at', width: 190, render: (value) => value ?? '永久有效' },
@@ -153,6 +156,9 @@ export function ApiKeysPage() {
           </Form.Item>
           <Form.Item name="app" label="App" rules={[{ required: true }]}>
             <Select options={apps.map((item) => ({ value: item.name, label: `${item.namespace}/${item.name}` }))} showSearch />
+          </Form.Item>
+          <Form.Item name="serviceAccountName" label="Service Account" rules={[{ required: true, message: '请输入 Service Account 名称' }]}>
+            <Input placeholder="java-demo-service-account" />
           </Form.Item>
           <Form.Item name="scopes" label="权限 scopes" rules={[{ required: true }]}>
             <Select mode="tags" options={DEFAULT_SCOPES.map((scope) => ({ value: scope }))} />
