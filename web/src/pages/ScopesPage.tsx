@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Col, Drawer, Form, Input, Row, Select, Space, Table, Tag, Typography, message } from 'antd';
+import { Alert, Button, Card, Col, Drawer, Form, Input, InputNumber, Row, Select, Space, Table, Tag, Typography, message } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
@@ -6,21 +6,28 @@ import {
   createAppScope,
   createNamespace,
   createWorkerPool,
+  createSecret,
+  updateWorkerPoolQuota,
   deleteAppScope,
   deleteNamespace,
   deleteOidcIdentity,
   deleteWorkerPool,
+  deleteSecret,
   upsertOidcIdentity,
   listAppScopes,
   listNamespaces,
   listOidcIdentities,
+  listSecrets,
   listWorkerPools,
   type AppScopeSummary,
   type CreateAppScopeRequest,
   type CreateNamespaceRequest,
   type CreateWorkerPoolRequest,
+  type CreateSecretRequest,
+  type UpdateWorkerPoolQuotaRequest,
   type NamespaceSummary,
   type OidcIdentitySummary,
+  type SecretSummary,
   type UpsertOidcIdentityRequest,
   type WorkerPoolSummary,
 } from '../api/client';
@@ -32,27 +39,33 @@ export function ScopesPage() {
   const [namespaces, setNamespaces] = useState<NamespaceSummary[]>([]);
   const [apps, setApps] = useState<AppScopeSummary[]>([]);
   const [workerPools, setWorkerPools] = useState<WorkerPoolSummary[]>([]);
+  const [secrets, setSecrets] = useState<SecretSummary[]>([]);
   const [oidcIdentities, setOidcIdentities] = useState<OidcIdentitySummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [pageSize, setPageSize] = usePersistentTablePageSize();
   const [namespaceForm] = Form.useForm<CreateNamespaceRequest>();
   const [appForm] = Form.useForm<CreateAppScopeRequest>();
   const [poolForm] = Form.useForm<CreateWorkerPoolRequest>();
+  const [secretForm] = Form.useForm<CreateSecretRequest>();
   const [oidcForm] = Form.useForm<UpsertOidcIdentityRequest>();
-  const [drawer, setDrawer] = useState<'namespace' | 'app' | 'pool' | 'oidc' | null>(null);
+  const [drawer, setDrawer] = useState<'namespace' | 'app' | 'pool' | 'secret' | 'oidc' | null>(null);
+  const [quotaForm] = Form.useForm<UpdateWorkerPoolQuotaRequest>();
+  const [quotaPool, setQuotaPool] = useState<WorkerPoolSummary | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [namespaceData, appData, poolData, oidcData] = await Promise.all([
+      const [namespaceData, appData, poolData, secretData, oidcData] = await Promise.all([
         listNamespaces(),
         listAppScopes(),
         listWorkerPools(),
+        listSecrets(),
         listOidcIdentities(),
       ]);
       setNamespaces(namespaceData);
       setApps(appData);
       setWorkerPools(poolData);
+      setSecrets(secretData);
       setOidcIdentities(oidcData);
     } catch (error) {
       message.error(error instanceof Error ? error.message : '加载租户范围失败');
@@ -127,6 +140,20 @@ export function ScopesPage() {
     await refresh();
   };
 
+  const openQuotaDrawer = (pool: WorkerPoolSummary) => {
+    setQuotaPool(pool);
+    quotaForm.setFieldsValue({ maxQueueDepth: pool.maxQueueDepth ?? 0, maxConcurrency: pool.maxConcurrency ?? 0 });
+  };
+
+  const handleQuotaUpdate = async (values: UpdateWorkerPoolQuotaRequest) => {
+    if (!quotaPool) return;
+    await updateWorkerPoolQuota(quotaPool.id, values);
+    setQuotaPool(null);
+    quotaForm.resetFields();
+    message.success('Worker Pool 配额已更新');
+    await refresh();
+  };
+
   const namespaceColumns: ColumnsType<NamespaceSummary> = [
     { title: '命名空间', dataIndex: 'name', render: (name: string) => <strong>{name}</strong> },
     { title: '创建时间', dataIndex: 'createdAt' },
@@ -141,12 +168,22 @@ export function ScopesPage() {
     { title: '操作', width: 120, render: (_, record) => <GuardedButton resource="tenants" action="manage" type="link" size="small" danger confirmTitle="删除应用" confirmDescription="仅空应用可删除；含 Worker Pool 或任务时后端会拒绝。" onConfirm={() => void handleAppDelete(record.id)}>删除</GuardedButton> },
   ];
 
+  const secretColumns: ColumnsType<SecretSummary> = [
+    { title: '范围', render: (_, item) => <Space><Tag color="blue">{item.namespace}</Tag><Tag color="purple">{item.app}</Tag></Space> },
+    { title: '名称', dataIndex: 'name' },
+    { title: 'Value Ref', dataIndex: 'valueRef', render: (value: string) => <Typography.Text code>{value}</Typography.Text> },
+    { title: '创建人', dataIndex: 'createdBy' },
+    { title: '操作', width: 100, render: (_, record) => <GuardedButton danger size="small" resource="tenants" action="manage" onClick={async () => { await deleteSecret(record.id); message.success('Secret 已删除'); await refresh(); }}>删除</GuardedButton> },
+  ];
+
   const poolColumns: ColumnsType<WorkerPoolSummary> = [
     { title: '命名空间', dataIndex: 'namespace', render: (value: string) => <Tag color="blue">{value}</Tag> },
     { title: '应用', dataIndex: 'app', render: (value: string) => <Tag color="purple">{value}</Tag> },
     { title: 'Worker Pool', dataIndex: 'name', render: (name: string) => <strong>{name}</strong> },
+    { title: '队列上限', dataIndex: 'maxQueueDepth', render: (value: number) => value > 0 ? value : '不限' },
+    { title: '并发上限', dataIndex: 'maxConcurrency', render: (value: number) => value > 0 ? value : '不限' },
     { title: '更新时间', dataIndex: 'updatedAt' },
-    { title: '操作', width: 140, render: (_, record) => <GuardedButton resource="tenants" action="manage" type="link" size="small" danger confirmTitle="删除 Worker Pool" confirmDescription="删除后不会影响在线 Worker，会移除该持久化元数据。" onConfirm={() => void handleWorkerPoolDelete(record.id)}>删除</GuardedButton> },
+    { title: '操作', width: 180, render: (_, record) => <Space size={4}><Button type="link" size="small" onClick={() => openQuotaDrawer(record)}>配额</Button><GuardedButton resource="tenants" action="manage" type="link" size="small" danger confirmTitle="删除 Worker Pool" confirmDescription="删除后不会影响在线 Worker，会移除该持久化元数据。" onConfirm={() => void handleWorkerPoolDelete(record.id)}>删除</GuardedButton></Space> },
   ];
 
   const oidcColumns: ColumnsType<OidcIdentitySummary> = [
@@ -179,7 +216,7 @@ export function ScopesPage() {
         </div>
       </section>
 
-      <Card className="clean-card" title="租户资源" extra={<PermissionGate resource="tenants" action="manage"><Space wrap className="card-toolbar"><Button type="primary" onClick={() => setDrawer('namespace')}>新建命名空间</Button><Button onClick={() => setDrawer('app')}>新建应用</Button><Button onClick={() => setDrawer('pool')}>新建 Worker Pool</Button><Button onClick={() => setDrawer('oidc')}>新建 OIDC 映射</Button></Space></PermissionGate>}>
+      <Card className="clean-card" title="租户资源" extra={<PermissionGate resource="tenants" action="manage"><Space wrap className="card-toolbar"><Button type="primary" onClick={() => setDrawer('namespace')}>新建命名空间</Button><Button onClick={() => setDrawer('app')}>新建应用</Button><Button onClick={() => setDrawer('pool')}>新建 Worker Pool</Button><Button onClick={() => setDrawer('secret')}>新建 Secret</Button><Button onClick={() => setDrawer('oidc')}>新建 OIDC 映射</Button></Space></PermissionGate>}>
         <Typography.Text type="secondary">所有新建/绑定操作通过右侧抽屉完成，列表区域只负责检索、查看和删除。</Typography.Text>
       </Card>
 
@@ -201,7 +238,16 @@ export function ScopesPage() {
           <Form.Item name="namespace" label="命名空间" rules={[{ required: true, message: '请选择命名空间' }]}><Select options={namespaceOptions} placeholder="选择 namespace" /></Form.Item>
           <Form.Item name="app" label="应用" rules={[{ required: true, message: '请选择应用' }]}><Select options={appOptions} placeholder="选择 app" /></Form.Item>
           <Form.Item name="name" label="Worker Pool" rules={[{ required: true, message: '请输入 Worker Pool' }]}><Input placeholder="critical / batch" /></Form.Item>
+          <Typography.Paragraph type="secondary">创建后可在列表操作中配置队列上限与并发上限；0 表示不限。</Typography.Paragraph>
           <PermissionGate resource="tenants" action="manage"><Button type="primary" htmlType="submit" block>创建 Worker Pool</Button></PermissionGate>
+        </Form>
+      </Drawer>
+
+      <Drawer title={quotaPool ? `Worker Pool 配额 - ${quotaPool.name}` : 'Worker Pool 配额'} open={quotaPool !== null} onClose={() => { setQuotaPool(null); quotaForm.resetFields(); }} width={420} destroyOnClose>
+        <Form form={quotaForm} layout="vertical" onFinish={(values) => void handleQuotaUpdate(values)}>
+          <Form.Item name="maxQueueDepth" label="队列上限" extra="pending + running 总数上限；0 表示不限" rules={[{ required: true }]}><InputNumber min={0} precision={0} style={{ width: '100%' }} /></Form.Item>
+          <Form.Item name="maxConcurrency" label="并发上限" extra="running 上限；0 表示不限" rules={[{ required: true }]}><InputNumber min={0} precision={0} style={{ width: '100%' }} /></Form.Item>
+          <PermissionGate resource="tenants" action="manage"><Button type="primary" htmlType="submit" block>保存配额</Button></PermissionGate>
         </Form>
       </Drawer>
 
@@ -210,6 +256,11 @@ export function ScopesPage() {
         <Col xs={24} xl={8}><Card className="clean-card" title="应用"><Table rowKey="id" loading={loading} columns={appColumns} dataSource={apps} pagination={persistentPagination(pageSize, setPageSize)} size="small" /></Card></Col>
         <Col xs={24} xl={8}><Card className="clean-card" title="Worker Pool"><Table rowKey="id" loading={loading} columns={poolColumns} dataSource={workerPools} pagination={persistentPagination(pageSize, setPageSize)} size="small" /></Card></Col>
       </Row>
+
+      <Card className="clean-card" title="Secret 引用" style={{ marginTop: 16 }} extra={<PermissionGate resource="tenants" action="manage"><Button onClick={() => setDrawer('secret')}>新建 Secret</Button></PermissionGate>}>
+        <Alert type="info" showIcon style={{ marginBottom: 16 }} message="Secret 按 namespace/app 隔离" description="这里只保存 env:/vault:/secret: 引用，不保存明文；创建、删除和使用会进入审计日志。" />
+        <Table rowKey="id" loading={loading} columns={secretColumns} dataSource={secrets} pagination={persistentPagination(pageSize, setPageSize)} size="small" />
+      </Card>
 
       <Drawer title="保存 OIDC 映射" open={drawer === 'oidc'} onClose={() => { setDrawer(null); oidcForm.resetFields(); }} width={720} destroyOnClose>
         <Alert type="info" showIcon style={{ marginBottom: 16 }} message="Fail-closed OIDC 映射" description="只有显式配置 issuer + subject 到本地用户的映射后，OIDC callback 才会签发本地 tikee session；namespace/app/Worker Pool 会进入 scope binding。" />

@@ -1,5 +1,7 @@
 //! Minimal pending-instance dispatcher for Worker Tunnel sessions.
 
+use std::net::IpAddr;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use tikee_core::{
@@ -193,6 +195,107 @@ async fn dispatch_single_instances(
         };
 
         let executor = resolve_job_executor(workflows, &instance.id, &job).await?;
+        if let JobExecutor::Http { config } = &executor {
+            let outcome = execute_http_processor(config).await;
+            let status = if outcome.success {
+                InstanceStatus::Succeeded
+            } else {
+                InstanceStatus::Failed
+            };
+            let _ = workflows
+                .mark_dispatch_queue_done_by_instance(&instance.id)
+                .await?;
+            instances.update_status(&instance.id, status).await?;
+            logs.append(AppendJobInstanceLog {
+                instance_id: instance.id.clone(),
+                worker_id: "builtin.http".to_owned(),
+                level: if outcome.success {
+                    "info".to_owned()
+                } else {
+                    "error".to_owned()
+                },
+                message: outcome.message.clone(),
+                sequence: 1,
+            })
+            .await?;
+            let _ = workflows
+                .complete_job_node_from_result(&instance.id, status, Some(outcome.message))
+                .await?;
+            continue;
+        }
+        if let JobExecutor::Grpc { config } = &executor {
+            let outcome = execute_grpc_processor(config).await;
+            let status = if outcome.success {
+                InstanceStatus::Succeeded
+            } else {
+                InstanceStatus::Failed
+            };
+            let _ = workflows
+                .mark_dispatch_queue_done_by_instance(&instance.id)
+                .await?;
+            instances.update_status(&instance.id, status).await?;
+            logs.append(AppendJobInstanceLog {
+                instance_id: instance.id.clone(),
+                worker_id: "builtin.grpc".to_owned(),
+                level: if outcome.success { "info".to_owned() } else { "error".to_owned() },
+                message: outcome.message.clone(),
+                sequence: 1,
+            })
+            .await?;
+            let _ = workflows
+                .complete_job_node_from_result(&instance.id, status, Some(outcome.message))
+                .await?;
+            continue;
+        }
+        if let JobExecutor::Sql { config } = &executor {
+            let outcome = execute_sql_processor(config).await;
+            let status = if outcome.success {
+                InstanceStatus::Succeeded
+            } else {
+                InstanceStatus::Failed
+            };
+            let _ = workflows
+                .mark_dispatch_queue_done_by_instance(&instance.id)
+                .await?;
+            instances.update_status(&instance.id, status).await?;
+            logs.append(AppendJobInstanceLog {
+                instance_id: instance.id.clone(),
+                worker_id: "builtin.sql".to_owned(),
+                level: if outcome.success { "info".to_owned() } else { "error".to_owned() },
+                message: outcome.message.clone(),
+                sequence: 1,
+            })
+            .await?;
+            let _ = workflows
+                .complete_job_node_from_result(&instance.id, status, Some(outcome.message))
+                .await?;
+            continue;
+        }
+
+        if let JobExecutor::FileCleanup { config } = &executor {
+            let outcome = execute_file_cleanup_processor(config).await;
+            let status = if outcome.success {
+                InstanceStatus::Succeeded
+            } else {
+                InstanceStatus::Failed
+            };
+            let _ = workflows
+                .mark_dispatch_queue_done_by_instance(&instance.id)
+                .await?;
+            instances.update_status(&instance.id, status).await?;
+            logs.append(AppendJobInstanceLog {
+                instance_id: instance.id.clone(),
+                worker_id: "builtin.file_cleanup".to_owned(),
+                level: if outcome.success { "info".to_owned() } else { "error".to_owned() },
+                message: outcome.message.clone(),
+                sequence: 1,
+            })
+            .await?;
+            let _ = workflows
+                .complete_job_node_from_result(&instance.id, status, Some(outcome.message))
+                .await?;
+            continue;
+        }
         let task = match build_dispatch_task(
             scripts,
             instance.id.clone(),
@@ -455,6 +558,18 @@ enum JobExecutor {
     Script {
         script_id: String,
     },
+    Http {
+        config: serde_json::Value,
+    },
+    Grpc {
+        config: serde_json::Value,
+    },
+    Sql {
+        config: serde_json::Value,
+    },
+    FileCleanup {
+        config: serde_json::Value,
+    },
 }
 
 async fn build_dispatch_task(
@@ -518,6 +633,10 @@ async fn build_dispatch_task(
             )
         }
         JobExecutor::SdkProcessor { processor_name, .. } => (processor_name, None),
+        JobExecutor::Http { .. } => ("builtin.http".to_owned(), None),
+        JobExecutor::Grpc { .. } => ("builtin.grpc".to_owned(), None),
+        JobExecutor::Sql { .. } => ("builtin.sql".to_owned(), None),
+        JobExecutor::FileCleanup { .. } => ("builtin.file_cleanup".to_owned(), None),
     };
 
     Ok(DispatchTaskBuild::Built(DispatchTask {
@@ -548,6 +667,10 @@ fn required_task_requirement_for_executor(
             name: processor_name.trim().to_owned(),
         }),
         JobExecutor::Script { .. } => required_task_requirement(task),
+        JobExecutor::Http { .. }
+        | JobExecutor::Grpc { .. }
+        | JobExecutor::Sql { .. }
+        | JobExecutor::FileCleanup { .. } => None,
     }
 }
 
@@ -741,14 +864,33 @@ async fn resolve_job_executor(
     instance_id: &str,
     job: &tikee_storage::JobSummary,
 ) -> Result<JobExecutor, tikee_storage::DbErr> {
-    if let Some(processor_name) = workflows
-        .processor_name_for_job_instance(instance_id)
-        .await?
-    {
-        return Ok(JobExecutor::SdkProcessor {
-            processor_name,
-            processor_type: None,
-        });
+    if let Some(binding) = workflows.job_binding_for_instance(instance_id).await? {
+        if binding.node_kind == "http" {
+            return Ok(JobExecutor::Http {
+                config: binding.config.unwrap_or_else(|| serde_json::json!({})),
+            });
+        }
+        if binding.node_kind == "grpc" {
+            return Ok(JobExecutor::Grpc {
+                config: binding.config.unwrap_or_else(|| serde_json::json!({})),
+            });
+        }
+        if binding.node_kind == "sql" {
+            return Ok(JobExecutor::Sql {
+                config: binding.config.unwrap_or_else(|| serde_json::json!({})),
+            });
+        }
+        if binding.node_kind == "file_cleanup" {
+            return Ok(JobExecutor::FileCleanup {
+                config: binding.config.unwrap_or_else(|| serde_json::json!({})),
+            });
+        }
+        if let Some(processor_name) = binding.processor_name {
+            return Ok(JobExecutor::SdkProcessor {
+                processor_name,
+                processor_type: None,
+            });
+        }
     }
     if let Some(script_id) = job
         .script_id
@@ -772,6 +914,388 @@ async fn resolve_job_executor(
     })
 }
 
+#[derive(Debug, Clone)]
+struct SqlProcessorOutcome {
+    success: bool,
+    message: String,
+}
+
+async fn execute_sql_processor(config: &serde_json::Value) -> SqlProcessorOutcome {
+    let Some(database_url) = config
+        .get("databaseUrl")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return SqlProcessorOutcome { success: false, message: "sql node requires config.databaseUrl".to_owned() };
+    };
+    let Some(sql) = config
+        .get("sql")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return SqlProcessorOutcome { success: false, message: "sql node requires config.sql".to_owned() };
+    };
+    let allowed = string_array(config.get("allowedDatabaseUrls"));
+    if allowed.is_empty() || !allowed.iter().any(|candidate| candidate == database_url) {
+        return SqlProcessorOutcome { success: false, message: "sql databaseUrl is not in allowedDatabaseUrls".to_owned() };
+    }
+    let read_only = config
+        .get("readOnly")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(true);
+    let dry_run = config
+        .get("dryRun")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(true);
+    if read_only && !is_read_only_sql(sql) {
+        return SqlProcessorOutcome { success: false, message: "sql readOnly mode only allows SELECT/EXPLAIN/WITH statements".to_owned() };
+    }
+    if dry_run {
+        return SqlProcessorOutcome { success: true, message: "sql dry-run validated statement and datasource allowlist".to_owned() };
+    }
+    if !database_url.starts_with("sqlite:") {
+        return SqlProcessorOutcome { success: false, message: "sql executor currently supports sqlite databaseUrl for direct execution".to_owned() };
+    }
+    let pool = match sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect(database_url)
+        .await
+    {
+        Ok(pool) => pool,
+        Err(error) => return SqlProcessorOutcome { success: false, message: format!("sql connect failed: {error}") },
+    };
+    let result = if read_only {
+        sqlx::query(sql).fetch_all(&pool).await.map(|rows| rows.len().to_string())
+    } else {
+        sqlx::query(sql).execute(&pool).await.map(|result| result.rows_affected().to_string())
+    };
+    match result {
+        Ok(count) if read_only => SqlProcessorOutcome { success: true, message: format!("sql query returned {count} row(s)") },
+        Ok(count) => SqlProcessorOutcome { success: true, message: format!("sql statement affected {count} row(s)") },
+        Err(error) => SqlProcessorOutcome { success: false, message: format!("sql execution failed: {error}") },
+    }
+}
+
+fn is_read_only_sql(sql: &str) -> bool {
+    let normalized = sql
+        .trim_start_matches(|ch: char| ch.is_whitespace() || ch == ';')
+        .to_ascii_lowercase();
+    normalized.starts_with("select ")
+        || normalized.starts_with("select\n")
+        || normalized == "select"
+        || normalized.starts_with("with ")
+        || normalized.starts_with("explain ")
+}
+
+#[derive(Debug, Clone)]
+struct GrpcProcessorOutcome {
+    success: bool,
+    message: String,
+}
+
+async fn execute_grpc_processor(config: &serde_json::Value) -> GrpcProcessorOutcome {
+    let Some(endpoint) = config
+        .get("endpoint")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return GrpcProcessorOutcome { success: false, message: "grpc node requires config.endpoint".to_owned() };
+    };
+    let Some(service) = config
+        .get("service")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return GrpcProcessorOutcome { success: false, message: "grpc node requires config.service".to_owned() };
+    };
+    let Some(method) = config
+        .get("method")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return GrpcProcessorOutcome { success: false, message: "grpc node requires config.method".to_owned() };
+    };
+    let allowed_hosts = string_array(config.get("allowedHosts"));
+    let url = match url::Url::parse(endpoint) {
+        Ok(url) => url,
+        Err(error) => return GrpcProcessorOutcome { success: false, message: format!("invalid grpc endpoint: {error}") },
+    };
+    if url.scheme() != "http" && url.scheme() != "https" {
+        return GrpcProcessorOutcome { success: false, message: "grpc endpoint only allows http/https schemes".to_owned() };
+    }
+    let Some(host) = url.host_str() else {
+        return GrpcProcessorOutcome { success: false, message: "grpc endpoint must include host".to_owned() };
+    };
+    if is_private_or_loopback_host(host) && !config.get("allowPrivateHost").and_then(serde_json::Value::as_bool).unwrap_or(false) {
+        return GrpcProcessorOutcome { success: false, message: "grpc node rejects loopback/private IP hosts by default".to_owned() };
+    }
+    if !allowed_hosts.is_empty() && !allowed_hosts.iter().any(|allowed| host_matches(host, allowed)) {
+        return GrpcProcessorOutcome { success: false, message: format!("grpc host {host} is not in allowedHosts") };
+    }
+    let path = format!("/{}/{}", service.trim_matches('/'), method.trim_matches('/'));
+    let uri = match tonic::codegen::http::uri::PathAndQuery::from_maybe_shared(path.clone()) {
+        Ok(uri) => uri,
+        Err(error) => return GrpcProcessorOutcome { success: false, message: format!("invalid grpc method path {path}: {error}") },
+    };
+    let payload = config
+        .get("payload")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!({}));
+    let type_url = payload
+        .get("typeUrl")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("type.googleapis.com/tikee.workflow.v1.JsonPayload")
+        .to_owned();
+    let value = payload
+        .get("valueBase64")
+        .and_then(serde_json::Value::as_str)
+        .and_then(|value| base64::Engine::decode(&base64::engine::general_purpose::STANDARD, value).ok())
+        .unwrap_or_else(|| payload.get("json").map_or_else(Vec::new, |json| serde_json::to_vec(json).unwrap_or_default()));
+    let any = prost_types::Any { type_url, value };
+    let channel = match tonic::transport::Endpoint::from_shared(endpoint.to_owned()) {
+        Ok(endpoint) => match endpoint.timeout(Duration::from_secs(15)).connect().await {
+            Ok(channel) => channel,
+            Err(error) => return GrpcProcessorOutcome { success: false, message: format!("grpc connect failed: {error}") },
+        },
+        Err(error) => return GrpcProcessorOutcome { success: false, message: format!("invalid grpc endpoint: {error}") },
+    };
+    let mut client = tonic::client::Grpc::new(channel);
+    let mut request = tonic::Request::new(any);
+    if let Some(metadata) = config.get("metadata").and_then(serde_json::Value::as_object) {
+        for (key, value) in metadata {
+            if let Some(value) = value.as_str()
+                && let Ok(name) = tonic::metadata::MetadataKey::from_bytes(key.as_bytes())
+                && let Ok(parsed) = value.parse()
+            {
+                request.metadata_mut().insert(name, parsed);
+            }
+        }
+    }
+    match client
+        .unary(request, uri, tonic_prost::ProstCodec::<prost_types::Any, prost_types::Any>::default())
+        .await
+    {
+        Ok(_) => GrpcProcessorOutcome { success: true, message: format!("grpc {service}/{method} succeeded") },
+        Err(status) => GrpcProcessorOutcome { success: false, message: format!("grpc {service}/{method} failed: {}", status.message()) },
+    }
+}
+
+#[derive(Debug, Clone)]
+struct FileCleanupOutcome {
+    success: bool,
+    message: String,
+}
+
+async fn execute_file_cleanup_processor(config: &serde_json::Value) -> FileCleanupOutcome {
+    let dry_run = config
+        .get("dryRun")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(true);
+    let allowed_roots = string_array(config.get("allowedRoots"))
+        .into_iter()
+        .map(PathBuf::from)
+        .collect::<Vec<_>>();
+    if allowed_roots.is_empty() {
+        return FileCleanupOutcome {
+            success: false,
+            message: "file_cleanup requires non-empty config.allowedRoots".to_owned(),
+        };
+    }
+    let mut paths = string_array(config.get("paths"));
+    if let Some(path) = config.get("path").and_then(serde_json::Value::as_str) {
+        paths.push(path.to_owned());
+    }
+    if paths.is_empty() {
+        return FileCleanupOutcome {
+            success: false,
+            message: "file_cleanup requires config.paths".to_owned(),
+        };
+    }
+    let recursive = config
+        .get("recursive")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+    let mut cleaned = 0_usize;
+    let mut planned = 0_usize;
+    for raw in paths {
+        let path = PathBuf::from(raw.trim());
+        if !path.is_absolute() || path.components().any(|component| matches!(component, std::path::Component::ParentDir)) {
+            return FileCleanupOutcome { success: false, message: format!("file_cleanup path must be clean absolute path: {}", path.display()) };
+        }
+        if !is_under_allowed_root(&path, &allowed_roots) {
+            return FileCleanupOutcome { success: false, message: format!("file_cleanup path is outside allowedRoots: {}", path.display()) };
+        }
+        planned = planned.saturating_add(1);
+        if dry_run {
+            continue;
+        }
+        match tokio::fs::metadata(&path).await {
+            Ok(metadata) if metadata.is_dir() && recursive => {
+                if let Err(error) = tokio::fs::remove_dir_all(&path).await {
+                    return FileCleanupOutcome { success: false, message: format!("file_cleanup failed to remove directory {}: {error}", path.display()) };
+                }
+                cleaned = cleaned.saturating_add(1);
+            }
+            Ok(metadata) if metadata.is_file() => {
+                if let Err(error) = tokio::fs::remove_file(&path).await {
+                    return FileCleanupOutcome { success: false, message: format!("file_cleanup failed to remove file {}: {error}", path.display()) };
+                }
+                cleaned = cleaned.saturating_add(1);
+            }
+            Ok(metadata) if metadata.is_dir() => {
+                return FileCleanupOutcome { success: false, message: format!("file_cleanup refusing directory without recursive=true: {}", path.display()) };
+            }
+            Ok(_) => {
+                return FileCleanupOutcome { success: false, message: format!("file_cleanup only supports regular files/directories: {}", path.display()) };
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return FileCleanupOutcome { success: false, message: format!("file_cleanup cannot inspect {}: {error}", path.display()) };
+            }
+        }
+    }
+    FileCleanupOutcome {
+        success: true,
+        message: if dry_run {
+            format!("file_cleanup dry-run planned {planned} path(s)")
+        } else {
+            format!("file_cleanup removed {cleaned} of {planned} path(s)")
+        },
+    }
+}
+
+fn is_under_allowed_root(path: &Path, allowed_roots: &[PathBuf]) -> bool {
+    allowed_roots.iter().any(|root| path.starts_with(root))
+}
+
+#[derive(Debug, Clone)]
+struct HttpProcessorOutcome {
+    success: bool,
+    message: String,
+}
+
+async fn execute_http_processor(config: &serde_json::Value) -> HttpProcessorOutcome {
+    let Some(url) = config
+        .get("url")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return HttpProcessorOutcome {
+            success: false,
+            message: "http node requires config.url".to_owned(),
+        };
+    };
+    let method = config
+        .get("method")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("GET")
+        .to_ascii_uppercase();
+    let allowed_hosts = string_array(config.get("allowedHosts"));
+    let parsed = match url::Url::parse(url) {
+        Ok(parsed) => parsed,
+        Err(error) => {
+            return HttpProcessorOutcome {
+                success: false,
+                message: format!("invalid http url: {error}"),
+            };
+        }
+    };
+    if parsed.scheme() != "https" && parsed.scheme() != "http" {
+        return HttpProcessorOutcome {
+            success: false,
+            message: "http node only allows http/https urls".to_owned(),
+        };
+    }
+    let Some(host) = parsed.host_str() else {
+        return HttpProcessorOutcome {
+            success: false,
+            message: "http node url must include host".to_owned(),
+        };
+    };
+    if is_private_or_loopback_host(host) {
+        return HttpProcessorOutcome {
+            success: false,
+            message: "http node rejects loopback/private IP hosts by default".to_owned(),
+        };
+    }
+    if !allowed_hosts.is_empty()
+        && !allowed_hosts
+            .iter()
+            .any(|allowed| host_matches(host, allowed))
+    {
+        return HttpProcessorOutcome {
+            success: false,
+            message: format!("http host {host} is not in allowedHosts"),
+        };
+    }
+    let client = match reqwest::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .build()
+    {
+        Ok(client) => client,
+        Err(error) => {
+            return HttpProcessorOutcome {
+                success: false,
+                message: format!("http client build failed: {error}"),
+            };
+        }
+    };
+    let req_method = method.parse().unwrap_or(reqwest::Method::GET);
+    let mut request = client.request(req_method, parsed);
+    if let Some(body) = config.get("body") {
+        request = request.json(body);
+    }
+    match request.send().await {
+        Ok(response) => {
+            let status = response.status();
+            HttpProcessorOutcome {
+                success: status.is_success(),
+                message: format!("http {} {url} -> {}", method, status.as_u16()),
+            }
+        }
+        Err(error) => HttpProcessorOutcome {
+            success: false,
+            message: format!("http request failed: {error}"),
+        },
+    }
+}
+
+fn string_array(value: Option<&serde_json::Value>) -> Vec<String> {
+    value
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
+fn host_matches(host: &str, allowed: &str) -> bool {
+    host.eq_ignore_ascii_case(allowed)
+        || allowed
+            .strip_prefix("*.")
+            .is_some_and(|suffix| host.ends_with(suffix))
+}
+
+fn is_private_or_loopback_host(host: &str) -> bool {
+    host.parse::<IpAddr>().is_ok_and(|ip| {
+        ip.is_loopback()
+            || ip.is_unspecified()
+            || match ip {
+                IpAddr::V4(v4) => v4.is_private() || v4.is_link_local(),
+                IpAddr::V6(v6) => v6.is_unique_local() || v6.is_unicast_link_local(),
+            }
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -791,7 +1315,8 @@ mod tests {
 
     use super::{
         DispatchTaskBuild, JobExecutor, ScriptGovernanceFailure, WorkerRegistry,
-        build_dispatch_task, dispatch_once, dispatch_once_if_owner, script_is_dispatchable,
+        build_dispatch_task, dispatch_once, dispatch_once_if_owner, execute_file_cleanup_processor,
+        execute_grpc_processor, execute_sql_processor, script_is_dispatchable,
         script_version_is_dispatchable,
     };
 
@@ -834,6 +1359,9 @@ mod tests {
                 name: "manual".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
                 processor_name: Some("billing.manual".to_owned()),
                 processor_type: None,
                 script_id: None,
@@ -926,6 +1454,9 @@ mod tests {
                 name: "blocked".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
                 processor_name: Some("demo.blocked".to_owned()),
                 processor_type: None,
                 script_id: None,
@@ -953,6 +1484,9 @@ mod tests {
                 name: "manual".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
                 processor_name: Some("demo.echo".to_owned()),
                 processor_type: None,
                 script_id: None,
@@ -1090,6 +1624,9 @@ mod tests {
                 name: "shell job".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
                 processor_name: None,
                 processor_type: None,
                 script_id: Some(script.id),
@@ -1197,6 +1734,9 @@ mod tests {
                 name: "python job".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
                 processor_name: None,
                 processor_type: None,
                 script_id: Some(script.id.clone()),
@@ -1295,6 +1835,9 @@ mod tests {
                 name: "manual".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
                 processor_name: None,
                 processor_type: None,
                 script_id: None,
@@ -1406,6 +1949,9 @@ mod tests {
                 name: "already-done".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
                 processor_name: None,
                 processor_type: None,
                 script_id: None,
@@ -1477,6 +2023,9 @@ mod tests {
                 name: "follower-dispatch".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
                 processor_name: None,
                 processor_type: None,
                 script_id: None,
@@ -1541,6 +2090,9 @@ mod tests {
                 name: "manual".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
                 processor_name: Some("job.default".to_owned()),
                 processor_type: None,
                 script_id: None,
@@ -1678,6 +2230,9 @@ mod tests {
                 name: "wasm job".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
                 processor_name: None,
                 processor_type: None,
                 script_id: Some(script.id.clone()),
@@ -2043,4 +2598,112 @@ mod tests {
         version.allow_network = true;
         assert!(!script_version_is_dispatchable(&version));
     }
+    #[tokio::test]
+    async fn file_cleanup_processor_defaults_to_dry_run_and_requires_allowed_roots() {
+        let outcome = execute_file_cleanup_processor(&serde_json::json!({
+            "paths": ["/tmp/tikee-cleanup-demo"]
+        }))
+        .await;
+        assert!(!outcome.success);
+        assert!(outcome.message.contains("allowedRoots"));
+
+        let outcome = execute_file_cleanup_processor(&serde_json::json!({
+            "paths": ["/tmp/tikee-cleanup-demo"],
+            "allowedRoots": ["/tmp"]
+        }))
+        .await;
+        assert!(outcome.success);
+        assert!(outcome.message.contains("dry-run"));
+    }
+
+    #[tokio::test]
+    async fn file_cleanup_processor_deletes_only_under_allowed_roots() {
+        let temp_root = std::env::temp_dir().join(format!("tikee-cleanup-test-{}", uuid::Uuid::new_v4()));
+        tokio::fs::create_dir_all(&temp_root)
+            .await
+            .unwrap_or_else(|error| panic!("temp root should be created: {error}"));
+        let target = temp_root.join("stale.log");
+        tokio::fs::write(&target, b"stale")
+            .await
+            .unwrap_or_else(|error| panic!("target file should be written: {error}"));
+
+        let rejected = execute_file_cleanup_processor(&serde_json::json!({
+            "paths": [target.display().to_string()],
+            "allowedRoots": ["/var/lib/tikee"],
+            "dryRun": false
+        }))
+        .await;
+        assert!(!rejected.success);
+        assert!(tokio::fs::metadata(&target).await.is_ok());
+
+        let deleted = execute_file_cleanup_processor(&serde_json::json!({
+            "paths": [target.display().to_string()],
+            "allowedRoots": [temp_root.display().to_string()],
+            "dryRun": false
+        }))
+        .await;
+        assert!(deleted.success, "{}", deleted.message);
+        assert!(tokio::fs::metadata(&target).await.is_err());
+        let _ = tokio::fs::remove_dir_all(&temp_root).await;
+    }
+
+    #[tokio::test]
+    async fn grpc_processor_fails_closed_without_required_fields_and_private_hosts() {
+        let missing = execute_grpc_processor(&serde_json::json!({})).await;
+        assert!(!missing.success);
+        assert!(missing.message.contains("endpoint"));
+
+        let private = execute_grpc_processor(&serde_json::json!({
+            "endpoint": "http://127.0.0.1:50051",
+            "service": "demo.Echo",
+            "method": "Ping"
+        }))
+        .await;
+        assert!(!private.success);
+        assert!(private.message.contains("private"));
+    }
+
+    #[tokio::test]
+    async fn sql_processor_enforces_allowlist_and_read_only_default() {
+        let missing_allowlist = execute_sql_processor(&serde_json::json!({
+            "databaseUrl": "sqlite::memory:",
+            "sql": "SELECT 1"
+        }))
+        .await;
+        assert!(!missing_allowlist.success);
+        assert!(missing_allowlist.message.contains("allowedDatabaseUrls"));
+
+        let write_rejected = execute_sql_processor(&serde_json::json!({
+            "databaseUrl": "sqlite::memory:",
+            "allowedDatabaseUrls": ["sqlite::memory:"],
+            "sql": "DELETE FROM demo",
+            "dryRun": false
+        }))
+        .await;
+        assert!(!write_rejected.success);
+        assert!(write_rejected.message.contains("readOnly"));
+
+        let dry_run = execute_sql_processor(&serde_json::json!({
+            "databaseUrl": "sqlite::memory:",
+            "allowedDatabaseUrls": ["sqlite::memory:"],
+            "sql": "SELECT 1"
+        }))
+        .await;
+        assert!(dry_run.success);
+        assert!(dry_run.message.contains("dry-run"));
+    }
+
+    #[tokio::test]
+    async fn sql_processor_executes_sqlite_read_only_query() {
+        let outcome = execute_sql_processor(&serde_json::json!({
+            "databaseUrl": "sqlite::memory:",
+            "allowedDatabaseUrls": ["sqlite::memory:"],
+            "sql": "SELECT 1",
+            "dryRun": false
+        }))
+        .await;
+        assert!(outcome.success, "{}", outcome.message);
+        assert!(outcome.message.contains("1 row"));
+    }
+
 }

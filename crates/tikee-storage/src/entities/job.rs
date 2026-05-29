@@ -19,6 +19,12 @@ pub struct Model {
     pub schedule_type: String,
     /// Optional schedule expression.
     pub schedule_expr: Option<String>,
+    /// Misfire policy for automatic schedules.
+    pub misfire_policy: String,
+    /// Optional inclusive schedule start timestamp.
+    pub schedule_start_at: Option<String>,
+    /// Optional exclusive schedule end timestamp.
+    pub schedule_end_at: Option<String>,
     /// Optional SDK worker processor binding.
     pub processor_name: Option<String>,
     /// Optional custom plugin processor type for capability resolution.

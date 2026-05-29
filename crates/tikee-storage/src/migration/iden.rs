@@ -72,6 +72,8 @@ pub(super) enum WorkflowShards {
     Status,
     Input,
     Output,
+    Checkpoint,
+    RetryCount,
     JobInstanceId,
     CreatedAt,
     UpdatedAt,
@@ -91,6 +93,9 @@ pub(super) enum DispatchQueue {
     LeaseUntil,
     FencingToken,
     WorkerSelector,
+    Namespace,
+    App,
+    WorkerPool,
     CreatedAt,
     UpdatedAt,
 }
@@ -212,6 +217,20 @@ pub(super) enum SdkApiKeys {
     CreatedBy,
     RevokedBy,
     RotatedFrom,
+    CreatedAt,
+    UpdatedAt,
+}
+
+#[derive(DeriveIden)]
+pub(super) enum Secrets {
+    Table,
+    Id,
+    Namespace,
+    App,
+    Name,
+    ValueRef,
+    Status,
+    CreatedBy,
     CreatedAt,
     UpdatedAt,
 }
@@ -445,6 +464,8 @@ pub(super) enum WorkerPools {
     NamespaceId,
     AppId,
     Name,
+    MaxQueueDepth,
+    MaxConcurrency,
     CreatedAt,
     UpdatedAt,
 }
@@ -509,6 +530,9 @@ pub(super) enum Jobs {
     Name,
     ScheduleType,
     ScheduleExpr,
+    MisfirePolicy,
+    ScheduleStartAt,
+    ScheduleEndAt,
     ProcessorName,
     ProcessorType,
     ScriptId,
@@ -528,6 +552,9 @@ pub(super) enum JobVersions {
     Name,
     ScheduleType,
     ScheduleExpr,
+    MisfirePolicy,
+    ScheduleStartAt,
+    ScheduleEndAt,
     ProcessorName,
     ProcessorType,
     ScriptId,

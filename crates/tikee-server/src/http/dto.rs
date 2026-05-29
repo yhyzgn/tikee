@@ -85,6 +85,7 @@ pub type UserListApiResponse = ApiResponse<Vec<tikee_storage::UserSummary>>;
 pub type JobInstancePageApiResponse = ApiResponse<JobInstancePage>;
 
 pub type JobInstanceApiResponse = ApiResponse<JobInstanceSummary>;
+pub type JobInstanceCancelApiResponse = ApiResponse<JobInstanceSummary>;
 
 pub type JobInstanceLogPageApiResponse = ApiResponse<JobInstanceLogPage>;
 
@@ -430,6 +431,7 @@ pub type WorkflowInstanceApiResponse = ApiResponse<tikee_storage::WorkflowInstan
 pub type WorkflowAdvanceApiResponse = ApiResponse<tikee_storage::AdvanceWorkflowResult>;
 pub type WorkflowMaterializeApiResponse = ApiResponse<tikee_storage::MaterializeWorkflowNodeResult>;
 pub type WorkflowRecoverApiResponse = ApiResponse<tikee_storage::RecoverWorkflowNodeResult>;
+pub type WorkflowShardRebalanceApiResponse = ApiResponse<tikee_storage::RebalanceWorkflowShardsResult>;
 pub type WorkflowShardListApiResponse = ApiResponse<Vec<tikee_storage::WorkflowShardSummary>>;
 pub type WorkflowShardCompleteApiResponse = ApiResponse<tikee_storage::CompleteWorkflowShardResult>;
 pub type DispatchQueueApiResponse = ApiResponse<tikee_storage::QueueOverview>;
@@ -603,6 +605,9 @@ pub struct JobSummary {
     pub name: String,
     pub schedule_type: String,
     pub schedule_expr: Option<String>,
+    pub misfire_policy: String,
+    pub schedule_start_at: Option<String>,
+    pub schedule_end_at: Option<String>,
     pub processor_name: Option<String>,
     pub processor_type: Option<String>,
     pub script_id: Option<String>,
@@ -762,6 +767,9 @@ pub struct CreateJobRequest {
     pub name: String,
     pub schedule_type: Option<String>,
     pub schedule_expr: Option<String>,
+    pub misfire_policy: Option<String>,
+    pub schedule_start_at: Option<String>,
+    pub schedule_end_at: Option<String>,
     pub processor_name: Option<String>,
     pub processor_type: Option<String>,
     pub script_id: Option<String>,
@@ -777,6 +785,11 @@ pub struct UpdateJobRequest {
     pub schedule_type: Option<String>,
     #[serde(default, deserialize_with = "deserialize_nullable_update")]
     pub schedule_expr: Option<Option<String>>,
+    pub misfire_policy: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_nullable_update")]
+    pub schedule_start_at: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_nullable_update")]
+    pub schedule_end_at: Option<Option<String>>,
     #[serde(default, deserialize_with = "deserialize_nullable_update")]
     pub processor_name: Option<Option<String>>,
     #[serde(default, deserialize_with = "deserialize_nullable_update")]
@@ -812,11 +825,22 @@ pub struct RollbackJobRequest {
     pub version_number: i64,
 }
 
+
+#[derive(Debug, Clone, Default, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct BroadcastSelectorRequest {
+    pub tags: Option<Vec<String>>,
+    pub region: Option<String>,
+    pub cluster: Option<String>,
+    pub labels: Option<std::collections::HashMap<String, String>>,
+}
+
 #[derive(Debug, Clone, Default, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TriggerJobRequest {
     pub trigger_type: Option<String>,
     pub execution_mode: Option<String>,
+    pub broadcast_selector: Option<BroadcastSelectorRequest>,
 }
 
 pub type InboundWebhookTriggerApiResponse = ApiResponse<InboundWebhookTriggerResponse>;
@@ -827,6 +851,10 @@ pub struct InboundWebhookTriggerRequest {
     pub source: Option<String>,
     pub event_type: Option<String>,
     pub payload: Option<serde_json::Value>,
+    pub signature: Option<String>,
+    pub timestamp: Option<i64>,
+    pub nonce: Option<String>,
+    pub secret_ref: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]

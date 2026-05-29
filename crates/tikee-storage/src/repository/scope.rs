@@ -27,8 +27,16 @@ pub struct WorkerPoolSummary {
     pub namespace: String,
     pub app: String,
     pub name: String,
+    pub max_queue_depth: i32,
+    pub max_concurrency: i32,
     pub created_at: String,
     pub updated_at: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct UpdateWorkerPoolQuota {
+    pub max_queue_depth: i32,
+    pub max_concurrency: i32,
 }
 
 #[derive(Debug, Clone)]
@@ -127,6 +135,8 @@ impl ScopeRepository {
                 namespace: ns.name,
                 app: app.name,
                 name: row.name,
+                max_queue_depth: row.max_queue_depth,
+                max_concurrency: row.max_concurrency,
                 created_at: row.created_at,
                 updated_at: row.updated_at,
             });
@@ -154,6 +164,8 @@ impl ScopeRepository {
                 namespace: ns.name,
                 app: app.name,
                 name: existing.name,
+                max_queue_depth: existing.max_queue_depth,
+                max_concurrency: existing.max_concurrency,
                 created_at: existing.created_at,
                 updated_at: existing.updated_at,
             });
@@ -163,6 +175,8 @@ impl ScopeRepository {
             namespace_id: Set(ns.id.clone()),
             app_id: Set(app.id.clone()),
             name: Set(name.to_owned()),
+            max_queue_depth: Set(0),
+            max_concurrency: Set(0),
             created_at: Set(now.clone()),
             updated_at: Set(now),
         }
@@ -173,9 +187,51 @@ impl ScopeRepository {
             namespace: ns.name,
             app: app.name,
             name: model.name,
+            max_queue_depth: model.max_queue_depth,
+            max_concurrency: model.max_concurrency,
             created_at: model.created_at,
             updated_at: model.updated_at,
         })
+    }
+
+    pub async fn update_worker_pool_quota(
+        &self,
+        id: &str,
+        input: UpdateWorkerPoolQuota,
+    ) -> Result<Option<WorkerPoolSummary>, sea_orm::DbErr> {
+        let Some(existing) = worker_pool::Entity::find_by_id(id.to_owned())
+            .one(&self.db)
+            .await?
+        else {
+            return Ok(None);
+        };
+        let Some(ns) = namespace::Entity::find_by_id(existing.namespace_id.clone())
+            .one(&self.db)
+            .await?
+        else {
+            return Ok(None);
+        };
+        let Some(app) = app::Entity::find_by_id(existing.app_id.clone())
+            .one(&self.db)
+            .await?
+        else {
+            return Ok(None);
+        };
+        let mut active: worker_pool::ActiveModel = existing.into();
+        active.max_queue_depth = Set(input.max_queue_depth.max(0));
+        active.max_concurrency = Set(input.max_concurrency.max(0));
+        active.updated_at = Set(now_rfc3339());
+        let model = active.update(&self.db).await?;
+        Ok(Some(WorkerPoolSummary {
+            id: model.id,
+            namespace: ns.name,
+            app: app.name,
+            name: model.name,
+            max_queue_depth: model.max_queue_depth,
+            max_concurrency: model.max_concurrency,
+            created_at: model.created_at,
+            updated_at: model.updated_at,
+        }))
     }
 
     pub async fn delete_namespace_if_empty(&self, id: &str) -> Result<bool, sea_orm::DbErr> {

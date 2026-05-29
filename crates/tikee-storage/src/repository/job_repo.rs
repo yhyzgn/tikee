@@ -2,6 +2,7 @@ use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set,
     TransactionTrait,
 };
+use tikee_core::MisfirePolicy;
 
 use crate::entities::{app, job, namespace};
 
@@ -62,7 +63,7 @@ impl JobRepository {
     pub async fn list_enabled_scheduled_jobs(&self) -> Result<Vec<JobSummary>, sea_orm::DbErr> {
         let rows = job::Entity::find()
             .filter(job::Column::Enabled.eq(true))
-            .filter(job::Column::ScheduleType.is_in(["cron", "fixed_rate"]))
+            .filter(job::Column::ScheduleType.is_in(["cron", "fixed_rate", "fixed_delay", "once", "daily_time_interval"]))
             .all(&self.db)
             .await?;
 
@@ -98,6 +99,9 @@ impl JobRepository {
             name: Set(input.name),
             schedule_type: Set(input.schedule_type),
             schedule_expr: Set(input.schedule_expr),
+            misfire_policy: Set(normalize_misfire_policy(Some(input.misfire_policy))),
+            schedule_start_at: Set(normalize_processor_name(input.schedule_start_at)),
+            schedule_end_at: Set(normalize_processor_name(input.schedule_end_at)),
             processor_name: Set(processor_name),
             processor_type: Set(processor_type),
             script_id: Set(script_id),
@@ -123,6 +127,9 @@ impl JobRepository {
             name: model.name,
             schedule_type: model.schedule_type,
             schedule_expr: model.schedule_expr,
+            misfire_policy: model.misfire_policy,
+            schedule_start_at: model.schedule_start_at,
+            schedule_end_at: model.schedule_end_at,
             processor_name: model.processor_name,
             processor_type: model.processor_type,
             script_id: model.script_id,
@@ -158,6 +165,15 @@ impl JobRepository {
         }
         if let Some(schedule_expr) = input.schedule_expr {
             active.schedule_expr = Set(schedule_expr);
+        }
+        if let Some(misfire_policy) = input.misfire_policy {
+            active.misfire_policy = Set(normalize_misfire_policy(Some(misfire_policy)));
+        }
+        if let Some(schedule_start_at) = input.schedule_start_at {
+            active.schedule_start_at = Set(normalize_processor_name(schedule_start_at));
+        }
+        if let Some(schedule_end_at) = input.schedule_end_at {
+            active.schedule_end_at = Set(normalize_processor_name(schedule_end_at));
         }
         if let Some(processor_name) = input.processor_name {
             active.processor_name = Set(normalize_processor_name(processor_name));
@@ -233,6 +249,9 @@ impl JobRepository {
         active.name = Set(version.name);
         active.schedule_type = Set(version.schedule_type);
         active.schedule_expr = Set(version.schedule_expr);
+        active.misfire_policy = Set(version.misfire_policy);
+        active.schedule_start_at = Set(version.schedule_start_at);
+        active.schedule_end_at = Set(version.schedule_end_at);
         active.processor_name = Set(version.processor_name);
         active.processor_type = Set(version.processor_type);
         active.script_id = Set(version.script_id);
@@ -291,6 +310,9 @@ impl JobRepository {
                 name: job.name,
                 schedule_type: job.schedule_type,
                 schedule_expr: job.schedule_expr,
+                misfire_policy: job.misfire_policy,
+                schedule_start_at: job.schedule_start_at,
+                schedule_end_at: job.schedule_end_at,
                 processor_name: job.processor_name,
                 processor_type: job.processor_type,
                 script_id: job.script_id,
@@ -368,10 +390,20 @@ fn job_changed(before: &job::Model, active: &job::ActiveModel) -> bool {
     active.name.as_ref() != &before.name
         || active.schedule_type.as_ref() != &before.schedule_type
         || active.schedule_expr.as_ref() != &before.schedule_expr
+        || active.misfire_policy.as_ref() != &before.misfire_policy
+        || active.schedule_start_at.as_ref() != &before.schedule_start_at
+        || active.schedule_end_at.as_ref() != &before.schedule_end_at
         || active.processor_name.as_ref() != &before.processor_name
         || active.processor_type.as_ref() != &before.processor_type
         || active.script_id.as_ref() != &before.script_id
         || active.enabled.as_ref() != &before.enabled
         || active.canary_job_id.as_ref() != &before.canary_job_id
         || active.canary_percent.as_ref() != &before.canary_percent
+}
+
+fn normalize_misfire_policy(value: Option<String>) -> String {
+    value
+        .and_then(|policy| policy.parse::<MisfirePolicy>().ok())
+        .unwrap_or_default()
+        .to_string()
 }

@@ -10,8 +10,8 @@ use axum::{
 };
 use serde::Deserialize;
 use tikee_storage::{
-    AdvanceWorkflowInput, CompleteWorkflowShardInput, CreateWorkflow, RecoverWorkflowNodeInput,
-    UpdateWorkflow, WorkflowDefinition, validate_workflow_definition,
+    AdvanceWorkflowInput, CompleteWorkflowShardInput, CreateWorkflow, RebalanceWorkflowShardsInput,
+    RecoverWorkflowNodeInput, UpdateWorkflow, WorkflowDefinition, validate_workflow_definition,
 };
 use tokio::{sync::mpsc, time};
 use tokio_stream::{Stream, wrappers::ReceiverStream};
@@ -25,6 +25,7 @@ use crate::http::{
         WorkflowDryRunResponse, WorkflowInstanceApiResponse, WorkflowListApiResponse,
         WorkflowMaterializeApiResponse, WorkflowRecoverApiResponse, WorkflowRunRequest,
         WorkflowShardCompleteApiResponse, WorkflowShardListApiResponse,
+        WorkflowShardRebalanceApiResponse,
         WorkflowValidationApiResponse,
     },
     error::ApiError,
@@ -361,6 +362,34 @@ pub async fn recover_workflow_node(
             "node={node_key} action={action} queued={}",
             item.queued_nodes.join(",")
         )),
+        &headers,
+    )
+    .await;
+    Ok(Json(ApiResponse::success(item)))
+}
+
+
+#[utoipa::path(post, path = "/api/v1/workflow-instances/{id}/shards/rebalance", tag = "workflows", request_body = RebalanceWorkflowShardsInput)]
+pub async fn rebalance_workflow_shards(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(request): Json<RebalanceWorkflowShardsInput>,
+) -> Result<Json<WorkflowShardRebalanceApiResponse>, ApiError> {
+    let principal = auth::require_permission(&headers, &state, "workflows", "execute").await?;
+    let item = state
+        .workflows
+        .rebalance_workflow_shards(&id, request)
+        .await
+        .map_err(|error| ApiError::storage(&error))?
+        .ok_or_else(|| ApiError::not_found(format!("workflow instance not found: {id}")))?;
+    audit(
+        &state,
+        &principal.username,
+        "rebalance",
+        "workflow_shards",
+        &id,
+        Some(format!("requeued_shards={}", item.requeued_shards.len())),
         &headers,
     )
     .await;

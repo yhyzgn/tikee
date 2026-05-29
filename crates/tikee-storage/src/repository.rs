@@ -21,6 +21,7 @@ mod plugin;
 mod raft;
 mod scope;
 mod script;
+mod secret;
 mod sdk_api_key;
 mod user;
 pub mod util;
@@ -59,7 +60,10 @@ pub use raft::{
     RecordRaftAppliedCommand, RecordRaftMembershipProposal, UpsertRaftLogEntry, UpsertRaftMember,
     UpsertRaftMetadata, UpsertRaftSnapshot,
 };
-pub use scope::{AppSummary, NamespaceSummary, ScopeRepository, WorkerPoolSummary};
+pub use scope::{
+    AppSummary, NamespaceSummary, ScopeRepository, UpdateWorkerPoolQuota, WorkerPoolSummary,
+};
+pub use secret::{CreateSecret, SecretRepository, SecretSummary};
 pub use script::{
     CreateScript, ScriptReleaseGrantEvidenceSummary, ScriptReleaseSignatureSummary,
     ScriptRepository, ScriptSummary, ScriptVersionRepository, ScriptVersionSummary, UpdateScript,
@@ -73,7 +77,8 @@ pub use worker_lifecycle::{
 };
 pub use workflow::{
     AdvanceWorkflowInput, AdvanceWorkflowResult, CompleteWorkflowShardInput,
-    CompleteWorkflowShardResult, CreateWorkflow, DispatchQueueClaim, DispatchQueueSloSummary,
+    CompleteWorkflowShardResult, CreateWorkflow, RebalanceWorkflowShardsInput,
+    RebalanceWorkflowShardsResult, DispatchQueueClaim, DispatchQueueSloSummary,
     DispatchQueueSummary, InstanceEventSummary, MaterializeWorkflowNodeResult, QueueOverview,
     RecoverWorkflowNodeInput, RecoverWorkflowNodeResult, UpdateWorkflow, WorkflowDefinition,
     WorkflowEdgeSpec, WorkflowInstanceSummary, WorkflowJobResultOutcome,
@@ -83,7 +88,7 @@ pub use workflow::{
 
 #[cfg(test)]
 mod tests {
-    use sea_orm::{ActiveModelTrait, ConnectionTrait, Database, Set, Statement};
+    use sea_orm::{ActiveModelTrait, ColumnTrait, ConnectionTrait, Database, EntityTrait, QueryFilter, Set, Statement};
     use sea_orm_migration::MigratorTrait;
 
     use tikee_core::{ExecutionMode, InstanceStatus, TriggerType};
@@ -99,7 +104,7 @@ mod tests {
         },
     };
 
-    use super::JobRepository;
+    use super::{JobInstanceRepository, JobRepository};
 
     #[tokio::test]
     async fn plugin_repository_resolves_custom_processor_and_alert_channel_types() {
@@ -161,6 +166,9 @@ mod tests {
                 name: "versioned".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
                 processor_name: Some("demo.echo".to_owned()),
                 processor_type: None,
                 script_id: None,
@@ -899,6 +907,9 @@ mod tests {
                 name: "nightly".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
                 processor_name: None,
                 processor_type: None,
                 script_id: None,
@@ -944,6 +955,9 @@ mod tests {
                 name: "manual".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
                 processor_name: None,
                 processor_type: None,
                 script_id: None,
@@ -1003,6 +1017,9 @@ mod tests {
                 name: "manual".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
                 processor_name: None,
                 processor_type: None,
                 script_id: None,
@@ -1165,6 +1182,9 @@ mod tests {
                 name: "first".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
                 processor_name: None,
                 processor_type: None,
                 script_id: None,
@@ -1182,6 +1202,9 @@ mod tests {
                 name: "second".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
                 processor_name: None,
                 processor_type: None,
                 script_id: None,
@@ -1292,6 +1315,9 @@ mod tests {
                 name: "terminal-close".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
                 processor_name: None,
                 processor_type: None,
                 script_id: None,
@@ -1348,6 +1374,9 @@ mod tests {
                 name: "claimable".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
                 processor_name: None,
                 processor_type: None,
                 script_id: None,
@@ -1450,6 +1479,9 @@ mod tests {
                 name: "reduce".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
                 processor_name: None,
                 processor_type: None,
                 script_id: None,
@@ -1522,6 +1554,7 @@ mod tests {
                 super::CompleteWorkflowShardInput {
                     status: "succeeded".to_owned(),
                     output: Some(serde_json::json!({"ok": 1})),
+                    checkpoint: None,
                     message: None,
                 },
             )
@@ -1537,6 +1570,7 @@ mod tests {
                 super::CompleteWorkflowShardInput {
                     status: "succeeded".to_owned(),
                     output: Some(serde_json::json!({"ok": 2})),
+                    checkpoint: None,
                     message: None,
                 },
             )
@@ -1562,6 +1596,197 @@ mod tests {
         assert_eq!(refreshed.nodes[1].status, "queued");
     }
 
+
+
+    #[tokio::test]
+    async fn cancel_job_instance_closes_dispatch_queue() {
+        let db = crate::connect_and_migrate("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("sqlite memory db should connect: {error}"));
+        let jobs = JobRepository::new(db.clone());
+        let instances = JobInstanceRepository::new(db.clone());
+        let workflows = super::WorkflowRepository::new(db);
+        let job = jobs
+            .create_job(CreateJob {
+                created_by: None,
+                namespace: "default".to_owned(),
+                app: "billing".to_owned(),
+                name: "cancel-me".to_owned(),
+                schedule_type: "api".to_owned(),
+                schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
+                processor_name: None,
+                processor_type: None,
+                script_id: None,
+                enabled: true,
+                canary_job_id: None,
+                canary_percent: 0,
+            })
+            .await
+            .unwrap_or_else(|error| panic!("job should create: {error}"));
+        let instance = instances
+            .create_pending(CreateJobInstance {
+                job_id: job.id,
+                trigger_type: TriggerType::Api,
+                execution_mode: ExecutionMode::Single,
+            })
+            .await
+            .unwrap_or_else(|error| panic!("instance should create: {error}"))
+            .unwrap_or_else(|| panic!("job should exist"));
+
+        assert!(workflows.cancel_job_instance(&instance.id).await.unwrap_or_else(|error| panic!("cancel should persist: {error}")));
+        let reloaded = instances
+            .get(&instance.id)
+            .await
+            .unwrap_or_else(|error| panic!("instance should reload: {error}"))
+            .unwrap_or_else(|| panic!("instance should exist"));
+        assert_eq!(reloaded.status, InstanceStatus::Cancelled);
+        let queue = workflows.queue_overview(10).await.unwrap_or_else(|error| panic!("queue overview should load: {error}"));
+        assert_eq!(queue.items[0].status, "cancelled");
+    }
+
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn workflow_map_reduce_writes_reduce_chunks_and_manifest() {
+        let db = crate::connect_and_migrate("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("sqlite memory db should connect: {error}"));
+        let workflows = super::WorkflowRepository::new(db.clone());
+        let workflow = workflows
+            .create_workflow(super::CreateWorkflow {
+                name: "map-reduce-manifest".to_owned(),
+                created_by: "test".to_owned(),
+                definition: super::WorkflowDefinition {
+                    nodes: vec![super::WorkflowNodeSpec {
+                        key: "reduce".to_owned(),
+                        name: None,
+                        kind: Some("map_reduce".to_owned()),
+                        job_id: None,
+                        processor_name: None,
+                        child_workflow_id: None,
+                        map_items: Some(vec![serde_json::json!({"n": 1}), serde_json::json!({"n": 2}), serde_json::json!({"n": 3})]),
+                        config: None,
+                    }],
+                    edges: vec![],
+                },
+            })
+            .await
+            .unwrap_or_else(|error| panic!("workflow should be created: {error}"));
+        let instance = workflows
+            .run_workflow(&workflow.id, "api")
+            .await
+            .unwrap_or_else(|error| panic!("workflow should run: {error}"))
+            .unwrap_or_else(|| panic!("workflow should exist"));
+        let materialized = workflows
+            .materialize_next_queued_node()
+            .await
+            .unwrap_or_else(|error| panic!("map_reduce should materialize: {error}"))
+            .unwrap_or_else(|| panic!("map_reduce queue should exist"));
+        for (index, shard) in materialized.shards.iter().enumerate() {
+            workflows
+                .complete_workflow_shard(
+                    &shard.id,
+                    super::CompleteWorkflowShardInput {
+                        status: "succeeded".to_owned(),
+                        output: Some(serde_json::json!({"ok": index})),
+                        checkpoint: Some(serde_json::json!({"offset": index})),
+                        message: None,
+                    },
+                )
+                .await
+                .unwrap_or_else(|error| panic!("shard should complete: {error}"));
+        }
+        let events = crate::entities::instance_event::Entity::find()
+            .filter(crate::entities::instance_event::Column::InstanceId.eq(instance.id))
+            .all(&db)
+            .await
+            .unwrap_or_else(|error| panic!("events should load: {error}"));
+        assert!(events.iter().any(|event| event.event_type == "workflow.map_reduce.chunk"));
+        let manifest = events
+            .iter()
+            .find(|event| event.event_type == "workflow.map_reduce.manifest")
+            .unwrap_or_else(|| panic!("manifest event should exist"));
+        let payload: serde_json::Value = serde_json::from_str(manifest.payload.as_deref().unwrap_or("{}"))
+            .unwrap_or_else(|error| panic!("manifest payload should parse: {error}"));
+        assert_eq!(payload["totalShards"], 3);
+        assert_eq!(payload["spilled"], true);
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn workflow_failed_shard_rebalance_preserves_checkpoint_and_requeues() {
+        let db = crate::connect_and_migrate("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("sqlite memory db should connect: {error}"));
+        let workflows = super::WorkflowRepository::new(db);
+        let workflow = workflows
+            .create_workflow(super::CreateWorkflow {
+                name: "rebalance-shards".to_owned(),
+                created_by: "test".to_owned(),
+                definition: super::WorkflowDefinition {
+                    nodes: vec![super::WorkflowNodeSpec {
+                        key: "map".to_owned(),
+                        name: None,
+                        kind: Some("map".to_owned()),
+                        job_id: None,
+                        processor_name: None,
+                        child_workflow_id: None,
+                        map_items: Some(vec![serde_json::json!({"n": 1})]),
+                        config: None,
+                    }],
+                    edges: vec![],
+                },
+            })
+            .await
+            .unwrap_or_else(|error| panic!("workflow should be created: {error}"));
+        let instance = workflows
+            .run_workflow(&workflow.id, "api")
+            .await
+            .unwrap_or_else(|error| panic!("workflow should run: {error}"))
+            .unwrap_or_else(|| panic!("workflow should exist"));
+        let materialized = workflows
+            .materialize_next_queued_node()
+            .await
+            .unwrap_or_else(|error| panic!("map should materialize: {error}"))
+            .unwrap_or_else(|| panic!("map queue should exist"));
+        let failed = workflows
+            .complete_workflow_shard(
+                &materialized.shards[0].id,
+                super::CompleteWorkflowShardInput {
+                    status: "failed".to_owned(),
+                    output: Some(serde_json::json!({"error": "boom"})),
+                    checkpoint: Some(serde_json::json!({"offset": 42})),
+                    message: Some("failed with checkpoint".to_owned()),
+                },
+            )
+            .await
+            .unwrap_or_else(|error| panic!("shard should fail: {error}"))
+            .unwrap_or_else(|| panic!("shard should exist"));
+        assert_eq!(failed.shard.checkpoint, Some(serde_json::json!({"offset": 42})));
+
+        let rebalanced = workflows
+            .rebalance_workflow_shards(
+                &instance.id,
+                super::RebalanceWorkflowShardsInput {
+                    node_key: Some("map".to_owned()),
+                    statuses: Some(vec!["failed".to_owned()]),
+                    message: None,
+                },
+            )
+            .await
+            .unwrap_or_else(|error| panic!("shards should rebalance: {error}"))
+            .unwrap_or_else(|| panic!("workflow instance should exist"));
+
+        assert_eq!(rebalanced.requeued_shards.len(), 1);
+        assert_eq!(rebalanced.requeued_shards[0].status, "pending");
+        assert_eq!(rebalanced.requeued_shards[0].retry_count, 1);
+        assert_eq!(rebalanced.requeued_shards[0].checkpoint, Some(serde_json::json!({"offset": 42})));
+        assert!(rebalanced.requeued_shards[0].job_instance_id.is_some());
+    }
+
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn child_workflow_completion_advances_parent_node() {
@@ -1578,6 +1803,9 @@ mod tests {
                 name: "child-job".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
                 processor_name: None,
                 processor_type: None,
                 script_id: None,
@@ -1665,4 +1893,210 @@ mod tests {
         assert_eq!(refreshed.status, "succeeded");
         assert_eq!(refreshed.nodes[0].status, "succeeded");
     }
+
+    #[tokio::test]
+    async fn workflow_condition_node_routes_failure_branch_and_auto_advances() {
+        let db = crate::connect_and_migrate("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("sqlite memory db should connect: {error}"));
+        let jobs = JobRepository::new(db.clone());
+        let workflows = super::WorkflowRepository::new(db);
+        let false_branch_job = jobs
+            .create_job(CreateJob {
+                created_by: None,
+                namespace: "default".to_owned(),
+                app: "billing".to_owned(),
+                name: "false-branch".to_owned(),
+                schedule_type: "api".to_owned(),
+                schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
+                processor_name: None,
+                processor_type: None,
+                script_id: None,
+                enabled: true,
+                canary_job_id: None,
+                canary_percent: 0,
+            })
+            .await
+            .unwrap_or_else(|error| panic!("job should be created: {error}"));
+        let workflow = workflows
+            .create_workflow(super::CreateWorkflow {
+                name: "condition-routing".to_owned(),
+                created_by: "test".to_owned(),
+                definition: super::WorkflowDefinition {
+                    nodes: vec![
+                        super::WorkflowNodeSpec {
+                            key: "gate".to_owned(),
+                            name: None,
+                            kind: Some("condition".to_owned()),
+                            job_id: None,
+                            processor_name: None,
+                            child_workflow_id: None,
+                            map_items: None,
+                            config: Some(serde_json::json!({"expression": "false"})),
+                        },
+                        super::WorkflowNodeSpec {
+                            key: "false-task".to_owned(),
+                            name: None,
+                            kind: Some("job".to_owned()),
+                            job_id: Some(false_branch_job.id),
+                            processor_name: None,
+                            child_workflow_id: None,
+                            map_items: None,
+                            config: None,
+                        },
+                    ],
+                    edges: vec![super::WorkflowEdgeSpec {
+                        from: "gate".to_owned(),
+                        to: "false-task".to_owned(),
+                        condition: Some("on_failure".to_owned()),
+                    }],
+                },
+            })
+            .await
+            .unwrap_or_else(|error| panic!("workflow should be created: {error}"));
+        let instance = workflows
+            .run_workflow(&workflow.id, "api")
+            .await
+            .unwrap_or_else(|error| panic!("workflow should run: {error}"))
+            .unwrap_or_else(|| panic!("workflow should exist"));
+
+        let materialized = workflows
+            .materialize_next_queued_node()
+            .await
+            .unwrap_or_else(|error| panic!("condition should materialize: {error}"))
+            .unwrap_or_else(|| panic!("queued condition should exist"));
+
+        assert_eq!(materialized.node.node_key, "gate");
+        assert_eq!(materialized.node.status, "failed");
+        let refreshed = workflows
+            .get_workflow_instance(&instance.id)
+            .await
+            .unwrap_or_else(|error| panic!("workflow instance should load: {error}"))
+            .unwrap_or_else(|| panic!("workflow instance should exist"));
+        assert_eq!(refreshed.nodes[0].status, "failed");
+        assert_eq!(refreshed.nodes[1].status, "queued");
+    }
+
+
+    #[tokio::test]
+    async fn workflow_compensation_node_auto_advances_after_failure_branch() {
+        let db = crate::connect_and_migrate("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("sqlite memory db should connect: {error}"));
+        let workflows = super::WorkflowRepository::new(db);
+        let workflow = workflows
+            .create_workflow(super::CreateWorkflow {
+                name: "compensation-routing".to_owned(),
+                created_by: "test".to_owned(),
+                definition: super::WorkflowDefinition {
+                    nodes: vec![
+                        super::WorkflowNodeSpec {
+                            key: "gate".to_owned(),
+                            name: None,
+                            kind: Some("condition".to_owned()),
+                            job_id: None,
+                            processor_name: None,
+                            child_workflow_id: None,
+                            map_items: None,
+                            config: Some(serde_json::json!({"expression": "false"})),
+                        },
+                        super::WorkflowNodeSpec {
+                            key: "rollback".to_owned(),
+                            name: None,
+                            kind: Some("compensation".to_owned()),
+                            job_id: None,
+                            processor_name: None,
+                            child_workflow_id: None,
+                            map_items: None,
+                            config: Some(serde_json::json!({"compensates": "gate", "strategy": "saga"})),
+                        },
+                        super::WorkflowNodeSpec {
+                            key: "end".to_owned(),
+                            name: None,
+                            kind: Some("end".to_owned()),
+                            job_id: None,
+                            processor_name: None,
+                            child_workflow_id: None,
+                            map_items: None,
+                            config: None,
+                        },
+                    ],
+                    edges: vec![
+                        super::WorkflowEdgeSpec { from: "gate".to_owned(), to: "rollback".to_owned(), condition: Some("on_failure".to_owned()) },
+                        super::WorkflowEdgeSpec { from: "rollback".to_owned(), to: "end".to_owned(), condition: Some("on_success".to_owned()) },
+                    ],
+                },
+            })
+            .await
+            .unwrap_or_else(|error| panic!("workflow should be created: {error}"));
+        let instance = workflows
+            .run_workflow(&workflow.id, "api")
+            .await
+            .unwrap_or_else(|error| panic!("workflow should run: {error}"))
+            .unwrap_or_else(|| panic!("workflow should exist"));
+
+        workflows
+            .materialize_next_queued_node()
+            .await
+            .unwrap_or_else(|error| panic!("condition should materialize: {error}"));
+        let compensation = workflows
+            .materialize_next_queued_node()
+            .await
+            .unwrap_or_else(|error| panic!("compensation should materialize: {error}"))
+            .unwrap_or_else(|| panic!("compensation should queue"));
+        assert_eq!(compensation.node.node_key, "rollback");
+        assert_eq!(compensation.node.status, "succeeded");
+
+        let refreshed = workflows
+            .get_workflow_instance(&instance.id)
+            .await
+            .unwrap_or_else(|error| panic!("workflow instance should load: {error}"))
+            .unwrap_or_else(|| panic!("workflow instance should exist"));
+        assert_eq!(refreshed.nodes[0].status, "failed");
+        assert_eq!(refreshed.nodes[1].status, "succeeded");
+        assert_eq!(refreshed.nodes[2].status, "queued");
+    }
+
+    #[tokio::test]
+    async fn workflow_delay_node_uses_run_after_before_materializing() {
+        let db = crate::connect_and_migrate("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("sqlite memory db should connect: {error}"));
+        let workflows = super::WorkflowRepository::new(db);
+        let workflow = workflows
+            .create_workflow(super::CreateWorkflow {
+                name: "delay-routing".to_owned(),
+                created_by: "test".to_owned(),
+                definition: super::WorkflowDefinition {
+                    nodes: vec![super::WorkflowNodeSpec {
+                        key: "wait".to_owned(),
+                        name: None,
+                        kind: Some("delay".to_owned()),
+                        job_id: None,
+                        processor_name: None,
+                        child_workflow_id: None,
+                        map_items: None,
+                        config: Some(serde_json::json!({"seconds": 60})),
+                    }],
+                    edges: vec![],
+                },
+            })
+            .await
+            .unwrap_or_else(|error| panic!("workflow should be created: {error}"));
+        workflows
+            .run_workflow(&workflow.id, "api")
+            .await
+            .unwrap_or_else(|error| panic!("workflow should run: {error}"))
+            .unwrap_or_else(|| panic!("workflow should exist"));
+
+        let materialized = workflows
+            .materialize_next_queued_node()
+            .await
+            .unwrap_or_else(|error| panic!("delay claim should not fail: {error}"));
+        assert!(materialized.is_none(), "delay node must wait until run_after");
+    }
+
 }

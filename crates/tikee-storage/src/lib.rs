@@ -22,7 +22,7 @@ pub use repository::{
     AuditLogRepository, AuditLogSummary, AuthSessionRepository, AuthSessionSummary,
     CompleteWorkflowShardInput, CompleteWorkflowShardResult, CreateAlertRule, CreateAuditLog,
     CreateAuthSession, CreateJob, CreateJobInstance, CreateJobInstanceAttempt, CreateOidcAuthState,
-    CreatePlugin, CreateScript, CreateSdkApiKey, CreateUser, CreateWorkflow, DispatchQueueClaim,
+    CreatePlugin, CreateScript, CreateSdkApiKey, CreateSecret, CreateUser, CreateWorkflow, DispatchQueueClaim,
     DispatchQueueSloSummary, DispatchQueueSummary, InstanceEventSummary, JobDurationHistory,
     JobInstanceAttemptRepository, JobInstanceAttemptSummary, JobInstanceLogRepository,
     JobInstanceLogSummary, JobInstanceRepository, JobInstanceSummary, JobRepository, JobSummary,
@@ -32,17 +32,19 @@ pub use repository::{
     PluginSummary, QueueOverview, RaftAppliedCommandSummary, RaftLogEntrySummary,
     RaftMemberSummary, RaftMembershipProposalSummary, RaftMetadataSummary, RaftRepository,
     RaftSnapshotSummary, RbacRepository, RecordAlertDeliveryAttempt, RecordRaftAppliedCommand,
-    RecordRaftMembershipProposal, RecoverWorkflowNodeInput, RecoverWorkflowNodeResult,
-    RegisterWorkerSession, ScopeRepository, ScriptReleaseGrantEvidenceSummary,
+    RecordRaftMembershipProposal, RebalanceWorkflowShardsInput, RebalanceWorkflowShardsResult,
+    RecoverWorkflowNodeInput, RecoverWorkflowNodeResult,
+    RegisterWorkerSession, ScopeRepository, SecretRepository, SecretSummary, ScriptReleaseGrantEvidenceSummary,
     ScriptReleaseSignatureSummary, ScriptRepository, ScriptSummary, ScriptVersionRepository,
     ScriptVersionSummary, SdkApiKeyRepository, SdkApiKeySummary, UpdateJob, UpdatePlugin,
-    UpdateScript, UpdateSdkApiKey, UpdateUser, UpdateWorkflow, UpsertOidcIdentity,
-    UpsertRaftLogEntry, UpsertRaftMember, UpsertRaftMetadata, UpsertRaftSnapshot, UserRepository,
-    UserSummary, VerifiedScriptReleaseGrants, VerifiedScriptReleaseSignature, WorkerHeartbeat,
-    WorkerLifecycleRepository, WorkerPoolSummary, WorkerSessionEventSummary, WorkerSessionSummary,
-    WorkflowDefinition, WorkflowEdgeSpec, WorkflowInstanceSummary, WorkflowJobResultOutcome,
-    WorkflowNodeInstanceSummary, WorkflowNodeSpec, WorkflowRepository, WorkflowShardSummary,
-    WorkflowSloSummary, WorkflowSummary, WorkflowValidationResult, validate_workflow_definition,
+    UpdateScript, UpdateSdkApiKey, UpdateUser, UpdateWorkerPoolQuota, UpdateWorkflow,
+    UpsertOidcIdentity, UpsertRaftLogEntry, UpsertRaftMember, UpsertRaftMetadata,
+    UpsertRaftSnapshot, UserRepository, UserSummary, VerifiedScriptReleaseGrants,
+    VerifiedScriptReleaseSignature, WorkerHeartbeat, WorkerLifecycleRepository, WorkerPoolSummary,
+    WorkerSessionEventSummary, WorkerSessionSummary, WorkflowDefinition, WorkflowEdgeSpec,
+    WorkflowInstanceSummary, WorkflowJobResultOutcome, WorkflowNodeInstanceSummary,
+    WorkflowNodeSpec, WorkflowRepository, WorkflowShardSummary, WorkflowSloSummary,
+    WorkflowSummary, WorkflowValidationResult, validate_workflow_definition,
 };
 pub use sea_orm::DbErr;
 
@@ -143,6 +145,8 @@ async fn ensure_scope_schema_compatibility(db: &DatabaseConnection) -> Result<()
         r"CREATE TABLE IF NOT EXISTS namespaces (
             id varchar NOT NULL PRIMARY KEY,
             name varchar NOT NULL,
+            max_queue_depth integer NOT NULL DEFAULT 0,
+            max_concurrency integer NOT NULL DEFAULT 0,
             created_at varchar NOT NULL,
             updated_at varchar NOT NULL
         )",
@@ -278,6 +282,9 @@ async fn ensure_job_schema_compatibility(db: &DatabaseConnection) -> Result<(), 
             name varchar NOT NULL,
             schedule_type varchar NOT NULL,
             schedule_expr varchar,
+            misfire_policy varchar NOT NULL DEFAULT 'fire_once',
+            schedule_start_at varchar,
+            schedule_end_at varchar,
             processor_name varchar,
             processor_type varchar,
             script_id varchar,
@@ -351,8 +358,8 @@ async fn ensure_workflow_schema_compatibility(
         r"CREATE TABLE IF NOT EXISTS workflow_edges (id varchar NOT NULL PRIMARY KEY, workflow_id varchar NOT NULL, from_node_key varchar NOT NULL, to_node_key varchar NOT NULL, condition varchar NOT NULL, created_at varchar NOT NULL)",
         r"CREATE TABLE IF NOT EXISTS workflow_instances (id varchar NOT NULL PRIMARY KEY, workflow_id varchar NOT NULL, status varchar NOT NULL, trigger_type varchar NOT NULL, created_at varchar NOT NULL, updated_at varchar NOT NULL)",
         r"CREATE TABLE IF NOT EXISTS workflow_node_instances (id varchar NOT NULL PRIMARY KEY, workflow_instance_id varchar NOT NULL, node_key varchar NOT NULL, status varchar NOT NULL, job_instance_id varchar, child_workflow_instance_id varchar, created_at varchar NOT NULL, updated_at varchar NOT NULL)",
-        r"CREATE TABLE IF NOT EXISTS workflow_shards (id varchar NOT NULL PRIMARY KEY, workflow_instance_id varchar NOT NULL, workflow_node_instance_id varchar NOT NULL, node_key varchar NOT NULL, shard_index integer NOT NULL, status varchar NOT NULL, input varchar NOT NULL, output varchar, job_instance_id varchar, created_at varchar NOT NULL, updated_at varchar NOT NULL)",
-        r"CREATE TABLE IF NOT EXISTS dispatch_queue (id varchar NOT NULL PRIMARY KEY, job_instance_id varchar, workflow_node_instance_id varchar, priority integer NOT NULL, run_after varchar NOT NULL, status varchar NOT NULL, attempt integer NOT NULL, lease_owner varchar, lease_until varchar, fencing_token varchar, worker_selector varchar, created_at varchar NOT NULL, updated_at varchar NOT NULL)",
+        r"CREATE TABLE IF NOT EXISTS workflow_shards (id varchar NOT NULL PRIMARY KEY, workflow_instance_id varchar NOT NULL, workflow_node_instance_id varchar NOT NULL, node_key varchar NOT NULL, shard_index integer NOT NULL, status varchar NOT NULL, input varchar NOT NULL, output varchar, checkpoint varchar, retry_count integer NOT NULL DEFAULT 0, job_instance_id varchar, created_at varchar NOT NULL, updated_at varchar NOT NULL)",
+        r"CREATE TABLE IF NOT EXISTS dispatch_queue (id varchar NOT NULL PRIMARY KEY, job_instance_id varchar, workflow_node_instance_id varchar, priority integer NOT NULL, run_after varchar NOT NULL, status varchar NOT NULL, attempt integer NOT NULL, lease_owner varchar, lease_until varchar, fencing_token varchar, worker_selector varchar, namespace varchar, app varchar, worker_pool varchar, created_at varchar NOT NULL, updated_at varchar NOT NULL)",
         r"CREATE TABLE IF NOT EXISTS instance_events (id varchar NOT NULL PRIMARY KEY, instance_id varchar NOT NULL, instance_type varchar NOT NULL, event_type varchar NOT NULL, message varchar NOT NULL, payload varchar, created_at varchar NOT NULL)",
         "CREATE INDEX IF NOT EXISTS idx_workflows_name ON workflows (name)",
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_workflow_nodes_workflow_key ON workflow_nodes (workflow_id, node_key)",
@@ -378,6 +385,20 @@ async fn ensure_workflow_schema_compatibility(
         db.execute(Statement::from_string(
             DatabaseBackend::Sqlite,
             "ALTER TABLE workflow_shards ADD COLUMN job_instance_id varchar",
+        ))
+        .await?;
+    }
+    if !sqlite_column_exists(db, "workflow_shards", "checkpoint").await? {
+        db.execute(Statement::from_string(
+            DatabaseBackend::Sqlite,
+            "ALTER TABLE workflow_shards ADD COLUMN checkpoint varchar",
+        ))
+        .await?;
+    }
+    if !sqlite_column_exists(db, "workflow_shards", "retry_count").await? {
+        db.execute(Statement::from_string(
+            DatabaseBackend::Sqlite,
+            "ALTER TABLE workflow_shards ADD COLUMN retry_count integer NOT NULL DEFAULT 0",
         ))
         .await?;
     }
@@ -1115,6 +1136,9 @@ async fn remove_sqlite_foreign_keys(db: &DatabaseConnection) -> Result<(), sea_o
             name varchar NOT NULL,
             schedule_type varchar NOT NULL,
             schedule_expr varchar,
+            misfire_policy varchar NOT NULL DEFAULT 'fire_once',
+            schedule_start_at varchar,
+            schedule_end_at varchar,
             processor_name varchar,
             processor_type varchar,
             script_id varchar,

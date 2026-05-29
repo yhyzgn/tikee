@@ -13,6 +13,12 @@ pub struct CreateJob {
     pub schedule_type: String,
     /// Optional schedule expression.
     pub schedule_expr: Option<String>,
+    /// Misfire policy for automatic schedules.
+    pub misfire_policy: String,
+    /// Optional inclusive schedule start timestamp.
+    pub schedule_start_at: Option<String>,
+    /// Optional exclusive schedule end timestamp.
+    pub schedule_end_at: Option<String>,
     /// Optional SDK worker processor binding. When absent, dispatch falls back to job name.
     pub processor_name: Option<String>,
     /// Optional custom plugin processor type.
@@ -38,6 +44,12 @@ pub struct UpdateJob {
     pub schedule_type: Option<String>,
     /// Optional schedule expression. Outer `None` leaves unchanged; inner `None` clears it.
     pub schedule_expr: Option<Option<String>>,
+    /// Optional misfire policy.
+    pub misfire_policy: Option<String>,
+    /// Optional start timestamp update. Outer `None` leaves unchanged; inner `None` clears it.
+    pub schedule_start_at: Option<Option<String>>,
+    /// Optional end timestamp update. Outer `None` leaves unchanged; inner `None` clears it.
+    pub schedule_end_at: Option<Option<String>>,
     /// Optional SDK worker processor binding. Outer `None` leaves unchanged; inner `None` clears it.
     pub processor_name: Option<Option<String>>,
     /// Optional custom plugin processor type.
@@ -69,6 +81,12 @@ pub struct JobSummary {
     pub schedule_type: String,
     /// Optional schedule expression.
     pub schedule_expr: Option<String>,
+    /// Misfire policy for automatic schedules.
+    pub misfire_policy: String,
+    /// Optional inclusive schedule start timestamp.
+    pub schedule_start_at: Option<String>,
+    /// Optional exclusive schedule end timestamp.
+    pub schedule_end_at: Option<String>,
     /// Optional SDK worker processor binding.
     pub processor_name: Option<String>,
     /// Optional custom plugin processor type.

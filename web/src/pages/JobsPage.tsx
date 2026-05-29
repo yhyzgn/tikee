@@ -3,7 +3,7 @@ import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { createJob, deleteJob, getJobSchedulingAdvice, listJobs, listJobVersions, listPlugins, listScripts, listWorkers, rollbackJob, triggerJob, updateJob, type CreateJobRequest, type JobSchedulingAdvice, type JobSummary, type PluginSummary, type JobVersionSummary, type ScriptSummary, type UpdateJobRequest, type WorkerSummary } from '../api/client';
+import { createJob, deleteJob, getJobSchedulingAdvice, listJobs, listJobVersions, listPlugins, listScripts, listWorkers, rollbackJob, triggerJob, updateJob, type BroadcastSelectorRequest, type CreateJobRequest, type JobSchedulingAdvice, type JobSummary, type PluginSummary, type JobVersionSummary, type ScriptSummary, type UpdateJobRequest, type WorkerSummary } from '../api/client';
 import { PermissionGate, useCan } from '../components/Permission';
 import { ROUTE_META } from '../routes';
 import { useUrlQueryState } from '../hooks/useUrlQueryState';
@@ -21,8 +21,9 @@ export function JobsPage() {
   const [plugins, setPlugins] = useState<PluginSummary[]>([]);
   const [workers, setWorkers] = useState<WorkerSummary[]>([]);
   const [loading, setLoading] = useState(false);
-  const [form] = Form.useForm<CreateJobRequest & { executorKind?: 'sdk' | 'script' | 'plugin'; fixedRateValue?: number; fixedRateUnit?: string }>();
-  const [editForm] = Form.useForm<UpdateJobRequest & { executorKind?: 'sdk' | 'script' | 'plugin'; fixedRateValue?: number; fixedRateUnit?: string }>();
+  const [form] = Form.useForm<CreateJobRequest & { executorKind?: 'sdk' | 'script' | 'plugin'; fixedRateValue?: number; fixedRateUnit?: string; fixedRateJitterValue?: number; fixedRateJitterUnit?: string }>();
+  const [editForm] = Form.useForm<UpdateJobRequest & { executorKind?: 'sdk' | 'script' | 'plugin'; fixedRateValue?: number; fixedRateUnit?: string; fixedRateJitterValue?: number; fixedRateJitterUnit?: string }>();
+  const [broadcastForm] = Form.useForm<{ tags?: string[]; region?: string; cluster?: string; labelsText?: string }>();
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<JobSummary | null>(null);
   const [versionJob, setVersionJob] = useState<JobSummary | null>(null);
@@ -31,8 +32,19 @@ export function JobsPage() {
   const [adviceJob, setAdviceJob] = useState<JobSummary | null>(null);
   const [schedulingAdvice, setSchedulingAdvice] = useState<JobSchedulingAdvice | null>(null);
   const [adviceLoading, setAdviceLoading] = useState(false);
+  const [broadcastJob, setBroadcastJob] = useState<JobSummary | null>(null);
   const [createProcessorSearch, setCreateProcessorSearch] = useState('');
   const [editProcessorSearch, setEditProcessorSearch] = useState('');
+
+  const scheduleTypeOptions = [
+    { value: 'api', label: 'API 手动触发' },
+    { value: 'cron', label: 'Cron 定时' },
+    { value: 'fixed_rate', label: '固定频率' },
+    { value: 'fixed_delay', label: '固定延迟' },
+    { value: 'once', label: '一次性未来任务' },
+    { value: 'daily_time_interval', label: 'Daily Time Interval' },
+  ];
+  const scheduleFilterOptions = scheduleTypeOptions.map((option) => ({ value: option.value, label: option.label }));
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -100,20 +112,34 @@ export function JobsPage() {
   const scriptOptions = scripts
     .filter((script) => script.status === 'approved')
     .map((script) => ({ value: script.id, label: `${script.name} · ${script.language} · ${script.id}` }));
-  const fixedRateExpr = (value?: number | null, unit?: string | null) => value ? `${value}${unit || 's'}` : null;
+  const durationExpr = (value?: number | null, unit?: string | null) => value ? `${value}${unit || 's'}` : null;
+  const fixedRateExpr = durationExpr;
   const parseFixedRate = (expr?: string | null) => {
-    const match = String(expr ?? '').trim().match(/^(\d+(?:\.\d+)?)(ns|us|ms|s|m|h|d|w|month|year)$/);
-    return match ? { fixedRateValue: Number(match[1]), fixedRateUnit: match[2] } : { fixedRateValue: undefined, fixedRateUnit: 's' };
+    const [interval, ...options] = String(expr ?? '').trim().split(';').map((item) => item.trim()).filter(Boolean);
+    const match = interval.match(/^(\d+(?:\.\d+)?)(ns|us|ms|s|m|h|d|w|month|year)$/);
+    const jitterOption = options.find((item) => item.startsWith('jitter='))?.slice('jitter='.length) ?? '';
+    const jitterMatch = jitterOption.match(/^(\d+(?:\.\d+)?)(ns|us|ms|s|m|h|d|w|month|year)$/);
+    return {
+      fixedRateValue: match ? Number(match[1]) : undefined,
+      fixedRateUnit: match?.[2] ?? 's',
+      fixedRateJitterValue: jitterMatch ? Number(jitterMatch[1]) : undefined,
+      fixedRateJitterUnit: jitterMatch?.[2] ?? 's',
+    };
   };
-  const normalizeSchedule = <T extends { scheduleType?: string; scheduleExpr?: string | null; fixedRateValue?: number; fixedRateUnit?: string }>(values: T) => {
+  const normalizeSchedule = <T extends { scheduleType?: string; scheduleExpr?: string | null; fixedRateValue?: number; fixedRateUnit?: string; fixedRateJitterValue?: number; fixedRateJitterUnit?: string }>(values: T) => {
     if (values.scheduleType === 'api') return { ...values, scheduleExpr: null };
-    if (values.scheduleType === 'fixed_rate') return { ...values, scheduleExpr: fixedRateExpr(values.fixedRateValue, values.fixedRateUnit) };
+    if (values.scheduleType === 'fixed_rate') {
+      const interval = durationExpr(values.fixedRateValue, values.fixedRateUnit);
+      const jitter = durationExpr(values.fixedRateJitterValue, values.fixedRateJitterUnit);
+      return { ...values, scheduleExpr: jitter ? `${interval};jitter=${jitter}` : interval };
+    }
+    if (values.scheduleType === 'fixed_delay') return { ...values, scheduleExpr: durationExpr(values.fixedRateValue, values.fixedRateUnit) };
     return values;
   };
   const openCreateDrawer = () => {
     form.resetFields();
     setCreateProcessorSearch('');
-    form.setFieldsValue({ namespace: 'default', app: 'default', scheduleType: 'api', enabled: true, fixedRateUnit: 's', executorKind: 'sdk', canaryPercent: 0 });
+    form.setFieldsValue({ namespace: 'default', app: 'default', scheduleType: 'api', enabled: true, fixedRateUnit: 's', fixedRateJitterUnit: 's', executorKind: 'sdk', canaryPercent: 0, misfirePolicy: 'fire_once' });
     setCreateDrawerOpen(true);
   };
 
@@ -124,8 +150,11 @@ export function JobsPage() {
     editForm.setFieldsValue({
       name: job.name,
       scheduleType: job.scheduleType,
-      scheduleExpr: job.scheduleType === 'cron' ? job.scheduleExpr : undefined,
+      scheduleExpr: ['cron', 'once', 'daily_time_interval'].includes(job.scheduleType) ? job.scheduleExpr : undefined,
       ...fixedRate,
+      misfirePolicy: job.misfirePolicy ?? 'fire_once',
+      scheduleStartAt: job.scheduleStartAt ?? undefined,
+      scheduleEndAt: job.scheduleEndAt ?? undefined,
       executorKind: job.scriptId ? 'script' : job.processorType ? 'plugin' : 'sdk',
       processorName: job.processorName ?? undefined,
       processorType: job.processorType ?? undefined,
@@ -134,6 +163,36 @@ export function JobsPage() {
       canaryPercent: job.canaryPercent ?? 0,
       enabled: job.enabled,
     });
+  };
+
+  const parseBroadcastLabels = (labelsText?: string): Record<string, string> => {
+    const labels: Record<string, string> = {};
+    for (const item of String(labelsText ?? '').split(',').map((part) => part.trim()).filter(Boolean)) {
+      const [key, ...rest] = item.split('=');
+      const value = rest.join('=').trim();
+      if (key?.trim() && value) labels[key.trim()] = value;
+    }
+    return labels;
+  };
+
+  const openBroadcastDrawer = (job: JobSummary) => {
+    setBroadcastJob(job);
+    broadcastForm.resetFields();
+  };
+
+  const handleBroadcastSubmit = async (values: { tags?: string[]; region?: string; cluster?: string; labelsText?: string }) => {
+    if (!broadcastJob) return;
+    const selector: BroadcastSelectorRequest = {
+      tags: values.tags?.map((tag) => tag.trim()).filter(Boolean),
+      region: values.region?.trim() || undefined,
+      cluster: values.cluster?.trim() || undefined,
+      labels: parseBroadcastLabels(values.labelsText),
+    };
+    if (selector.labels && Object.keys(selector.labels).length === 0) delete selector.labels;
+    const instance = await triggerJob(broadcastJob.id, { triggerType: 'api', executionMode: 'broadcast', broadcastSelector: selector });
+    message.success(instance.canaryRouting?.routed ? `已广播触发 ${broadcastJob.name}，命中灰度 ${instance.canaryRouting.routedJobId}` : `已广播触发 ${broadcastJob.name}`);
+    setBroadcastJob(null);
+    await load();
   };
 
   const validatePluginExecutor = (processorType?: string | null, processorName?: string | null) => {
@@ -295,19 +354,7 @@ export function JobsPage() {
             </Button>
           ) : null}
           {canExecuteInstances ? (
-            <Button
-              size="small"
-              type="link"
-              onClick={async () => {
-                try {
-                  const instance = await triggerJob(job.id, { triggerType: 'api', executionMode: 'broadcast' });
-                  message.success(instance.canaryRouting?.routed ? `已广播触发 ${job.name}，命中灰度 ${instance.canaryRouting.routedJobId}` : `已广播触发 ${job.name}`);
-                  await load();
-                } catch (err) {
-                  message.error(err instanceof Error ? err.message : '触发失败');
-                }
-              }}
-            >
+            <Button size="small" type="link" onClick={() => openBroadcastDrawer(job)}>
               广播
             </Button>
           ) : null}
@@ -339,7 +386,7 @@ export function JobsPage() {
         <Form
           form={form}
           layout="vertical"
-          initialValues={{ namespace: 'default', app: 'default', scheduleType: 'api', enabled: true, canaryPercent: 0 }}
+          initialValues={{ namespace: 'default', app: 'default', scheduleType: 'api', enabled: true, canaryPercent: 0, misfirePolicy: 'fire_once' }}
           onFinish={async (values) => {
             if (!canWriteJobs) { message.error('当前账号无权限创建任务'); return; }
             try {
@@ -370,15 +417,21 @@ export function JobsPage() {
               <Form.Item name="processorName" label="SDK Processor" extra="只能选择普通 SDK processor；候选来自 Worker 注册的结构化 sdkProcessors。Java demo/Spring Worker 通过 @TikeeProcessor 注册，例如 demo.echo。" rules={[{ validator: (_, value) => isScriptCapability(value) ? Promise.reject(new Error('SDK Processor 不能选择脚本执行器')) : Promise.resolve() }]}><Select allowClear showSearch placeholder="输入或选择 SDK Processor" options={sdkProcessorOptions(createProcessorSearch, form.getFieldValue('processorName'))} filterOption={(input, option) => String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())} onSearch={setCreateProcessorSearch} onChange={(value) => setCreateProcessorSearch(String(value ?? ''))} /></Form.Item>
             )}
           </Form.Item>
-          <Form.Item name="scheduleType" label="调度类型"><Select options={[{ value: 'api', label: 'API 手动触发' }, { value: 'cron', label: 'Cron 定时' }, { value: 'fixed_rate', label: '固定频率' }]} /></Form.Item>
+          <Form.Item name="scheduleType" label="调度类型"><Select options={scheduleTypeOptions} /></Form.Item>
           <Form.Item noStyle shouldUpdate={(prev, next) => prev.scheduleType !== next.scheduleType}>
             {({ getFieldValue }) => {
               const scheduleType = getFieldValue('scheduleType');
-              if (scheduleType === 'cron') return <Form.Item name="scheduleExpr" label="Cron 表达式" rules={[{ required: true, message: '请输入 Cron 表达式' }]}><Input placeholder="0/30 * * * * * *" /></Form.Item>;
-              if (scheduleType === 'fixed_rate') return <Space.Compact block><Form.Item name="fixedRateValue" label="固定频率" rules={[{ required: true, message: '请输入频率' }]} style={{ flex: 1 }}><InputNumber min={1} precision={0} style={{ width: '100%' }} placeholder="30" /></Form.Item><Form.Item name="fixedRateUnit" label="单位" rules={[{ required: true }]}><Select style={{ width: 120 }} options={[{ value: 's', label: '秒' }, { value: 'm', label: '分钟' }, { value: 'h', label: '小时' }, { value: 'd', label: '天' }]} /></Form.Item></Space.Compact>;
+              if (scheduleType === 'cron') return <Form.Item name="scheduleExpr" label="Cron 表达式" extra="支持 ;tz=IANA 时区 和 ;exclude=YYYY-MM-DD,...，例如 0 30 9 * * * *;tz=Asia/Shanghai;exclude=2026-10-01。" rules={[{ required: true, message: '请输入 Cron 表达式' }]}><Input placeholder="0/30 * * * * * *;tz=Asia/Shanghai" /></Form.Item>;
+              if (scheduleType === 'fixed_rate' || scheduleType === 'fixed_delay') return <><Space.Compact block><Form.Item name="fixedRateValue" label={scheduleType === 'fixed_delay' ? '固定延迟' : '固定频率'} rules={[{ required: true, message: '请输入间隔' }]} style={{ flex: 1 }}><InputNumber min={1} precision={0} style={{ width: '100%' }} placeholder="30" /></Form.Item><Form.Item name="fixedRateUnit" label="单位" rules={[{ required: true }]}><Select style={{ width: 120 }} options={[{ value: 's', label: '秒' }, { value: 'm', label: '分钟' }, { value: 'h', label: '小时' }, { value: 'd', label: '天' }]} /></Form.Item></Space.Compact>{scheduleType === 'fixed_rate' ? <Space.Compact block><Form.Item name="fixedRateJitterValue" label="Jitter 抖动" extra="可选：用于分散同频任务触发，防止惊群。" style={{ flex: 1 }}><InputNumber min={0} precision={0} style={{ width: '100%' }} placeholder="5" /></Form.Item><Form.Item name="fixedRateJitterUnit" label="单位"><Select style={{ width: 120 }} options={[{ value: 's', label: '秒' }, { value: 'm', label: '分钟' }, { value: 'h', label: '小时' }]} /></Form.Item></Space.Compact> : null}</>;
+              if (scheduleType === 'once') return <Form.Item name="scheduleExpr" label="触发时间" rules={[{ required: true, message: '请输入 RFC3339 时间' }]}><Input placeholder="2026-05-29T20:00:00+08:00" /></Form.Item>;
+              if (scheduleType === 'daily_time_interval') return <Form.Item name="scheduleExpr" label="Daily Time Interval" extra="格式：HH:MM-HH:MM/间隔@时区，例如 09:00-18:00/30m@Asia/Shanghai。" rules={[{ required: true, message: '请输入 Daily Time Interval 表达式' }]}><Input placeholder="09:00-18:00/30m@Asia/Shanghai" /></Form.Item>;
               return <Typography.Paragraph type="secondary">API 手动触发任务不会配置调度表达式，可通过 UI、SDK 或 HTTP API 显式触发。</Typography.Paragraph>;
             }}
           </Form.Item>
+          <Form.Item name="misfirePolicy" label="Misfire 策略"><Select options={[{ value: 'fire_once', label: '补触发一次' }, { value: 'do_nothing', label: '跳过错过触发' }, { value: 'catch_up_limited', label: '有限追赶' }, { value: 'reschedule', label: '重排到当前' }, { value: 'latest_only', label: '仅保留最近一次' }]} /></Form.Item>
+          <Space.Compact block><Form.Item name="scheduleStartAt" label="生命周期开始" style={{ flex: 1 }}><Input allowClear placeholder="可选 RFC3339" /></Form.Item><Form.Item name="scheduleEndAt" label="生命周期结束" style={{ flex: 1 }}><Input allowClear placeholder="可选 RFC3339" /></Form.Item></Space.Compact>
+          <Form.Item name="misfirePolicy" label="Misfire 策略"><Select options={[{ value: 'fire_once', label: '补触发一次' }, { value: 'do_nothing', label: '跳过错过触发' }, { value: 'catch_up_limited', label: '有限追赶' }, { value: 'reschedule', label: '重排到当前' }, { value: 'latest_only', label: '仅保留最近一次' }]} /></Form.Item>
+          <Space.Compact block><Form.Item name="scheduleStartAt" label="生命周期开始" style={{ flex: 1 }}><Input allowClear placeholder="可选 RFC3339" /></Form.Item><Form.Item name="scheduleEndAt" label="生命周期结束" style={{ flex: 1 }}><Input allowClear placeholder="可选 RFC3339" /></Form.Item></Space.Compact>
           <Form.Item name="canaryJobId" label="灰度目标任务" extra="可选：显式触发当前任务时，按灰度比例路由到目标任务。"><Select allowClear showSearch optionFilterProp="label" placeholder="选择同 App 下的 canary 任务" options={jobs.map((item) => ({ value: item.id, label: `${item.name} · ${item.id}` }))} /></Form.Item>
           <Form.Item name="canaryPercent" label="灰度比例"><InputNumber min={0} max={100} precision={0} addonAfter="%" style={{ width: '100%' }} /></Form.Item>
           <Form.Item name="enabled" label="启用" valuePropName="checked"><Switch /></Form.Item>
@@ -407,12 +460,14 @@ export function JobsPage() {
               <Form.Item name="processorName" label="SDK Processor" extra="只能选择普通 SDK processor；候选来自 Worker 注册的结构化 sdkProcessors。Java demo/Spring Worker 通过 @TikeeProcessor 注册，例如 demo.echo。" rules={[{ validator: (_, value) => isScriptCapability(value) ? Promise.reject(new Error('SDK Processor 不能选择脚本执行器')) : Promise.resolve() }]}><Select allowClear showSearch placeholder="输入或选择 SDK Processor" options={sdkProcessorOptions(editProcessorSearch, editForm.getFieldValue('processorName'))} filterOption={(input, option) => String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())} onSearch={setEditProcessorSearch} onChange={(value) => setEditProcessorSearch(String(value ?? ''))} /></Form.Item>
             )}
           </Form.Item>
-          <Form.Item name="scheduleType" label="调度类型"><Select options={[{ value: 'api', label: 'API 手动触发' }, { value: 'cron', label: 'Cron 定时' }, { value: 'fixed_rate', label: '固定频率' }]} /></Form.Item>
+          <Form.Item name="scheduleType" label="调度类型"><Select options={scheduleTypeOptions} /></Form.Item>
           <Form.Item noStyle shouldUpdate={(prev, next) => prev.scheduleType !== next.scheduleType}>
             {({ getFieldValue }) => {
               const scheduleType = getFieldValue('scheduleType');
-              if (scheduleType === 'cron') return <Form.Item name="scheduleExpr" label="Cron 表达式" rules={[{ required: true, message: '请输入 Cron 表达式' }]}><Input placeholder="0/30 * * * * * *" /></Form.Item>;
-              if (scheduleType === 'fixed_rate') return <Space.Compact block><Form.Item name="fixedRateValue" label="固定频率" rules={[{ required: true, message: '请输入频率' }]} style={{ flex: 1 }}><InputNumber min={1} precision={0} style={{ width: '100%' }} placeholder="30" /></Form.Item><Form.Item name="fixedRateUnit" label="单位" rules={[{ required: true }]}><Select style={{ width: 120 }} options={[{ value: 's', label: '秒' }, { value: 'm', label: '分钟' }, { value: 'h', label: '小时' }, { value: 'd', label: '天' }]} /></Form.Item></Space.Compact>;
+              if (scheduleType === 'cron') return <Form.Item name="scheduleExpr" label="Cron 表达式" extra="支持 ;tz=IANA 时区 和 ;exclude=YYYY-MM-DD,...，例如 0 30 9 * * * *;tz=Asia/Shanghai;exclude=2026-10-01。" rules={[{ required: true, message: '请输入 Cron 表达式' }]}><Input placeholder="0/30 * * * * * *;tz=Asia/Shanghai" /></Form.Item>;
+              if (scheduleType === 'fixed_rate' || scheduleType === 'fixed_delay') return <><Space.Compact block><Form.Item name="fixedRateValue" label={scheduleType === 'fixed_delay' ? '固定延迟' : '固定频率'} rules={[{ required: true, message: '请输入间隔' }]} style={{ flex: 1 }}><InputNumber min={1} precision={0} style={{ width: '100%' }} placeholder="30" /></Form.Item><Form.Item name="fixedRateUnit" label="单位" rules={[{ required: true }]}><Select style={{ width: 120 }} options={[{ value: 's', label: '秒' }, { value: 'm', label: '分钟' }, { value: 'h', label: '小时' }, { value: 'd', label: '天' }]} /></Form.Item></Space.Compact>{scheduleType === 'fixed_rate' ? <Space.Compact block><Form.Item name="fixedRateJitterValue" label="Jitter 抖动" extra="可选：用于分散同频任务触发，防止惊群。" style={{ flex: 1 }}><InputNumber min={0} precision={0} style={{ width: '100%' }} placeholder="5" /></Form.Item><Form.Item name="fixedRateJitterUnit" label="单位"><Select style={{ width: 120 }} options={[{ value: 's', label: '秒' }, { value: 'm', label: '分钟' }, { value: 'h', label: '小时' }]} /></Form.Item></Space.Compact> : null}</>;
+              if (scheduleType === 'once') return <Form.Item name="scheduleExpr" label="触发时间" rules={[{ required: true, message: '请输入 RFC3339 时间' }]}><Input placeholder="2026-05-29T20:00:00+08:00" /></Form.Item>;
+              if (scheduleType === 'daily_time_interval') return <Form.Item name="scheduleExpr" label="Daily Time Interval" extra="格式：HH:MM-HH:MM/间隔@时区，例如 09:00-18:00/30m@Asia/Shanghai。" rules={[{ required: true, message: '请输入 Daily Time Interval 表达式' }]}><Input placeholder="09:00-18:00/30m@Asia/Shanghai" /></Form.Item>;
               return <Typography.Paragraph type="secondary">API 手动触发任务不会配置调度表达式，可通过 UI、SDK 或 HTTP API 显式触发。</Typography.Paragraph>;
             }}
           </Form.Item>
@@ -423,6 +478,24 @@ export function JobsPage() {
         </Form>
       </Drawer>
 
+
+
+      <Drawer
+        title={broadcastJob ? `广播触发 - ${broadcastJob.name}` : '广播触发'}
+        open={broadcastJob !== null}
+        onClose={() => { setBroadcastJob(null); broadcastForm.resetFields(); }}
+        width={520}
+        destroyOnClose
+      >
+        <Typography.Paragraph type="secondary">可选填写 Worker 筛选条件；不填写时广播到当前 Namespace/App 下全部在线可调度 Worker。</Typography.Paragraph>
+        <Form form={broadcastForm} layout="vertical" onFinish={(values) => void handleBroadcastSubmit(values)}>
+          <Form.Item name="tags" label="Worker Tags" extra="匹配 Worker structuredCapabilities.tags，可输入多个。"><Select mode="tags" tokenSeparators={[',']} placeholder="java,blue" /></Form.Item>
+          <Form.Item name="region" label="Region"><Input allowClear placeholder="cn / us-east-1" /></Form.Item>
+          <Form.Item name="cluster" label="Cluster / Version"><Input allowClear placeholder="prod / v2" /></Form.Item>
+          <Form.Item name="labelsText" label="Labels" extra="逗号分隔 key=value，例如 tier=gold,runtime=java。"><Input allowClear placeholder="tier=gold,runtime=java" /></Form.Item>
+          <Button type="primary" htmlType="submit" block>按条件广播触发</Button>
+        </Form>
+      </Drawer>
 
       <Drawer
         title={versionJob ? `版本历史 - ${versionJob.name}` : '版本历史'}
@@ -523,7 +596,7 @@ export function JobsPage() {
       <Card
         className="clean-card"
         title="任务列表"
-        extra={<Space wrap className="card-toolbar"><Button onClick={() => navigate(ROUTE_META.jobTopology.path)}>任务拓扑</Button><PermissionGate resource="jobs" action="write"><Button type="primary" onClick={openCreateDrawer}>新建任务</Button></PermissionGate><Input allowClear placeholder="搜索任务/Namespace/App" value={String(query.keyword ?? '')} onChange={(event) => setQuery({ keyword: event.target.value, page: 1 })} style={{ width: 220 }} /><Select allowClear placeholder="调度类型" value={query.scheduleType || undefined} onChange={(value) => setQuery({ scheduleType: value ?? '', page: 1 })} style={{ width: 130 }} options={[{ value: 'api' }, { value: 'cron' }, { value: 'fixed_rate' }]} /><Button onClick={load}>刷新</Button></Space>}
+        extra={<Space wrap className="card-toolbar"><Button onClick={() => navigate(ROUTE_META.jobTopology.path)}>任务拓扑</Button><PermissionGate resource="jobs" action="write"><Button type="primary" onClick={openCreateDrawer}>新建任务</Button></PermissionGate><Input allowClear placeholder="搜索任务/Namespace/App" value={String(query.keyword ?? '')} onChange={(event) => setQuery({ keyword: event.target.value, page: 1 })} style={{ width: 220 }} /><Select allowClear placeholder="调度类型" value={query.scheduleType || undefined} onChange={(value) => setQuery({ scheduleType: value ?? '', page: 1 })} style={{ width: 130 }} options={scheduleFilterOptions} /><Button onClick={load}>刷新</Button></Space>}
       >
         <Table rowKey="id" loading={loading} columns={columns} dataSource={filteredJobs} pagination={{ pageSize: Number(query.page_size) || pageSize, current: Number(query.page) || 1, showSizeChanger: true, pageSizeOptions: TABLE_PAGE_SIZE_OPTIONS.map(String), onChange: (page, nextPageSize) => { setPageSize(nextPageSize); setQuery({ page, page_size: nextPageSize }); } }} size="middle" />
       </Card>

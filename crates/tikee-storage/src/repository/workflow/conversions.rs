@@ -99,6 +99,9 @@ where
         name: Set(format!("workflow node {job_id}")),
         schedule_type: Set("api".to_owned()),
         schedule_expr: Set(None),
+        misfire_policy: Set("fire_once".to_owned()),
+        schedule_start_at: Set(None),
+        schedule_end_at: Set(None),
         processor_name: Set(Some(job_id.to_owned())),
         processor_type: Set(None),
         script_id: Set(None),
@@ -126,6 +129,10 @@ impl From<workflow_shard::Model> for WorkflowShardSummary {
             output: model
                 .output
                 .and_then(|value| serde_json::from_str(&value).ok()),
+            checkpoint: model
+                .checkpoint
+                .and_then(|value| serde_json::from_str(&value).ok()),
+            retry_count: model.retry_count,
             job_instance_id: model.job_instance_id,
             created_at: model.created_at,
             updated_at: model.updated_at,
@@ -191,7 +198,7 @@ pub(super) fn normalize_terminal_status(status: &str) -> Result<String, sea_orm:
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum DispatchQueueClaimKind {
     Any,
     WorkflowNode,

@@ -28,10 +28,7 @@ public enum ScriptSandboxBackend {
         if (this != AUTO) {
             return this;
         }
-        return switch (kind) {
-            case JS, TS -> DENO;
-            case SHELL, PYTHON, POWERSHELL, RHAI -> SRT;
-        };
+        return WASMTIME;
     }
 
     public static ScriptSandboxBackend fromValue(String value) {

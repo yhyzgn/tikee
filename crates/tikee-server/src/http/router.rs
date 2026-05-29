@@ -238,6 +238,10 @@ pub(super) fn api_router() -> Router<Arc<AppState>> {
             get(routes::list_workflow_shards),
         )
         .route(
+            "/workflow-instances/{id}/shards/rebalance",
+            axum::routing::post(routes::rebalance_workflow_shards),
+        )
+        .route(
             "/workflow-shards/{id}/complete",
             axum::routing::post(routes::complete_workflow_shard),
         )
@@ -257,8 +261,10 @@ pub(super) fn api_router() -> Router<Arc<AppState>> {
             "/namespaces/{id}",
             axum::routing::delete(routes::delete_namespace),
         )
-        .route("/apps", get(routes::list_apps).post(routes::create_app))
+         .route("/apps", get(routes::list_apps).post(routes::create_app))
         .route("/apps/{id}", axum::routing::delete(routes::delete_app))
+        .route("/secrets", get(routes::list_secrets).post(routes::create_secret))
+        .route("/secrets/{id}", axum::routing::delete(routes::delete_secret))
         .route(
             "/worker-pools",
             get(routes::list_worker_pools).post(routes::create_worker_pool),
@@ -266,6 +272,10 @@ pub(super) fn api_router() -> Router<Arc<AppState>> {
         .route(
             "/worker-pools/{id}",
             axum::routing::delete(routes::delete_worker_pool),
+        )
+        .route(
+            "/worker-pools/{id}/quota",
+            axum::routing::patch(routes::update_worker_pool_quota),
         )
         .route("/jobs", get(routes::list_jobs).post(routes::create_job))
         .route("/jobs/topology", get(routes::job_topology))
@@ -287,6 +297,10 @@ pub(super) fn api_router() -> Router<Arc<AppState>> {
         )
         .route("/jobs/{job}/instances", get(routes::list_job_instances))
         .route("/instances/{instance}", get(routes::get_job_instance))
+        .route(
+            "/instances/{instance}/cancel",
+            axum::routing::post(routes::cancel_job_instance),
+        )
         .route(
             "/instances/{instance}/logs",
             get(routes::list_instance_logs),

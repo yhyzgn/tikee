@@ -1,7 +1,7 @@
 //! In-memory Worker Tunnel connection registry.
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::Arc,
     time::{Duration, SystemTime},
 };
@@ -24,6 +24,20 @@ const DEFAULT_LEASE_SECONDS: u64 = 30;
 pub struct WorkerRegistry {
     workers: Arc<RwLock<HashMap<String, RegisteredWorker>>>,
     lifecycle: Option<WorkerLifecycleRepository>,
+}
+
+
+/// Broadcast fan-out selector over connected worker metadata.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct BroadcastSelector {
+    /// Required structured capability tags.
+    pub tags: Vec<String>,
+    /// Optional exact region match.
+    pub region: Option<String>,
+    /// Optional exact cluster/version match.
+    pub cluster: Option<String>,
+    /// Optional worker labels that must all match.
+    pub labels: HashMap<String, String>,
 }
 
 impl WorkerRegistry {
@@ -316,6 +330,28 @@ impl WorkerRegistry {
             .await
     }
 
+    /// Return worker ids matching namespace/app plus broadcast selector constraints.
+    pub async fn find_eligible_workers_with_broadcast_selector(
+        &self,
+        namespace: &str,
+        app: &str,
+        selector: Option<&BroadcastSelector>,
+    ) -> Vec<String> {
+        let selector = selector.cloned().unwrap_or_default();
+        self.workers
+            .read()
+            .await
+            .values()
+            .filter(|worker| {
+                worker.is_schedulable()
+                    && is_match(&worker.namespace, namespace)
+                    && is_match(&worker.app, app)
+                    && broadcast_selector_matches(worker, &selector)
+            })
+            .map(|worker| worker.worker_id.clone())
+            .collect()
+    }
+
     /// Return worker ids matching namespace/app and an optional required capability.
     pub async fn find_eligible_workers_with_capability(
         &self,
@@ -535,6 +571,41 @@ fn is_match(worker_val: &str, job_val: &str) -> bool {
         || job_val.is_empty()
 }
 
+
+fn broadcast_selector_matches(worker: &RegisteredWorker, selector: &BroadcastSelector) -> bool {
+    if selector
+        .region
+        .as_deref()
+        .is_some_and(|region| !is_match(&worker.region, region))
+    {
+        return false;
+    }
+    if selector
+        .cluster
+        .as_deref()
+        .is_some_and(|cluster| !is_match(&worker.cluster, cluster))
+    {
+        return false;
+    }
+    if !selector
+        .labels
+        .iter()
+        .all(|(key, value)| worker.labels.get(key).is_some_and(|actual| actual == value))
+    {
+        return false;
+    }
+    if selector.tags.is_empty() {
+        return true;
+    }
+    let tags: HashSet<&str> = worker
+        .structured_capabilities
+        .tags
+        .iter()
+        .map(String::as_str)
+        .collect();
+    selector.tags.iter().all(|tag| tags.contains(tag.as_str()))
+}
+
 fn worker_satisfies(worker: &RegisteredWorker, requirement: &WorkerRequirement) -> bool {
     structured_capabilities_match(&worker.structured_capabilities, requirement)
         || worker
@@ -642,7 +713,7 @@ mod tests {
 
     use tikee_storage::WorkerLifecycleRepository;
 
-    use super::{WorkerRegistry, WorkerSessionStatus};
+    use super::{BroadcastSelector, WorkerRegistry, WorkerSessionStatus};
     use crate::tunnel::capability::WorkerRequirement;
 
     #[tokio::test]
@@ -746,6 +817,59 @@ mod tests {
                 .accepts_worker_assignment(&worker.worker_id, "wrong-token")
                 .await
         );
+    }
+
+
+    #[tokio::test]
+    async fn registry_matches_broadcast_selector_region_tags_cluster_and_labels() {
+        let registry = WorkerRegistry::default();
+        registry
+            .register(
+                RegisterWorker {
+                    client_instance_id: "pod-java-cn".to_owned(),
+                    region: "cn".to_owned(),
+                    cluster: "v2".to_owned(),
+                    structured_capabilities: Some(WorkerCapabilities {
+                        tags: vec!["java".to_owned(), "blue".to_owned()],
+                        ..WorkerCapabilities::default()
+                    }),
+                    labels: [("tier".to_owned(), "gold".to_owned())].into(),
+                    ..register_worker("pod-java-cn")
+                },
+                mpsc::channel(1).0,
+            )
+            .await;
+        registry
+            .register(
+                RegisterWorker {
+                    client_instance_id: "pod-rust-us".to_owned(),
+                    region: "us".to_owned(),
+                    cluster: "v1".to_owned(),
+                    structured_capabilities: Some(WorkerCapabilities {
+                        tags: vec!["rust".to_owned()],
+                        ..WorkerCapabilities::default()
+                    }),
+                    labels: [("tier".to_owned(), "silver".to_owned())].into(),
+                    ..register_worker("pod-rust-us")
+                },
+                mpsc::channel(1).0,
+            )
+            .await;
+
+        let workers = registry
+            .find_eligible_workers_with_broadcast_selector(
+                "finance",
+                "billing",
+                Some(&BroadcastSelector {
+                    tags: vec!["java".to_owned(), "blue".to_owned()],
+                    region: Some("cn".to_owned()),
+                    cluster: Some("v2".to_owned()),
+                    labels: [("tier".to_owned(), "gold".to_owned())].into(),
+                }),
+            )
+            .await;
+
+        assert_eq!(workers.len(), 1);
     }
 
     #[tokio::test]

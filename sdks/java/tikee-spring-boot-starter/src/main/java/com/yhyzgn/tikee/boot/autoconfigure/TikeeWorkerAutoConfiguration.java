@@ -5,9 +5,9 @@ import com.yhyzgn.tikee.management.client.HttpTikeeJobClient;
 import com.yhyzgn.tikee.management.client.TikeeJobClient;
 import com.yhyzgn.tikee.sandbox.SandboxToolResolver;
 import com.yhyzgn.tikee.script.ContainerScriptRunner;
-import com.yhyzgn.tikee.script.LocalSubprocessScriptRunner;
 import com.yhyzgn.tikee.script.ScriptRunnerKind;
 import com.yhyzgn.tikee.script.ScriptRunnerRegistry;
+import com.yhyzgn.tikee.script.WasmScriptRunner;
 import com.yhyzgn.tikee.spring.processor.TikeeProcessorRegistry;
 import com.yhyzgn.tikee.spring.worker.SpringTikeeTaskProcessor;
 import com.yhyzgn.tikee.wasm.CliWasmtimeRunner;
@@ -198,7 +198,7 @@ public class TikeeWorkerAutoConfiguration {
         if (!scripts.isEnabled()) {
             return registry;
         }
-        registerLocalDevelopmentRunners(registry, properties);
+        registerDefaultWasmScriptRunners(registry, properties);
         if (scripts.isContainerEnabled()) {
             if (
                 scripts.getRuntimeCommand() == null ||
@@ -270,19 +270,25 @@ public class TikeeWorkerAutoConfiguration {
         return registry;
     }
 
-    private static void registerLocalDevelopmentRunners(
+    private static void registerDefaultWasmScriptRunners(
         ScriptRunnerRegistry registry,
         TikeeWorkerProperties properties
     ) {
-        SandboxToolResolver resolver = sandboxToolResolver(properties);
-        for (ScriptRunnerKind kind : ScriptRunnerKind.values()) {
-            registry.register(
-                new LocalSubprocessScriptRunner(
-                    kind,
-                    resolver.localDevelopmentCommand(kind)
+        sandboxToolResolver(properties)
+            .resolveWasmtimeCommand()
+            .ifPresentOrElse(
+                runtimeCommand -> registry.register(
+                    new WasmScriptRunner(
+                        ScriptRunnerKind.SHELL,
+                        runtimeCommand,
+                        List.of()
+                    )
+                ),
+                () -> log.warn(
+                    "tikee script sandbox is enabled but Wasmtime is unavailable; " +
+                        "script:shell capability will not be advertised"
                 )
             );
-        }
     }
 
     private static void registerContainerRunner(

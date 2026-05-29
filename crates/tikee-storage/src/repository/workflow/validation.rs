@@ -28,12 +28,16 @@ pub fn validate_workflow_definition(definition: &WorkflowDefinition) -> Workflow
         "job",
         "script",
         "http",
+        "grpc",
+        "sql",
         "condition",
         "parallel",
         "join",
         "delay",
         "approval",
         "notification",
+        "compensation",
+        "file_cleanup",
         "map",
         "map_reduce",
         "sub_workflow",
@@ -46,23 +50,79 @@ pub fn validate_workflow_definition(definition: &WorkflowDefinition) -> Workflow
         if kind == "job" && node.job_id.as_deref().unwrap_or("").is_empty() {
             errors.push(format!("job node {} requires job_id", node.key));
         }
-        if kind == "condition" && node_config_string(node, "expression").is_none() {
+        if kind == "condition" && workflow_config_string(node, "expression").is_none() {
             errors.push(format!(
                 "condition node {} requires config.expression",
                 node.key
             ));
         }
-        if kind == "http" && node_config_string(node, "url").is_none() {
+        if kind == "http" && workflow_config_string(node, "url").is_none() {
             errors.push(format!("http node {} requires config.url", node.key));
         }
-        if kind == "script" && node_config_string(node, "source").is_none() {
+        if kind == "grpc" {
+            for field in ["endpoint", "service", "method"] {
+                if workflow_config_string(node, field).is_none() {
+                    errors.push(format!("grpc node {} requires config.{field}", node.key));
+                }
+            }
+        }
+        if kind == "sql" {
+            for field in ["databaseUrl", "sql"] {
+                if workflow_config_string(node, field).is_none() {
+                    errors.push(format!("sql node {} requires config.{field}", node.key));
+                }
+            }
+            let has_allowed_database_urls = node
+                .config
+                .as_ref()
+                .and_then(|value| value.get("allowedDatabaseUrls"))
+                .and_then(serde_json::Value::as_array)
+                .is_some_and(|urls| !urls.is_empty());
+            if !has_allowed_database_urls {
+                errors.push(format!(
+                    "sql node {} requires config.allowedDatabaseUrls",
+                    node.key
+                ));
+            }
+        }
+        if kind == "script" && workflow_config_string(node, "source").is_none() {
             errors.push(format!("script node {} requires config.source", node.key));
         }
-        if kind == "approval" && node_config_string(node, "approvers").is_none() {
+        if kind == "approval" && workflow_config_string(node, "approvers").is_none() {
             errors.push(format!(
                 "approval node {} requires config.approvers",
                 node.key
             ));
+        }
+        if kind == "compensation" && workflow_config_string(node, "compensates").is_none() {
+            errors.push(format!(
+                "compensation node {} requires config.compensates",
+                node.key
+            ));
+        }
+        if kind == "file_cleanup" {
+            let has_paths = node
+                .config
+                .as_ref()
+                .and_then(|value| value.get("paths"))
+                .and_then(serde_json::Value::as_array)
+                .is_some_and(|paths| !paths.is_empty())
+                || workflow_config_string(node, "path").is_some();
+            let has_allowed_roots = node
+                .config
+                .as_ref()
+                .and_then(|value| value.get("allowedRoots"))
+                .and_then(serde_json::Value::as_array)
+                .is_some_and(|roots| !roots.is_empty());
+            if !has_paths {
+                errors.push(format!("file_cleanup node {} requires config.paths", node.key));
+            }
+            if !has_allowed_roots {
+                errors.push(format!(
+                    "file_cleanup node {} requires config.allowedRoots",
+                    node.key
+                ));
+            }
         }
         if kind == "sub_workflow" && node.child_workflow_id.as_deref().unwrap_or("").is_empty() {
             errors.push(format!(
@@ -101,12 +161,29 @@ pub fn validate_workflow_definition(definition: &WorkflowDefinition) -> Workflow
     }
 }
 
-fn node_config_string<'a>(node: &'a WorkflowNodeSpec, key: &str) -> Option<&'a str> {
+pub(super) fn workflow_config_string<'a>(node: &'a WorkflowNodeSpec, key: &str) -> Option<&'a str> {
     node.config
         .as_ref()
         .and_then(|value| value.get(key))
         .and_then(serde_json::Value::as_str)
         .filter(|value| !value.trim().is_empty())
+}
+
+
+pub(super) fn workflow_config_i64(node: &WorkflowNodeSpec, key: &str) -> Option<i64> {
+    node.config.as_ref().and_then(|value| value.get(key)).and_then(|value| {
+        value.as_i64().or_else(|| value.as_str()?.trim().parse::<i64>().ok())
+    })
+}
+
+pub(super) fn workflow_config_bool(node: &WorkflowNodeSpec, key: &str) -> Option<bool> {
+    node.config.as_ref().and_then(|value| value.get(key)).and_then(|value| {
+        value.as_bool().or_else(|| match value.as_str()?.trim().to_ascii_lowercase().as_str() {
+            "true" | "yes" | "1" | "success" | "succeeded" => Some(true),
+            "false" | "no" | "0" | "failure" | "failed" => Some(false),
+            _ => None,
+        })
+    })
 }
 
 pub(super) fn next_nodes_for_status(

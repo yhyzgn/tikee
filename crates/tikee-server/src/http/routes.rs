@@ -29,7 +29,7 @@ pub use alerts::{
 pub use audit::{export_audit_logs, list_audit_logs};
 pub use event_sources::trigger_inbound_webhook;
 pub use jobs::{
-    create_job, delete_job, get_job_instance, list_instance_attempts, list_instance_logs,
+    cancel_job_instance, create_job, delete_job, get_job_instance, list_instance_attempts, list_instance_logs,
     list_job_instances, list_job_versions, list_jobs, rollback_job, trigger_job, update_job,
 };
 pub use metrics::metrics_summary;
@@ -39,8 +39,8 @@ pub use plugins::{create_plugin, delete_plugin, list_plugins, update_plugin};
 pub use raft::{append_entries, propose_member_change};
 pub use scheduling::job_scheduling_advice;
 pub use scope::{
-    create_app, create_namespace, create_worker_pool, delete_app, delete_namespace,
-    delete_worker_pool, list_apps, list_namespaces, list_worker_pools,
+    create_app, create_namespace, create_secret, create_worker_pool, delete_app, delete_namespace,
+    delete_secret, delete_worker_pool, list_apps, list_namespaces, list_secrets, list_worker_pools, update_worker_pool_quota,
 };
 pub use scripts::{
     create_script, delete_script, diff_script_versions, get_script, list_script_versions,
@@ -54,7 +54,8 @@ pub use workers::{claim_dispatch_queue, dispatch_queue, list_workers, worker_lif
 pub use workflows::{
     advance_workflow_instance, complete_workflow_shard, create_workflow, dry_run_workflow,
     get_workflow, get_workflow_instance as get_workflow_instance_route, list_workflow_shards,
-    list_workflows, materialize_next_workflow_node, recover_workflow_node, run_workflow,
+    list_workflows, materialize_next_workflow_node, rebalance_workflow_shards,
+    recover_workflow_node, run_workflow,
     stream_instance_events, update_workflow, validate_workflow,
 };
 

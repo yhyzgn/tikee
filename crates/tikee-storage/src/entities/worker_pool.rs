@@ -15,6 +15,10 @@ pub struct Model {
     pub app_id: String,
     /// Worker pool name unique within an app.
     pub name: String,
+    /// Maximum queued/running dispatch items allowed for this pool; 0 means unlimited.
+    pub max_queue_depth: i32,
+    /// Maximum concurrently running dispatch items allowed for this pool; 0 means unlimited.
+    pub max_concurrency: i32,
     /// Creation timestamp in RFC3339 format.
     pub created_at: String,
     /// Last update timestamp in RFC3339 format.

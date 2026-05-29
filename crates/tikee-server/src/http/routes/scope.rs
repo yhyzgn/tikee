@@ -30,6 +30,12 @@ pub struct CreateWorkerPoolRequest {
     pub name: String,
 }
 
+#[derive(Debug, Clone, Deserialize, utoipa::ToSchema)]
+pub struct UpdateWorkerPoolQuotaRequest {
+    pub max_queue_depth: i32,
+    pub max_concurrency: i32,
+}
+
 #[derive(Debug, Clone, Default, Deserialize, utoipa::IntoParams)]
 pub struct ScopeQuery {
     pub namespace: Option<String>,
@@ -136,6 +142,29 @@ pub async fn create_worker_pool(
     Ok(Json(ApiResponse::success(item)))
 }
 
+#[utoipa::path(patch, path = "/api/v1/worker-pools/{id}/quota", tag = "tenancy", request_body = UpdateWorkerPoolQuotaRequest, params(("id" = String, Path, description = "Worker pool id")))]
+pub async fn update_worker_pool_quota(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    axum::extract::Path(id): axum::extract::Path<String>,
+    Json(request): Json<UpdateWorkerPoolQuotaRequest>,
+) -> Result<Json<ApiResponse<tikee_storage::WorkerPoolSummary>>, ApiError> {
+    auth::require_permission(&headers, &state, "tenants", "manage").await?;
+    let repo = ScopeRepository::new(state.users.db());
+    let item = repo
+        .update_worker_pool_quota(
+            &id,
+            tikee_storage::UpdateWorkerPoolQuota {
+                max_queue_depth: request.max_queue_depth,
+                max_concurrency: request.max_concurrency,
+            },
+        )
+        .await
+        .map_err(|error| ApiError::storage(&error))?
+        .ok_or_else(|| ApiError::not_found("worker pool not found"))?;
+    Ok(Json(ApiResponse::success(item)))
+}
+
 #[utoipa::path(delete, path = "/api/v1/namespaces/{id}", tag = "tenancy", params(("id" = String, Path, description = "Namespace id")))]
 pub async fn delete_namespace(
     State(state): State<Arc<AppState>>,
@@ -194,6 +223,77 @@ fn normalize_name(value: &str, field: &str) -> Result<String, ApiError> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
         return Err(ApiError::bad_request(format!("{field} cannot be empty")));
+    }
+    Ok(trimmed.to_owned())
+}
+
+#[derive(Debug, Clone, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateSecretRequest {
+    pub namespace: String,
+    pub app: String,
+    pub name: String,
+    pub value_ref: String,
+}
+
+#[utoipa::path(get, path = "/api/v1/secrets", tag = "tenancy", params(ScopeQuery))]
+pub async fn list_secrets(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(query): Query<ScopeQuery>,
+) -> Result<Json<ApiResponse<Vec<tikee_storage::SecretSummary>>>, ApiError> {
+    let principal = auth::require_permission(&headers, &state, "tenants", "read").await?;
+    let repo = tikee_storage::SecretRepository::new(state.users.db());
+    let mut items = repo
+        .list(query.namespace.as_deref(), query.app.as_deref())
+        .await
+        .map_err(|error| ApiError::storage(&error))?;
+    items.retain(|secret| crate::http::access_scope::allows_resource(&principal.scope_bindings, &secret.namespace, &secret.app, None));
+    Ok(Json(ApiResponse::success(items)))
+}
+
+#[utoipa::path(post, path = "/api/v1/secrets", tag = "tenancy", request_body = CreateSecretRequest)]
+pub async fn create_secret(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(request): Json<CreateSecretRequest>,
+) -> Result<Json<ApiResponse<tikee_storage::SecretSummary>>, ApiError> {
+    let principal = auth::require_permission(&headers, &state, "tenants", "manage").await?;
+    let namespace = normalize_name(&request.namespace, "namespace")?;
+    let app = normalize_name(&request.app, "app")?;
+    let name = normalize_name(&request.name, "secret")?;
+    let value_ref = normalize_value_ref(&request.value_ref)?;
+    if !crate::http::access_scope::allows_resource(&principal.scope_bindings, &namespace, &app, None) {
+        return Err(ApiError::forbidden("scope binding does not allow this namespace/app"));
+    }
+    let repo = tikee_storage::SecretRepository::new(state.users.db());
+    let item = repo
+        .create(tikee_storage::CreateSecret { namespace, app, name, value_ref, created_by: principal.username.clone() })
+        .await
+        .map_err(|error| ApiError::storage(&error))?;
+    super::common::audit(&state, &principal.username, "create", "secret", &item.id, Some(format!("{}/{}:{}", item.namespace, item.app, item.name)), &headers).await;
+    Ok(Json(ApiResponse::success(item)))
+}
+
+#[utoipa::path(delete, path = "/api/v1/secrets/{id}", tag = "tenancy", params(("id" = String, Path, description = "Secret id")))]
+pub async fn delete_secret(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> Result<Json<ApiResponse<crate::http::dto::EmptyData>>, ApiError> {
+    let principal = auth::require_permission(&headers, &state, "tenants", "manage").await?;
+    let repo = tikee_storage::SecretRepository::new(state.users.db());
+    let deleted = repo.delete(&id).await.map_err(|error| ApiError::storage(&error))?;
+    if !deleted { return Err(ApiError::not_found("secret not found")); }
+    super::common::audit(&state, &principal.username, "delete", "secret", &id, None, &headers).await;
+    Ok(Json(ApiResponse::success(crate::http::dto::EmptyData {})))
+}
+
+fn normalize_value_ref(value: &str) -> Result<String, ApiError> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() { return Err(ApiError::bad_request("secret valueRef cannot be empty")); }
+    if !trimmed.starts_with("env:") && !trimmed.starts_with("vault:") && !trimmed.starts_with("secret:") {
+        return Err(ApiError::bad_request("secret valueRef must start with env:, vault:, or secret:"));
     }
     Ok(trimmed.to_owned())
 }

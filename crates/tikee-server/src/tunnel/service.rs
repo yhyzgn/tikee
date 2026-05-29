@@ -2,7 +2,7 @@
 
 use tikee_core::InstanceStatus;
 use tikee_proto::worker::v1::{
-    Heartbeat, Ping, ServerMessage, SubscribeTaskLogsRequest, TaskLog, TaskResult,
+    Heartbeat, Ping, ServerMessage, SubscribeTaskLogsRequest, TaskCheckpoint, TaskLog, TaskResult,
     UnregisterWorker, WorkerMessage, WorkerRegistered, server_message, worker_message,
     worker_tunnel_service_server::WorkerTunnelService,
 };
@@ -252,6 +252,10 @@ async fn handle_worker_message(
             Ok(WorkerMessageOutcome::Continue)
         }
         Some(worker_message::Kind::TaskLog(log)) => handle_task_log(context, log).await,
+        Some(worker_message::Kind::TaskCheckpoint(checkpoint)) => {
+            handle_task_checkpoint(context, checkpoint).await;
+            Ok(WorkerMessageOutcome::Continue)
+        },
         None => {
             context
                 .tx
@@ -385,6 +389,38 @@ async fn handle_task_log(
         Err(error) => tracing::warn!(%error, "failed to persist task log"),
     }
     Ok(WorkerMessageOutcome::Continue)
+}
+
+
+async fn handle_task_checkpoint(context: &WorkerMessageContext<'_>, checkpoint: TaskCheckpoint) {
+    let TaskCheckpoint {
+        worker_id,
+        instance_id,
+        checkpoint_json,
+        sequence,
+        assignment_token,
+    } = checkpoint;
+    if !context
+        .registry
+        .accepts_worker_assignment(&worker_id, &assignment_token)
+        .await
+    {
+        metrics::counter!("tikee_worker_stale_messages_total", "kind" => "task_checkpoint").increment(1);
+        return;
+    }
+    if let Err(error) = context
+        .logs
+        .append(AppendJobInstanceLog {
+            instance_id,
+            worker_id,
+            level: "checkpoint".to_owned(),
+            message: checkpoint_json,
+            sequence,
+        })
+        .await
+    {
+        tracing::warn!(%error, "failed to persist task checkpoint");
+    }
 }
 
 async fn handle_task_result(context: &WorkerMessageContext<'_>, result: TaskResult) {
@@ -676,6 +712,9 @@ mod tests {
                 name: "assign-token".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
                 processor_name: None,
                 processor_type: None,
                 script_id: None,
@@ -768,6 +807,9 @@ mod tests {
                 name: "log-stream".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
                 processor_name: None,
                 processor_type: None,
                 script_id: None,

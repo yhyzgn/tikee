@@ -54,6 +54,9 @@ export interface JobSummary {
   name: string;
   scheduleType: string;
   scheduleExpr: string | null;
+  misfirePolicy: string;
+  scheduleStartAt: string | null;
+  scheduleEndAt: string | null;
   processorName: string | null;
   processorType: string | null;
   scriptId: string | null;
@@ -71,6 +74,9 @@ export interface JobVersionSummary {
   name: string;
   schedule_type: string;
   schedule_expr: string | null;
+  misfire_policy: string;
+  schedule_start_at: string | null;
+  schedule_end_at: string | null;
   processor_name: string | null;
   script_id: string | null;
   enabled: boolean;
@@ -197,6 +203,9 @@ export interface CreateJobRequest {
   name: string;
   scheduleType?: string;
   scheduleExpr?: string | null;
+  misfirePolicy?: string | null;
+  scheduleStartAt?: string | null;
+  scheduleEndAt?: string | null;
   processorName?: string | null;
   processorType?: string | null;
   scriptId?: string | null;
@@ -209,6 +218,9 @@ export interface UpdateJobRequest {
   name?: string;
   scheduleType?: string;
   scheduleExpr?: string | null;
+  misfirePolicy?: string | null;
+  scheduleStartAt?: string | null;
+  scheduleEndAt?: string | null;
   processorName?: string | null;
   processorType?: string | null;
   scriptId?: string | null;
@@ -231,9 +243,17 @@ export interface InboundWebhookTriggerResponse {
   triggerType: string;
 }
 
+export interface BroadcastSelectorRequest {
+  tags?: string[];
+  region?: string;
+  cluster?: string;
+  labels?: Record<string, string>;
+}
+
 export interface TriggerJobRequest {
   triggerType?: string;
   executionMode?: 'single' | 'broadcast';
+  broadcastSelector?: BroadcastSelectorRequest;
 }
 
 export interface CanaryRoutingSummary {
@@ -301,6 +321,20 @@ export interface WorkerPoolSummary {
   namespace: string;
   app: string;
   name: string;
+  maxQueueDepth: number;
+  maxConcurrency: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SecretSummary {
+  id: string;
+  namespace: string;
+  app: string;
+  name: string;
+  valueRef: string;
+  status: string;
+  createdBy: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -308,6 +342,8 @@ export interface WorkerPoolSummary {
 export interface CreateNamespaceRequest { name: string }
 export interface CreateAppScopeRequest { namespace: string; name: string }
 export interface CreateWorkerPoolRequest { namespace: string; app: string; name: string }
+export interface CreateSecretRequest { namespace: string; app: string; name: string; valueRef: string }
+export interface UpdateWorkerPoolQuotaRequest { maxQueueDepth: number; maxConcurrency: number }
 
 export interface UserSummary {
   id: string;
@@ -609,6 +645,10 @@ export async function getInstance(instanceId: string): Promise<JobInstanceSummar
   return request<JobInstanceSummary>(`/api/v1/instances/${encodeURIComponent(instanceId)}`);
 }
 
+export async function cancelInstance(instanceId: string): Promise<JobInstanceSummary> {
+  return request<JobInstanceSummary>(`/api/v1/instances/${encodeURIComponent(instanceId)}/cancel`, { method: 'POST', body: JSON.stringify({}) });
+}
+
 export async function listInstanceAttempts(instanceId: string): Promise<Page<JobInstanceAttemptSummary>> {
   return request<Page<JobInstanceAttemptSummary>>(`/api/v1/instances/${encodeURIComponent(instanceId)}/attempts`);
 }
@@ -659,6 +699,31 @@ export async function createWorkerPool(payload: CreateWorkerPoolRequest): Promis
   });
 }
 
+export async function updateWorkerPoolQuota(id: string, payload: UpdateWorkerPoolQuotaRequest): Promise<WorkerPoolSummary> {
+  return request<WorkerPoolSummary>(`/api/v1/worker-pools/${encodeURIComponent(id)}/quota`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function listSecrets(params: { namespace?: string; app?: string } = {}): Promise<SecretSummary[]> {
+  const query = new URLSearchParams();
+  if (params.namespace) query.set('namespace', params.namespace);
+  if (params.app) query.set('app', params.app);
+  const suffix = query.toString() ? `?${query}` : '';
+  return request<SecretSummary[]>(`/api/v1/secrets${suffix}`);
+}
+
+export async function createSecret(payload: CreateSecretRequest): Promise<SecretSummary> {
+  return request<SecretSummary>('/api/v1/secrets', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteSecret(id: string): Promise<void> {
+  await request<void>(`/api/v1/secrets/${encodeURIComponent(id)}`, { method: 'DELETE', allowNullData: true });
+}
 
 export async function deleteNamespace(id: string): Promise<void> {
   await request<void>(`/api/v1/namespaces/${encodeURIComponent(id)}`, { method: 'DELETE', allowNullData: true });

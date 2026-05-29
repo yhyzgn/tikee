@@ -16,7 +16,7 @@ use self::{
         DispatchQueue, InstanceEvents, JobInstanceAttempts, JobInstanceLogs, JobInstances,
         JobVersions, Jobs, Namespaces, OidcAuthStates, OidcIdentities, Permissions, Plugins,
         RaftAppliedCommands, RaftLogEntries, RaftMembers, RaftMembershipProposals, RaftMetadata,
-        RaftSnapshots, RolePermissions, Roles, ScriptVersions, Scripts, SdkApiKeys, Users,
+        RaftSnapshots, RolePermissions, Roles, ScriptVersions, Scripts, SdkApiKeys, Secrets, Users,
         WorkerLogicalInstances, WorkerPools, WorkerSessionEvents, WorkerSessions, WorkflowEdges,
         WorkflowInstances, WorkflowNodeInstances, WorkflowNodes, WorkflowShards, Workflows,
     },
@@ -52,6 +52,7 @@ impl MigrationTrait for CreateMetadataTables {
         create_rbac_tables(manager).await?;
         create_auth_sessions(manager).await?;
         create_sdk_api_keys(manager).await?;
+        create_secrets(manager).await?;
         create_oidc_auth_states(manager).await?;
         create_oidc_identities(manager).await?;
         create_plugins(manager).await?;
@@ -102,6 +103,7 @@ async fn drop_metadata_tables(manager: &SchemaManager<'_>) -> Result<(), DbErr> 
             Workflows::Table.into_iden(),
             ScriptVersions::Table.into_iden(),
             Scripts::Table.into_iden(),
+            Secrets::Table.into_iden(),
             SdkApiKeys::Table.into_iden(),
             Plugins::Table.into_iden(),
         ],
@@ -272,6 +274,26 @@ async fn create_sdk_api_keys(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
                 .col(string_null(SdkApiKeys::RotatedFrom))
                 .col(string_col(SdkApiKeys::CreatedAt))
                 .col(string_col(SdkApiKeys::UpdatedAt))
+                .to_owned(),
+        )
+        .await
+}
+
+async fn create_secrets(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    manager
+        .create_table(
+            Table::create()
+                .table(Secrets::Table)
+                .if_not_exists()
+                .col(string_pk(Secrets::Id))
+                .col(string_col(Secrets::Namespace))
+                .col(string_col(Secrets::App))
+                .col(string_col(Secrets::Name))
+                .col(string_col(Secrets::ValueRef))
+                .col(string_col(Secrets::Status))
+                .col(string_col(Secrets::CreatedBy))
+                .col(string_col(Secrets::CreatedAt))
+                .col(string_col(Secrets::UpdatedAt))
                 .to_owned(),
         )
         .await
@@ -607,6 +629,8 @@ async fn create_workflow_shards(manager: &SchemaManager<'_>) -> Result<(), DbErr
                 .col(string_col(WorkflowShards::Status))
                 .col(string_col(WorkflowShards::Input))
                 .col(string_null(WorkflowShards::Output))
+                .col(string_null(WorkflowShards::Checkpoint))
+                .col(integer_col(WorkflowShards::RetryCount))
                 .col(string_null(WorkflowShards::JobInstanceId))
                 .col(string_col(WorkflowShards::CreatedAt))
                 .col(string_col(WorkflowShards::UpdatedAt))
@@ -632,6 +656,9 @@ async fn create_dispatch_queue(manager: &SchemaManager<'_>) -> Result<(), DbErr>
                 .col(string_null(DispatchQueue::LeaseUntil))
                 .col(string_null(DispatchQueue::FencingToken))
                 .col(string_null(DispatchQueue::WorkerSelector))
+                .col(string_null(DispatchQueue::Namespace))
+                .col(string_null(DispatchQueue::App))
+                .col(string_null(DispatchQueue::WorkerPool))
                 .col(string_col(DispatchQueue::CreatedAt))
                 .col(string_col(DispatchQueue::UpdatedAt))
                 .to_owned(),
@@ -988,6 +1015,8 @@ async fn create_worker_pools(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
                 .col(string_col(WorkerPools::NamespaceId))
                 .col(string_col(WorkerPools::AppId))
                 .col(string_col(WorkerPools::Name))
+                .col(integer_col(WorkerPools::MaxQueueDepth))
+                .col(integer_col(WorkerPools::MaxConcurrency))
                 .col(string_col(WorkerPools::CreatedAt))
                 .col(string_col(WorkerPools::UpdatedAt))
                 .to_owned(),
@@ -1070,6 +1099,9 @@ async fn create_jobs(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
                 .col(string_col(Jobs::Name))
                 .col(string_col(Jobs::ScheduleType))
                 .col(string_null(Jobs::ScheduleExpr))
+                .col(string_col(Jobs::MisfirePolicy))
+                .col(string_null(Jobs::ScheduleStartAt))
+                .col(string_null(Jobs::ScheduleEndAt))
                 .col(string_null(Jobs::ProcessorName))
                 .col(string_null(Jobs::ProcessorType))
                 .col(string_null(Jobs::ScriptId))
@@ -1095,6 +1127,9 @@ async fn create_job_versions(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
                 .col(string_col(JobVersions::Name))
                 .col(string_col(JobVersions::ScheduleType))
                 .col(string_null(JobVersions::ScheduleExpr))
+                .col(string_col(JobVersions::MisfirePolicy))
+                .col(string_null(JobVersions::ScheduleStartAt))
+                .col(string_null(JobVersions::ScheduleEndAt))
                 .col(string_null(JobVersions::ProcessorName))
                 .col(string_null(JobVersions::ProcessorType))
                 .col(string_null(JobVersions::ScriptId))

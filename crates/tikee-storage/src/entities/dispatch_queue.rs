@@ -20,6 +20,9 @@ pub struct Model {
     pub lease_until: Option<String>,
     pub fencing_token: Option<String>,
     pub worker_selector: Option<String>,
+    pub namespace: Option<String>,
+    pub app: Option<String>,
+    pub worker_pool: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }

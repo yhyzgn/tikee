@@ -14,6 +14,9 @@
                 name: "metrics-job".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
                 processor_name: None,
                 processor_type: None,
                 script_id: None,
@@ -89,6 +92,7 @@
                     CompleteWorkflowShardInput {
                         status: "succeeded".to_owned(),
                         output: Some(serde_json::json!({"ok": true})),
+                        checkpoint: None,
                         message: Some("shard succeeded".to_owned()),
                     },
                 )
@@ -273,6 +277,9 @@
                 name: "extract".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
                 processor_name: Some("billing.extract".to_owned()),
                 processor_type: None,
                 script_id: None,
@@ -290,6 +297,9 @@
                 name: "load".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
                 processor_name: Some("billing.load".to_owned()),
                 processor_type: None,
                 script_id: None,
@@ -417,6 +427,82 @@
 
 
     #[tokio::test]
+    async fn tenant_secret_store_creates_lists_and_deletes_scoped_secret_refs() {
+        let db = connect_and_migrate("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("test storage should initialize: {error}"));
+        let app = router_with_state(AppState::new(
+            JobRepository::new(db.clone()),
+            JobInstanceRepository::new(db.clone()),
+            JobInstanceLogRepository::new(db.clone()),
+            JobInstanceAttemptRepository::new(db.clone()),
+            UserRepository::new(db.clone()),
+            ScriptRepository::new(db.clone()),
+            WorkflowRepository::new(db.clone()),
+            AuditLogRepository::new(db.clone()),
+            crate::tunnel::WorkerRegistry::default(),
+            StandaloneCoordinator::shared("test-node"),
+        ));
+        let create_response = app
+            .clone()
+            .oneshot(
+                admin_json_request_builder(
+                    app.clone(),
+                    "POST",
+                    "/api/v1/secrets",
+                    r#"{"namespace":"default","app":"billing","name":"db.password","valueRef":"env:APP_DB_PASSWORD"}"#,
+                )
+                .await,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("create secret should respond: {error}"));
+        assert!(create_response.status().is_success());
+        let body = axum::body::to_bytes(create_response.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let created: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+        let id = created["data"]["id"].as_str().unwrap_or_else(|| panic!("secret id should exist")).to_owned();
+        assert_eq!(created["data"]["namespace"], "default");
+        assert_eq!(created["data"]["app"], "billing");
+        assert_eq!(created["data"]["valueRef"], "env:APP_DB_PASSWORD");
+
+        let list_response = app
+            .clone()
+            .oneshot(admin_request_builder(app.clone(), "GET", "/api/v1/secrets?namespace=default&app=billing").await)
+            .await
+            .unwrap_or_else(|error| panic!("list secrets should respond: {error}"));
+        assert!(list_response.status().is_success());
+        let body = axum::body::to_bytes(list_response.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let listed: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+        assert!(listed["data"].as_array().is_some_and(|items| items.iter().any(|item| item["id"] == id)));
+
+        let delete_response = app
+            .clone()
+            .oneshot(admin_request_builder(app.clone(), "DELETE", format!("/api/v1/secrets/{id}")).await)
+            .await
+            .unwrap_or_else(|error| panic!("delete secret should respond: {error}"));
+        assert!(delete_response.status().is_success());
+
+        let list_response = app
+            .clone()
+            .oneshot(admin_request_builder(app, "GET", "/api/v1/secrets?namespace=default&app=billing").await)
+            .await
+            .unwrap_or_else(|error| panic!("list secrets after delete should respond: {error}"));
+        assert!(list_response.status().is_success());
+        let body = axum::body::to_bytes(list_response.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("body should collect: {error}"));
+        let listed_after_delete: Value = serde_json::from_slice(&body)
+            .unwrap_or_else(|error| panic!("body should be JSON: {error}"));
+        assert!(!listed_after_delete["data"].as_array().unwrap_or(&Vec::new()).iter().any(|item| item["id"] == id));
+    }
+
+
+    #[tokio::test]
     async fn inbound_webhook_event_source_triggers_job_and_records_payload_log() {
         let db = connect_and_migrate("sqlite::memory:")
             .await
@@ -430,6 +516,9 @@
                 name: "webhook-target".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
                 processor_name: Some("billing.webhook".to_owned()),
                 processor_type: None,
                 script_id: None,
@@ -501,6 +590,115 @@
         );
     }
 
+    #[tokio::test]
+    async fn inbound_webhook_rejects_replayed_signed_nonce() {
+        let db = connect_and_migrate("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("test storage should initialize: {error}"));
+        let jobs = JobRepository::new(db.clone());
+        let job = jobs
+            .create_job(CreateJob {
+                created_by: Some("admin".to_owned()),
+                namespace: "default".to_owned(),
+                app: "billing".to_owned(),
+                name: "signed-webhook-target".to_owned(),
+                schedule_type: "api".to_owned(),
+                schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
+                processor_name: Some("billing.webhook".to_owned()),
+                processor_type: None,
+                script_id: None,
+                enabled: true,
+                canary_job_id: None,
+                canary_percent: 0,
+            })
+            .await
+            .unwrap_or_else(|error| panic!("job should create: {error}"));
+        let instances = JobInstanceRepository::new(db.clone());
+        let app = router_with_state(AppState::new(
+            jobs,
+            instances.clone(),
+            JobInstanceLogRepository::new(db.clone()),
+            JobInstanceAttemptRepository::new(db.clone()),
+            UserRepository::new(db.clone()),
+            ScriptRepository::new(db.clone()),
+            WorkflowRepository::new(db.clone()),
+            AuditLogRepository::new(db.clone()),
+            crate::tunnel::WorkerRegistry::default(),
+            StandaloneCoordinator::shared("test-node"),
+        ));
+        let timestamp = chrono::Utc::now().timestamp();
+        let nonce = "nonce-1";
+        let payload = serde_json::json!({"sha":"abc123"});
+        let signature = inbound_webhook_signature(&std::env::var("PATH").unwrap_or_default(), &job.id, timestamp, nonce, &payload);
+        let body = serde_json::json!({
+            "source": "gitlab",
+            "eventType": "push",
+            "payload": payload,
+            "secretRef": "env:PATH",
+            "signature": signature,
+            "timestamp": timestamp,
+            "nonce": nonce
+        })
+        .to_string();
+
+        let first = app
+            .clone()
+            .oneshot(
+                admin_json_request_builder(
+                    app.clone(),
+                    "POST",
+                    format!("/api/v1/events/webhooks/{}:trigger", job.id),
+                    &body,
+                )
+                .await,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("webhook route should respond: {error}"));
+        assert!(first.status().is_success());
+
+        let replay = app
+            .clone()
+            .oneshot(
+                admin_json_request_builder(
+                    app,
+                    "POST",
+                    format!("/api/v1/events/webhooks/{}:trigger", job.id),
+                    &body,
+                )
+                .await,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("webhook replay should respond: {error}"));
+        assert_eq!(replay.status(), axum::http::StatusCode::BAD_REQUEST);
+        let listed = instances
+            .list_by_job(&job.id)
+            .await
+            .unwrap_or_else(|error| panic!("instances should list: {error}"));
+        assert_eq!(listed.len(), 1, "replay must not create another instance");
+    }
+
+    fn inbound_webhook_signature(
+        secret: &str,
+        job_id: &str,
+        timestamp: i64,
+        nonce: &str,
+        payload: &serde_json::Value,
+    ) -> String {
+        use sha2::{Digest as _, Sha256};
+        let canonical = format!(
+            "tikee-webhook-v1\njob_id={job_id}\ntimestamp={timestamp}\nnonce={nonce}\npayload={}",
+            serde_json::to_string(payload).unwrap_or_else(|_| "null".to_owned())
+        );
+        let mut hasher = Sha256::new();
+        hasher.update(secret.as_bytes());
+        hasher.update(b"\n");
+        hasher.update(canonical.as_bytes());
+        format!("sha256:{}", hex::encode(hasher.finalize()))
+    }
+
 
     #[tokio::test]
     async fn scheduling_advice_reports_worker_capability_readiness() {
@@ -516,6 +714,9 @@
                 name: "advice-target".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
                 processor_name: Some("billing.advice".to_owned()),
                 processor_type: None,
                 script_id: None,
@@ -607,6 +808,9 @@
                 name: "canary-target".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
                 processor_name: Some("billing.canary".to_owned()),
                 processor_type: None,
                 script_id: None,
@@ -624,6 +828,9 @@
                 name: "main-target".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
                 processor_name: Some("billing.main".to_owned()),
                 processor_type: None,
                 script_id: None,
@@ -694,6 +901,9 @@
                 name: "predictable-job".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
                 processor_name: Some("demo.predict".to_owned()),
                 processor_type: None,
                 script_id: None,
@@ -791,15 +1001,15 @@
             .unwrap_or_else(|error| panic!("test storage should initialize: {error}"));
         let jobs = JobRepository::new(db.clone());
         let extract = jobs
-            .create_job(CreateJob { created_by: Some("admin".to_owned()), namespace: "default".to_owned(), app: "billing".to_owned(), name: "extract".to_owned(), schedule_type: "api".to_owned(), schedule_expr: None, processor_name: Some("billing.extract".to_owned()), processor_type: None, script_id: None, enabled: true, canary_job_id: None, canary_percent: 0 })
+            .create_job(CreateJob { created_by: Some("admin".to_owned()), namespace: "default".to_owned(), app: "billing".to_owned(), name: "extract".to_owned(), schedule_type: "api".to_owned(), schedule_expr: None, misfire_policy: "fire_once".to_owned(), schedule_start_at: None, schedule_end_at: None, processor_name: Some("billing.extract".to_owned()), processor_type: None, script_id: None, enabled: true, canary_job_id: None, canary_percent: 0 })
             .await
             .unwrap_or_else(|error| panic!("extract job should create: {error}"));
         let normalize = jobs
-            .create_job(CreateJob { created_by: Some("admin".to_owned()), namespace: "default".to_owned(), app: "billing".to_owned(), name: "normalize".to_owned(), schedule_type: "api".to_owned(), schedule_expr: None, processor_name: Some("billing.normalize".to_owned()), processor_type: None, script_id: None, enabled: true, canary_job_id: None, canary_percent: 0 })
+            .create_job(CreateJob { created_by: Some("admin".to_owned()), namespace: "default".to_owned(), app: "billing".to_owned(), name: "normalize".to_owned(), schedule_type: "api".to_owned(), schedule_expr: None, misfire_policy: "fire_once".to_owned(), schedule_start_at: None, schedule_end_at: None, processor_name: Some("billing.normalize".to_owned()), processor_type: None, script_id: None, enabled: true, canary_job_id: None, canary_percent: 0 })
             .await
             .unwrap_or_else(|error| panic!("normalize job should create: {error}"));
         let publish = jobs
-            .create_job(CreateJob { created_by: Some("admin".to_owned()), namespace: "default".to_owned(), app: "billing".to_owned(), name: "publish".to_owned(), schedule_type: "api".to_owned(), schedule_expr: None, processor_name: Some("billing.publish".to_owned()), processor_type: None, script_id: None, enabled: true, canary_job_id: None, canary_percent: 0 })
+            .create_job(CreateJob { created_by: Some("admin".to_owned()), namespace: "default".to_owned(), app: "billing".to_owned(), name: "publish".to_owned(), schedule_type: "api".to_owned(), schedule_expr: None, misfire_policy: "fire_once".to_owned(), schedule_start_at: None, schedule_end_at: None, processor_name: Some("billing.publish".to_owned()), processor_type: None, script_id: None, enabled: true, canary_job_id: None, canary_percent: 0 })
             .await
             .unwrap_or_else(|error| panic!("publish job should create: {error}"));
         let workflows = WorkflowRepository::new(db.clone());
@@ -866,7 +1076,7 @@
             .unwrap_or_else(|error| panic!("test storage should initialize: {error}"));
         let jobs = JobRepository::new(db.clone());
         let job = jobs
-            .create_job(CreateJob { created_by: Some("admin".to_owned()), namespace: "default".to_owned(), app: "billing".to_owned(), name: "replay-job".to_owned(), schedule_type: "api".to_owned(), schedule_expr: None, processor_name: Some("billing.replay".to_owned()), processor_type: None, script_id: None, enabled: true, canary_job_id: None, canary_percent: 0 })
+            .create_job(CreateJob { created_by: Some("admin".to_owned()), namespace: "default".to_owned(), app: "billing".to_owned(), name: "replay-job".to_owned(), schedule_type: "api".to_owned(), schedule_expr: None, misfire_policy: "fire_once".to_owned(), schedule_start_at: None, schedule_end_at: None, processor_name: Some("billing.replay".to_owned()), processor_type: None, script_id: None, enabled: true, canary_job_id: None, canary_percent: 0 })
             .await
             .unwrap_or_else(|error| panic!("job should create: {error}"));
         let workflows = WorkflowRepository::new(db.clone());
@@ -944,6 +1154,9 @@
                 name: "governed-script".to_owned(),
                 schedule_type: "api".to_owned(),
                 schedule_expr: None,
+                misfire_policy: "fire_once".to_owned(),
+                schedule_start_at: None,
+                schedule_end_at: None,
                 processor_name: None,
                 processor_type: None,
                 script_id: Some("script-missing-runtime".to_owned()),

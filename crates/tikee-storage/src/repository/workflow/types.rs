@@ -105,6 +105,14 @@ pub struct WorkflowNodeInstanceSummary {
 
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct WorkflowJobBindingSummary {
+    pub node_kind: String,
+    pub processor_name: Option<String>,
+    pub config: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkflowShardSummary {
     pub id: String,
     pub workflow_instance_id: String,
@@ -114,6 +122,8 @@ pub struct WorkflowShardSummary {
     pub status: String,
     pub input: serde_json::Value,
     pub output: Option<serde_json::Value>,
+    pub checkpoint: Option<serde_json::Value>,
+    pub retry_count: i32,
     pub job_instance_id: Option<String>,
     pub created_at: String,
     pub updated_at: String,
@@ -124,6 +134,7 @@ pub struct WorkflowShardSummary {
 pub struct CompleteWorkflowShardInput {
     pub status: String,
     pub output: Option<serde_json::Value>,
+    pub checkpoint: Option<serde_json::Value>,
     pub message: Option<String>,
 }
 
@@ -148,6 +159,7 @@ pub struct DispatchQueueSloSummary {
     pub longest_dispatch_latency_seconds: u64,
     pub oldest_pending_age_seconds: u64,
     pub average_pending_age_seconds: u64,
+    pub blocked_by_quota: u64,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, utoipa::ToSchema)]
@@ -210,6 +222,21 @@ pub struct RecoverWorkflowNodeInput {
     pub node_key: String,
     pub action: String,
     pub message: Option<String>,
+}
+
+
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RebalanceWorkflowShardsInput {
+    pub node_key: Option<String>,
+    pub statuses: Option<Vec<String>>,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RebalanceWorkflowShardsResult {
+    pub requeued_shards: Vec<WorkflowShardSummary>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]

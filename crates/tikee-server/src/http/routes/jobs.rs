@@ -8,11 +8,14 @@ use axum::{
 use tikee_core::ExecutionMode;
 use tikee_storage::{CreateJob, CreateJobInstance, UpdateJob};
 
+use crate::tunnel::registry::BroadcastSelector;
+
 use crate::http::{
     AppState, auth,
     dto::{
         ApiResponse, CanaryRoutingSummary, CreateJobRequest, DeleteJobApiResponse, EmptyData,
-        ErrorResponse, JobApiResponse, JobInstanceApiResponse, JobInstanceAttemptPage,
+        ErrorResponse, JobApiResponse, JobInstanceApiResponse, JobInstanceCancelApiResponse,
+        JobInstanceAttemptPage,
         JobInstanceAttemptPageApiResponse, JobInstanceAttemptSummary, JobInstanceLogPage,
         JobInstanceLogPageApiResponse, JobInstanceLogSummary, JobInstancePage,
         JobInstancePageApiResponse, JobInstanceSummary, JobPageApiResponse, JobSummary,
@@ -133,6 +136,12 @@ pub async fn create_job(
             name: request.name.clone(),
             schedule_type: schedule_type.to_string(),
             schedule_expr: request.schedule_expr.clone(),
+            misfire_policy: request
+                .misfire_policy
+                .clone()
+                .unwrap_or_else(|| "fire_once".to_owned()),
+            schedule_start_at: request.schedule_start_at.clone(),
+            schedule_end_at: request.schedule_end_at.clone(),
             processor_name: request.processor_name.clone(),
             processor_type: request.processor_type.clone(),
             script_id: request.script_id.clone(),
@@ -220,14 +229,31 @@ pub async fn trigger_job(
             .map_err(|error| ApiError::storage(&error))?
             .ok_or_else(|| ApiError::not_found(format!("job not found: {target_job}")))?
     };
+    let broadcast_selector = request.broadcast_selector.as_ref().map(|selector| BroadcastSelector {
+        tags: selector
+            .tags
+            .clone()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|tag| tag.trim().to_owned())
+            .filter(|tag| !tag.is_empty())
+            .collect(),
+        region: selector.region.as_ref().map(|value| value.trim().to_owned()).filter(|value| !value.is_empty()),
+        cluster: selector.cluster.as_ref().map(|value| value.trim().to_owned()).filter(|value| !value.is_empty()),
+        labels: selector.labels.clone().unwrap_or_default(),
+    });
     let broadcast_worker_ids = if execution_mode == ExecutionMode::Broadcast {
         let worker_ids = state
             .registry
-            .find_eligible_workers(&target_summary.namespace, &target_summary.app)
+            .find_eligible_workers_with_broadcast_selector(
+                &target_summary.namespace,
+                &target_summary.app,
+                broadcast_selector.as_ref(),
+            )
             .await;
         if worker_ids.is_empty() {
             return Err(ApiError::bad_request(
-                "broadcast execution requires at least one eligible online worker",
+                "broadcast execution requires at least one eligible online worker matching selector",
             ));
         }
         Some(worker_ids)
@@ -360,6 +386,9 @@ pub async fn update_job(
                 name: request.name.clone(),
                 schedule_type,
                 schedule_expr: request.schedule_expr.clone(),
+                misfire_policy: request.misfire_policy.clone(),
+                schedule_start_at: request.schedule_start_at.clone(),
+                schedule_end_at: request.schedule_end_at.clone(),
                 processor_name: request.processor_name.clone(),
                 processor_type: request.processor_type.clone(),
                 script_id: request.script_id.clone(),
@@ -747,6 +776,62 @@ pub async fn get_job_instance(
     )))
 }
 
+
+/// Cancel a pending/running job instance and close its dispatch queue item.
+#[utoipa::path(
+    post,
+    path = "/api/v1/instances/{instance}/cancel",
+    tag = "jobs",
+    params(("instance" = String, Path, description = "Instance identifier")),
+    responses(
+        (status = 200, description = "Cancelled job instance", body = JobInstanceCancelApiResponse),
+        (status = 404, description = "Instance not found", body = ErrorResponse),
+        (status = 500, description = "Storage error", body = ErrorResponse)
+    )
+)]
+pub async fn cancel_job_instance(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(instance): Path<String>,
+) -> Result<Json<JobInstanceCancelApiResponse>, ApiError> {
+    let principal = auth::require_permission(&headers, &state, "instances", "execute").await?;
+    let cancelled = state
+        .workflows
+        .cancel_job_instance(&instance)
+        .await
+        .map_err(|error| ApiError::storage(&error))?;
+    if !cancelled {
+        let exists = state
+            .instances
+            .get(&instance)
+            .await
+            .map_err(|error| ApiError::storage(&error))?
+            .is_some();
+        if !exists {
+            return Err(ApiError::not_found(format!("instance not found: {instance}")));
+        }
+    }
+    let summary = state
+        .instances
+        .get(&instance)
+        .await
+        .map_err(|error| ApiError::storage(&error))?
+        .ok_or_else(|| ApiError::not_found(format!("instance not found: {instance}")))?;
+    audit(
+        &state,
+        &principal.username,
+        "cancel",
+        "job_instance",
+        &instance,
+        Some(format!("cancelled={cancelled}")),
+        &headers,
+    )
+    .await;
+    Ok(Json(ApiResponse::success(
+        instance_summary_with_latest_log(&state, summary).await?,
+    )))
+}
+
 /// List broadcast attempts for one job instance.
 ///
 /// # Errors
@@ -836,6 +921,9 @@ impl From<tikee_storage::JobSummary> for JobSummary {
             name: value.name,
             schedule_type: value.schedule_type,
             schedule_expr: value.schedule_expr,
+            misfire_policy: value.misfire_policy,
+            schedule_start_at: value.schedule_start_at,
+            schedule_end_at: value.schedule_end_at,
             processor_name: value.processor_name,
             processor_type: value.processor_type,
             script_id: value.script_id,

@@ -1,7 +1,7 @@
 #![allow(missing_docs)]
 
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder,
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, DatabaseTransaction, EntityTrait, QueryFilter, QueryOrder,
     QuerySelect, Set, TransactionTrait, sea_query::Expr,
 };
 use tikee_core::InstanceStatus;
@@ -20,11 +20,101 @@ use conversions::{
     success_ratio,
 };
 pub use types::*;
-use validation::{all_predecessors_satisfied, next_nodes_for_status, start_node_keys};
+use validation::{
+    all_predecessors_satisfied, next_nodes_for_status, start_node_keys, workflow_config_bool,
+    workflow_config_i64, workflow_config_string,
+};
+
+fn evaluate_condition_node(node: &WorkflowNodeSpec) -> bool {
+    if let Some(value) = workflow_config_bool(node, "result") {
+        return value;
+    }
+    if let Some(value) = workflow_config_bool(node, "value") {
+        return value;
+    }
+    workflow_config_string(node, "expression")
+        .map(str::trim)
+        .map(|expression| {
+            matches!(
+                expression.to_ascii_lowercase().as_str(),
+                "true" | "1" | "yes" | "success" | "succeeded" | "context.success == true"
+            )
+        })
+        .unwrap_or(false)
+}
+
+
+fn workflow_node_run_after(definition: &WorkflowDefinition, node_key: &str, now: &str) -> String {
+    definition
+        .nodes
+        .iter()
+        .find(|node| node.key == node_key && node_kind(node) == "delay")
+        .and_then(|node| workflow_config_i64(node, "seconds"))
+        .filter(|seconds| *seconds > 0)
+        .map_or_else(|| now.to_owned(), rfc3339_after_seconds)
+}
 
 #[derive(Debug, Clone)]
 pub struct WorkflowRepository {
     db: DatabaseConnection,
+}
+
+
+async fn persist_map_reduce_result_chunks(
+    txn: &DatabaseTransaction,
+    workflow_instance_id: &str,
+    node_key: &str,
+    shards: &[workflow_shard::Model],
+    now: &str,
+) -> Result<(), sea_orm::DbErr> {
+    let mut outputs = Vec::new();
+    for shard in shards {
+        outputs.push(serde_json::json!({
+            "shardIndex": shard.shard_index,
+            "output": shard.output.as_ref().and_then(|value| serde_json::from_str::<serde_json::Value>(value).ok()),
+            "checkpoint": shard.checkpoint.as_ref().and_then(|value| serde_json::from_str::<serde_json::Value>(value).ok()),
+        }));
+    }
+    outputs.sort_by_key(|value| value.get("shardIndex").and_then(serde_json::Value::as_i64).unwrap_or_default());
+    let chunk_size = 2_usize;
+    let mut chunk_ids = Vec::new();
+    for (chunk_index, chunk) in outputs.chunks(chunk_size).enumerate() {
+        let event_id = new_id("evt");
+        chunk_ids.push(event_id.clone());
+        instance_event::ActiveModel {
+            id: Set(event_id),
+            instance_id: Set(workflow_instance_id.to_owned()),
+            instance_type: Set("workflow".to_owned()),
+            event_type: Set("workflow.map_reduce.chunk".to_owned()),
+            message: Set(format!("map_reduce {node_key} result chunk {chunk_index}")),
+            payload: Set(Some(serde_json::to_string(&serde_json::json!({
+                "nodeKey": node_key,
+                "chunkIndex": chunk_index,
+                "items": chunk,
+            })).map_err(|error| sea_orm::DbErr::Custom(error.to_string()))?)),
+            created_at: Set(now.to_owned()),
+        }
+        .insert(txn)
+        .await?;
+    }
+    instance_event::ActiveModel {
+        id: Set(new_id("evt")),
+        instance_id: Set(workflow_instance_id.to_owned()),
+        instance_type: Set("workflow".to_owned()),
+        event_type: Set("workflow.map_reduce.manifest".to_owned()),
+        message: Set(format!("map_reduce {node_key} reduced {} shards into {} chunks", outputs.len(), chunk_ids.len())),
+        payload: Set(Some(serde_json::to_string(&serde_json::json!({
+            "nodeKey": node_key,
+            "totalShards": outputs.len(),
+            "chunkSize": chunk_size,
+            "chunkEventIds": chunk_ids,
+            "spilled": true,
+        })).map_err(|error| sea_orm::DbErr::Custom(error.to_string()))?)),
+        created_at: Set(now.to_owned()),
+    }
+    .insert(txn)
+    .await?;
+    Ok(())
 }
 
 impl WorkflowRepository {
@@ -222,13 +312,16 @@ impl WorkflowRepository {
                     job_instance_id: Set(None),
                     workflow_node_instance_id: Set(Some(node_instance.id.clone())),
                     priority: Set(0),
-                    run_after: Set(now.clone()),
+                    run_after: Set(workflow_node_run_after(&workflow.definition, &node.key, &now)),
                     status: Set("pending".to_owned()),
                     attempt: Set(0),
                     lease_owner: Set(None),
                     lease_until: Set(None),
                     fencing_token: Set(None),
                     worker_selector: Set(None),
+                    namespace: Set(None),
+                    app: Set(None),
+                    worker_pool: Set(None),
                     created_at: Set(now.clone()),
                     updated_at: Set(now.clone()),
                 }
@@ -325,13 +418,16 @@ impl WorkflowRepository {
                         job_instance_id: Set(None),
                         workflow_node_instance_id: Set(Some(queued.id)),
                         priority: Set(0),
-                        run_after: Set(now.clone()),
+                        run_after: Set(workflow_node_run_after(&workflow.definition, &node_key, &now)),
                         status: Set("pending".to_owned()),
                         attempt: Set(0),
                         lease_owner: Set(None),
                         lease_until: Set(None),
                         fencing_token: Set(None),
                         worker_selector: Set(None),
+                        namespace: Set(None),
+                        app: Set(None),
+                        worker_pool: Set(None),
                         created_at: Set(now.clone()),
                         updated_at: Set(now.clone()),
                     }
@@ -501,6 +597,9 @@ impl WorkflowRepository {
                     lease_until: Set(None),
                     fencing_token: Set(None),
                     worker_selector: Set(None),
+                    namespace: Set(None),
+                    app: Set(None),
+                    worker_pool: Set(None),
                     created_at: Set(now.clone()),
                     updated_at: Set(now.clone()),
                 }
@@ -514,6 +613,7 @@ impl WorkflowRepository {
                 ensure_workflow_job_soft_link(&txn, &shard_job_id, &now).await?;
                 for (index, item) in node_spec
                     .map_items
+                    .clone()
                     .unwrap_or_default()
                     .into_iter()
                     .enumerate()
@@ -530,6 +630,8 @@ impl WorkflowRepository {
                             serde_json::to_string(&item).unwrap_or_else(|_| "null".to_owned())
                         ),
                         output: Set(None),
+                        checkpoint: Set(None),
+                        retry_count: Set(0),
                         job_instance_id: Set(Some(job_instance_id.clone())),
                         created_at: Set(now.clone()),
                         updated_at: Set(now.clone()),
@@ -559,6 +661,9 @@ impl WorkflowRepository {
                         lease_until: Set(None),
                         fencing_token: Set(None),
                         worker_selector: Set(None),
+                        namespace: Set(None),
+                        app: Set(None),
+                        worker_pool: Set(None),
                         created_at: Set(now.clone()),
                         updated_at: Set(now.clone()),
                     }
@@ -602,13 +707,16 @@ impl WorkflowRepository {
                                 job_instance_id: Set(None),
                                 workflow_node_instance_id: Set(Some(child_node_instance.id)),
                                 priority: Set(0),
-                                run_after: Set(now.clone()),
+                                run_after: Set(workflow_node_run_after(&child_workflow.definition, &child_node.key, &now)),
                                 status: Set("pending".to_owned()),
                                 attempt: Set(0),
                                 lease_owner: Set(None),
                                 lease_until: Set(None),
                                 fencing_token: Set(None),
                                 worker_selector: Set(None),
+                                namespace: Set(None),
+                                app: Set(None),
+                                worker_pool: Set(None),
                                 created_at: Set(now.clone()),
                                 updated_at: Set(now.clone()),
                             }
@@ -641,6 +749,102 @@ impl WorkflowRepository {
                 .insert(&txn)
                 .await?;
             }
+            "script" => {
+                let job_instance_id = new_id("inst");
+                let job_id = node_spec.job_id.clone().unwrap_or_else(|| {
+                    format!("workflow-script-{}-{}", instance.workflow_id, node_spec.key)
+                });
+                ensure_workflow_job_soft_link(&txn, &job_id, &now).await?;
+                crate::entities::job_instance::ActiveModel {
+                    id: Set(job_instance_id.clone()),
+                    job_id: Set(job_id),
+                    status: Set("pending".to_owned()),
+                    trigger_type: Set("workflow".to_owned()),
+                    execution_mode: Set("single".to_owned()),
+                    created_at: Set(now.clone()),
+                    updated_at: Set(now.clone()),
+                }
+                .insert(&txn)
+                .await?;
+                node_active.job_instance_id = Set(Some(job_instance_id.clone()));
+                dispatch_queue::ActiveModel {
+                    id: Set(new_id("dq")),
+                    job_instance_id: Set(Some(job_instance_id)),
+                    workflow_node_instance_id: Set(None),
+                    priority: Set(0),
+                    run_after: Set(now.clone()),
+                    status: Set("pending".to_owned()),
+                    attempt: Set(0),
+                    lease_owner: Set(None),
+                    lease_until: Set(None),
+                    fencing_token: Set(None),
+                    worker_selector: Set(None),
+                    namespace: Set(None),
+                    app: Set(None),
+                    worker_pool: Set(None),
+                    created_at: Set(now.clone()),
+                    updated_at: Set(now.clone()),
+                }
+                .insert(&txn)
+                .await?;
+            }
+            "http" | "grpc" | "sql" | "file_cleanup" => {
+                let job_instance_id = new_id("inst");
+                let job_id = format!("workflow-{}-{}-{}", node_kind(&node_spec), instance.workflow_id, node_spec.key);
+                ensure_workflow_job_soft_link(&txn, &job_id, &now).await?;
+                crate::entities::job_instance::ActiveModel {
+                    id: Set(job_instance_id.clone()),
+                    job_id: Set(job_id),
+                    status: Set("pending".to_owned()),
+                    trigger_type: Set("workflow".to_owned()),
+                    execution_mode: Set("single".to_owned()),
+                    created_at: Set(now.clone()),
+                    updated_at: Set(now.clone()),
+                }
+                .insert(&txn)
+                .await?;
+                node_active.job_instance_id = Set(Some(job_instance_id.clone()));
+                dispatch_queue::ActiveModel {
+                    id: Set(new_id("dq")),
+                    job_instance_id: Set(Some(job_instance_id)),
+                    workflow_node_instance_id: Set(None),
+                    priority: Set(0),
+                    run_after: Set(now.clone()),
+                    status: Set("pending".to_owned()),
+                    attempt: Set(0),
+                    lease_owner: Set(None),
+                    lease_until: Set(None),
+                    fencing_token: Set(None),
+                    worker_selector: Set(None),
+                    namespace: Set(None),
+                    app: Set(None),
+                    worker_pool: Set(None),
+                    created_at: Set(now.clone()),
+                    updated_at: Set(now.clone()),
+                }
+                .insert(&txn)
+                .await?;
+            }
+            "condition" => {
+                node_active.status = Set(if evaluate_condition_node(&node_spec) {
+                    "succeeded".to_owned()
+                } else {
+                    "failed".to_owned()
+                });
+            }
+            "approval" => {
+                node_active.status = Set(if workflow_config_bool(&node_spec, "approved").unwrap_or(false) {
+                    "succeeded".to_owned()
+                } else {
+                    "running".to_owned()
+                });
+            }
+            "delay" => {
+                node_active.status = Set("succeeded".to_owned());
+            }
+            "parallel" | "join" | "notification" | "compensation" | "start" | "end" => {
+                node_active.status = Set("succeeded".to_owned());
+            }
             _ => {}
         }
         let updated_node = node_active.update(&txn).await?;
@@ -657,27 +861,46 @@ impl WorkflowRepository {
             event_type: Set("workflow.node.materialized".to_owned()),
             message: Set(format!("node {} materialized", updated_node.node_key)),
             payload: Set(None),
-            created_at: Set(now),
+            created_at: Set(now.clone()),
         }
         .insert(&txn)
         .await?;
+        let updated_node_status = updated_node.status.clone();
+        let updated_node_key = updated_node.node_key.clone();
+        let updated_node_summary = WorkflowNodeInstanceSummary::from(updated_node);
+        let updated_queue_summary = DispatchQueueSummary::from(updated_queue);
+        let should_auto_advance = matches!(
+            node_kind(&node_spec),
+            "condition" | "parallel" | "join" | "notification" | "compensation" | "start" | "end" | "delay"
+        ) && matches!(updated_node_status.as_str(), "succeeded" | "failed" | "skipped");
         txn.commit().await?;
+        if should_auto_advance {
+            let _ = Box::pin(self.advance_workflow(
+                &instance.id,
+                AdvanceWorkflowInput {
+                    node_key: updated_node_key,
+                    status: updated_node_status,
+                    message: Some("workflow control node completed".to_owned()),
+                },
+            ))
+            .await?;
+        }
         let refreshed = self
             .get_workflow_instance(&instance.id)
             .await?
             .ok_or_else(|| sea_orm::DbErr::RecordNotFound(instance.id.clone()))?;
         Ok(Some(MaterializeWorkflowNodeResult {
             instance: refreshed,
-            node: WorkflowNodeInstanceSummary::from(updated_node),
+            node: updated_node_summary,
             shards,
-            queue_item: DispatchQueueSummary::from(updated_queue),
+            queue_item: updated_queue_summary,
         }))
     }
 
-    pub async fn processor_name_for_job_instance(
+    pub async fn job_binding_for_instance(
         &self,
         job_instance_id: &str,
-    ) -> Result<Option<String>, sea_orm::DbErr> {
+    ) -> Result<Option<WorkflowJobBindingSummary>, sea_orm::DbErr> {
         if crate::entities::job_instance::Entity::find_by_id(job_instance_id.to_owned())
             .one(&self.db)
             .await?
@@ -700,9 +923,12 @@ impl WorkflowRepository {
                 .nodes
                 .iter()
                 .find(|node| node.key == node_instance.node_key)
-            && let Some(processor_name) = normalize_processor_name(node.processor_name.clone())
         {
-            return Ok(Some(processor_name));
+            return Ok(Some(WorkflowJobBindingSummary {
+                node_kind: node_kind(node).to_owned(),
+                processor_name: normalize_processor_name(node.processor_name.clone()),
+                config: node.config.clone(),
+            }));
         }
 
         if let Some(shard) = workflow_shard::Entity::find()
@@ -715,12 +941,25 @@ impl WorkflowRepository {
                 .nodes
                 .iter()
                 .find(|node| node.key == shard.node_key)
-            && let Some(processor_name) = normalize_processor_name(node.processor_name.clone())
         {
-            return Ok(Some(processor_name));
+            return Ok(Some(WorkflowJobBindingSummary {
+                node_kind: node_kind(node).to_owned(),
+                processor_name: normalize_processor_name(node.processor_name.clone()),
+                config: node.config.clone(),
+            }));
         }
 
         Ok(None)
+    }
+
+    pub async fn processor_name_for_job_instance(
+        &self,
+        job_instance_id: &str,
+    ) -> Result<Option<String>, sea_orm::DbErr> {
+        Ok(self
+            .job_binding_for_instance(job_instance_id)
+            .await?
+            .and_then(|binding| binding.processor_name))
     }
 
     pub async fn get_node_by_job_instance(
@@ -752,6 +991,7 @@ impl WorkflowRepository {
                 CompleteWorkflowShardInput {
                     status: terminal_status.clone(),
                     output: None,
+                    checkpoint: None,
                     message: message.clone(),
                 },
             )
@@ -885,6 +1125,12 @@ impl WorkflowRepository {
             .map(serde_json::to_string)
             .transpose()
             .map_err(|error| sea_orm::DbErr::Custom(error.to_string()))?;
+        let checkpoint = input
+            .checkpoint
+            .as_ref()
+            .map(serde_json::to_string)
+            .transpose()
+            .map_err(|error| sea_orm::DbErr::Custom(error.to_string()))?;
         let workflow_instance_id = shard.workflow_instance_id.clone();
         let workflow_node_instance_id = shard.workflow_node_instance_id.clone();
         let shard_job_instance_id = shard.job_instance_id.clone();
@@ -894,6 +1140,9 @@ impl WorkflowRepository {
         let mut active: workflow_shard::ActiveModel = shard.into();
         active.status = Set(status.clone());
         active.output = Set(output.clone());
+        if checkpoint.is_some() {
+            active.checkpoint = Set(checkpoint.clone());
+        }
         active.updated_at = Set(now.clone());
         let updated = active.update(&txn).await?;
         instance_event::ActiveModel {
@@ -919,6 +1168,27 @@ impl WorkflowRepository {
             .await?;
         let has_failed = sibling_rows.iter().any(|row| row.status == "failed");
         let all_succeeded = sibling_rows.iter().all(|row| row.status == "succeeded");
+
+        if all_succeeded {
+            let node_row = workflow_node_instance::Entity::find_by_id(workflow_node_instance_id.clone())
+                .one(&txn)
+                .await?;
+            if let Some(node_row) = node_row {
+                let workflow_row = workflow_instance::Entity::find_by_id(workflow_instance_id.clone())
+                    .one(&txn)
+                    .await?;
+                if let Some(workflow_row) = workflow_row {
+                    let definition_row = workflow_node::Entity::find()
+                        .filter(workflow_node::Column::WorkflowId.eq(workflow_row.workflow_id))
+                        .filter(workflow_node::Column::NodeKey.eq(node_row.node_key.clone()))
+                        .one(&txn)
+                        .await?;
+                    if definition_row.as_ref().is_some_and(|node| node.kind == "map_reduce") {
+                        persist_map_reduce_result_chunks(&txn, &workflow_instance_id, &node_row.node_key, &sibling_rows, &now).await?;
+                    }
+                }
+            }
+        }
         txn.commit().await?;
         if let Some(job_instance_id) = &shard_job_instance_id {
             self.mark_job_queue_done(job_instance_id, &status).await?;
@@ -1099,13 +1369,26 @@ impl WorkflowRepository {
                 query.filter(dispatch_queue::Column::JobInstanceId.is_not_null())
             }
         };
-        let Some((queue_id,)) = query
+        let candidates = query
             .select_only()
             .column(dispatch_queue::Column::Id)
+            .limit(16)
             .into_tuple::<(String,)>()
-            .one(&self.db)
-            .await?
-        else {
+            .all(&self.db)
+            .await?;
+        let mut queue_id = None;
+        for (candidate_id,) in candidates {
+            if kind == DispatchQueueClaimKind::JobInstance
+                && self
+                    .dispatch_queue_item_blocked_by_quota(&candidate_id)
+                    .await?
+            {
+                continue;
+            }
+            queue_id = Some(candidate_id);
+            break;
+        }
+        let Some(queue_id) = queue_id else {
             return Ok(None);
         };
         self.claim_dispatch_queue_item_with_fencing(
@@ -1125,6 +1408,52 @@ impl WorkflowRepository {
     ) -> Result<Option<DispatchQueueClaim>, sea_orm::DbErr> {
         self.claim_dispatch_queue_item_with_fencing(queue_id, lease_owner, lease_seconds, None)
             .await
+    }
+
+    async fn dispatch_queue_item_blocked_by_quota(
+        &self,
+        queue_id: &str,
+    ) -> Result<bool, sea_orm::DbErr> {
+        let Some(row) = dispatch_queue::Entity::find_by_id(queue_id.to_owned())
+            .one(&self.db)
+            .await?
+        else {
+            return Ok(false);
+        };
+        let (Some(namespace), Some(app), Some(pool)) = (row.namespace, row.app, row.worker_pool)
+        else {
+            return Ok(false);
+        };
+        let Some(scope) = crate::entities::worker_pool::Entity::find()
+            .filter(crate::entities::worker_pool::Column::Name.eq(pool.clone()))
+            .one(&self.db)
+            .await?
+        else {
+            return Ok(false);
+        };
+        let active_depth = dispatch_queue::Entity::find()
+            .filter(dispatch_queue::Column::Namespace.eq(namespace.clone()))
+            .filter(dispatch_queue::Column::App.eq(app.clone()))
+            .filter(dispatch_queue::Column::WorkerPool.eq(pool.clone()))
+            .filter(dispatch_queue::Column::Status.is_in(["pending", "running"]))
+            .all(&self.db)
+            .await?
+            .len();
+        if scope.max_queue_depth > 0
+            && active_depth > usize::try_from(scope.max_queue_depth).unwrap_or(usize::MAX)
+        {
+            return Ok(true);
+        }
+        let running_depth = dispatch_queue::Entity::find()
+            .filter(dispatch_queue::Column::Namespace.eq(namespace))
+            .filter(dispatch_queue::Column::App.eq(app))
+            .filter(dispatch_queue::Column::WorkerPool.eq(pool))
+            .filter(dispatch_queue::Column::Status.eq("running"))
+            .all(&self.db)
+            .await?
+            .len();
+        Ok(scope.max_concurrency > 0
+            && running_depth >= usize::try_from(scope.max_concurrency).unwrap_or(usize::MAX))
     }
 
     pub async fn claim_dispatch_queue_item_with_fencing(
@@ -1509,6 +1838,138 @@ impl WorkflowRepository {
         Ok(summary)
     }
 
+
+
+    pub async fn cancel_job_instance(&self, job_instance_id: &str) -> Result<bool, sea_orm::DbErr> {
+        let now = now_rfc3339();
+        let txn = self.db.begin().await?;
+        let instance_result = crate::entities::job_instance::Entity::update_many()
+            .col_expr(
+                crate::entities::job_instance::Column::Status,
+                Expr::value("cancelled"),
+            )
+            .col_expr(crate::entities::job_instance::Column::UpdatedAt, Expr::value(now.clone()))
+            .filter(crate::entities::job_instance::Column::Id.eq(job_instance_id.to_owned()))
+            .filter(crate::entities::job_instance::Column::Status.is_in(["pending", "dispatching", "running"]))
+            .exec(&txn)
+            .await?;
+        dispatch_queue::Entity::update_many()
+            .col_expr(dispatch_queue::Column::Status, Expr::value("cancelled"))
+            .col_expr(dispatch_queue::Column::LeaseOwner, Expr::value(Option::<String>::None))
+            .col_expr(dispatch_queue::Column::LeaseUntil, Expr::value(Option::<String>::None))
+            .col_expr(dispatch_queue::Column::FencingToken, Expr::value(Option::<String>::None))
+            .col_expr(dispatch_queue::Column::UpdatedAt, Expr::value(now.clone()))
+            .filter(dispatch_queue::Column::JobInstanceId.eq(job_instance_id.to_owned()))
+            .exec(&txn)
+            .await?;
+        if let Some(shard) = workflow_shard::Entity::find()
+            .filter(workflow_shard::Column::JobInstanceId.eq(job_instance_id.to_owned()))
+            .one(&txn)
+            .await?
+        {
+            let mut active: workflow_shard::ActiveModel = shard.into();
+            active.status = Set("cancelled".to_owned());
+            active.updated_at = Set(now.clone());
+            active.update(&txn).await?;
+        }
+        instance_event::ActiveModel {
+            id: Set(new_id("evt")),
+            instance_id: Set(job_instance_id.to_owned()),
+            instance_type: Set("job".to_owned()),
+            event_type: Set("job.instance.cancelled".to_owned()),
+            message: Set("job instance cancelled".to_owned()),
+            payload: Set(None),
+            created_at: Set(now),
+        }
+        .insert(&txn)
+        .await?;
+        txn.commit().await?;
+        Ok(instance_result.rows_affected > 0)
+    }
+
+    pub async fn rebalance_workflow_shards(
+        &self,
+        instance_id: &str,
+        input: RebalanceWorkflowShardsInput,
+    ) -> Result<Option<RebalanceWorkflowShardsResult>, sea_orm::DbErr> {
+        let instance_exists = workflow_instance::Entity::find_by_id(instance_id.to_owned())
+            .one(&self.db)
+            .await?
+            .is_some();
+        if !instance_exists {
+            return Ok(None);
+        }
+        let statuses = input
+            .statuses
+            .unwrap_or_else(|| vec!["failed".to_owned()]);
+        let now = now_rfc3339();
+        let mut query = workflow_shard::Entity::find()
+            .filter(workflow_shard::Column::WorkflowInstanceId.eq(instance_id.to_owned()))
+            .filter(workflow_shard::Column::Status.is_in(statuses));
+        if let Some(node_key) = input.node_key.as_ref().filter(|value| !value.trim().is_empty()) {
+            query = query.filter(workflow_shard::Column::NodeKey.eq(node_key.trim().to_owned()));
+        }
+        let shards = query.all(&self.db).await?;
+        let txn = self.db.begin().await?;
+        let mut requeued = Vec::new();
+        for shard in shards {
+            let next_retry_count = shard.retry_count.saturating_add(1);
+            let job_instance_id = new_id("inst");
+            crate::entities::job_instance::ActiveModel {
+                id: Set(job_instance_id.clone()),
+                job_id: Set(format!("workflow-shard-{}-{}", shard.workflow_instance_id, shard.node_key)),
+                status: Set("pending".to_owned()),
+                trigger_type: Set("workflow_shard".to_owned()),
+                execution_mode: Set("single".to_owned()),
+                created_at: Set(now.clone()),
+                updated_at: Set(now.clone()),
+            }
+            .insert(&txn)
+            .await?;
+            dispatch_queue::ActiveModel {
+                id: Set(new_id("dq")),
+                job_instance_id: Set(Some(job_instance_id.clone())),
+                workflow_node_instance_id: Set(None),
+                priority: Set(0),
+                run_after: Set(now.clone()),
+                status: Set("pending".to_owned()),
+                attempt: Set(0),
+                lease_owner: Set(None),
+                lease_until: Set(None),
+                fencing_token: Set(None),
+                worker_selector: Set(None),
+                namespace: Set(None),
+                app: Set(None),
+                worker_pool: Set(None),
+                created_at: Set(now.clone()),
+                updated_at: Set(now.clone()),
+            }
+            .insert(&txn)
+            .await?;
+            let mut active: workflow_shard::ActiveModel = shard.into();
+            active.status = Set("pending".to_owned());
+            active.output = Set(None);
+            active.retry_count = Set(next_retry_count);
+            active.job_instance_id = Set(Some(job_instance_id));
+            active.updated_at = Set(now.clone());
+            let updated = active.update(&txn).await?;
+            requeued.push(WorkflowShardSummary::from(updated));
+        }
+        instance_event::ActiveModel {
+            id: Set(new_id("evt")),
+            instance_id: Set(instance_id.to_owned()),
+            instance_type: Set("workflow".to_owned()),
+            event_type: Set("workflow.shards.rebalanced".to_owned()),
+            message: Set(input.message.unwrap_or_else(|| format!("rebalanced {} workflow shards", requeued.len()))),
+            payload: Set(Some(serde_json::to_string(&requeued).map_err(|error| sea_orm::DbErr::Custom(error.to_string()))?)),
+            created_at: Set(now),
+        }
+        .insert(&txn)
+        .await?;
+        txn.commit().await?;
+        Ok(Some(RebalanceWorkflowShardsResult { requeued_shards: requeued }))
+    }
+
     pub async fn recover_workflow_node(
         &self,
         instance_id: &str,
@@ -1552,6 +2013,9 @@ impl WorkflowRepository {
                 lease_until: Set(None),
                 fencing_token: Set(None),
                 worker_selector: Set(None),
+                namespace: Set(None),
+                app: Set(None),
+                worker_pool: Set(None),
                 created_at: Set(now.clone()),
                 updated_at: Set(now.clone()),
             }

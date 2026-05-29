@@ -247,7 +247,7 @@ describe('api client envelope handling', () => {
         return new Response(JSON.stringify({
           code: 0,
           message: 'success',
-          data: [{ id: 'wp_1', namespace: 'default', app: 'billing', name: 'critical', createdAt: 'now', updatedAt: 'now' }],
+          data: [{ id: 'wp_1', namespace: 'default', app: 'billing', name: 'critical', maxQueueDepth: 0, maxConcurrency: 0, createdAt: 'now', updatedAt: 'now' }],
         }));
       }
       return new Response(JSON.stringify({
@@ -258,11 +258,11 @@ describe('api client envelope handling', () => {
     }) as unknown as typeof fetch;
 
     await expect(listNamespaces()).resolves.toEqual([{ id: 'ns_1', name: 'default', createdAt: 'now', updatedAt: 'now' }]);
-    await expect(listWorkerPools({ namespace: 'default', app: 'billing' })).resolves.toEqual([{ id: 'wp_1', namespace: 'default', app: 'billing', name: 'critical', createdAt: 'now', updatedAt: 'now' }]);
+    await expect(listWorkerPools({ namespace: 'default', app: 'billing' })).resolves.toEqual([{ id: 'wp_1', namespace: 'default', app: 'billing', name: 'critical', maxQueueDepth: 0, maxConcurrency: 0, createdAt: 'now', updatedAt: 'now' }]);
 
     globalThis.fetch = mock(async (url: string | URL | Request, init?: RequestInit) => {
       calls.push({ url: String(url), body: init?.body ? JSON.parse(String(init.body)) : undefined });
-      return new Response(JSON.stringify({ code: 0, message: 'success', data: { id: 'ok', name: 'ok', namespace: 'default', app: 'billing', createdAt: 'now', updatedAt: 'now' } }));
+      return new Response(JSON.stringify({ code: 0, message: 'success', data: { id: 'ok', name: 'ok', namespace: 'default', app: 'billing', maxQueueDepth: 0, maxConcurrency: 0, createdAt: 'now', updatedAt: 'now' } }));
     }) as unknown as typeof fetch;
 
     await createNamespace({ name: 'payments' });

@@ -17,6 +17,8 @@ pub struct Model {
     pub status: String,
     pub input: String,
     pub output: Option<String>,
+    pub checkpoint: Option<String>,
+    pub retry_count: i32,
     pub job_instance_id: Option<String>,
     pub created_at: String,
     pub updated_at: String,

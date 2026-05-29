@@ -36,6 +36,10 @@ pub enum ScheduleType {
     FixedRate,
     /// Job is triggered with a fixed delay after previous completion.
     FixedDelay,
+    /// Job is triggered once at a future timestamp.
+    Once,
+    /// Job is triggered only inside a daily time window at a fixed interval.
+    DailyTimeInterval,
 }
 
 impl ScheduleType {
@@ -47,6 +51,8 @@ impl ScheduleType {
             Self::Cron => "cron",
             Self::FixedRate => "fixed_rate",
             Self::FixedDelay => "fixed_delay",
+            Self::Once => "once",
+            Self::DailyTimeInterval => "daily_time_interval",
         }
     }
 }
@@ -66,7 +72,68 @@ impl FromStr for ScheduleType {
             "cron" => Ok(Self::Cron),
             "fixed_rate" | "fixed-rate" | "fixedrate" => Ok(Self::FixedRate),
             "fixed_delay" | "fixed-delay" | "fixeddelay" => Ok(Self::FixedDelay),
+            "once" | "one_time" | "one-time" | "once_at" | "once-at" => Ok(Self::Once),
+            "daily_time_interval" | "daily-time-interval" | "daily" | "calendar_daily" => Ok(Self::DailyTimeInterval),
             _ => Err(ParseEnumError::new("schedule_type", value)),
+        }
+    }
+}
+
+/// Misfire policy for automatic schedules when one or more fire times were missed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MisfirePolicy {
+    /// Skip missed fire times and wait for the next regular schedule.
+    DoNothing,
+    /// Fire at most once for missed fire times.
+    FireOnce,
+    /// Catch up missed fire times up to the configured scheduler cap.
+    CatchUpLimited,
+    /// Move the schedule cursor to now without firing missed instances.
+    Reschedule,
+    /// Keep only the latest missed fire time when the scheduler catches up.
+    LatestOnly,
+}
+
+impl MisfirePolicy {
+    /// Returns the stable storage and wire representation.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::DoNothing => "do_nothing",
+            Self::FireOnce => "fire_once",
+            Self::CatchUpLimited => "catch_up_limited",
+            Self::Reschedule => "reschedule",
+            Self::LatestOnly => "latest_only",
+        }
+    }
+}
+
+impl Default for MisfirePolicy {
+    fn default() -> Self {
+        Self::FireOnce
+    }
+}
+
+impl fmt::Display for MisfirePolicy {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+impl FromStr for MisfirePolicy {
+    type Err = ParseEnumError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "do_nothing" | "do-nothing" | "donothing" => Ok(Self::DoNothing),
+            "fire_once" | "fire-once" | "fireonce" => Ok(Self::FireOnce),
+            "catch_up_limited" | "catch-up-limited" | "catchuplimited" | "catch_up" => {
+                Ok(Self::CatchUpLimited)
+            }
+            "reschedule" => Ok(Self::Reschedule),
+            "latest_only" | "latest-only" | "latestonly" | "latest" => Ok(Self::LatestOnly),
+            _ => Err(ParseEnumError::new("misfire_policy", value)),
         }
     }
 }
@@ -120,6 +187,12 @@ pub enum TriggerType {
     Cron,
     /// Fixed-rate tikee trigger.
     FixedRate,
+    /// Fixed-delay tikee trigger.
+    FixedDelay,
+    /// One-shot future tikee trigger.
+    Once,
+    /// Daily time-window interval tikee trigger.
+    DailyTimeInterval,
     /// Manual operator trigger from UI or CLI.
     Manual,
     /// Workflow shard fan-out trigger.
@@ -136,6 +209,9 @@ impl TriggerType {
             Self::Api => "api",
             Self::Cron => "cron",
             Self::FixedRate => "fixed_rate",
+            Self::FixedDelay => "fixed_delay",
+            Self::Once => "once",
+            Self::DailyTimeInterval => "daily_time_interval",
             Self::Manual => "manual",
             Self::WorkflowShard => "workflow_shard",
             Self::Webhook => "webhook",
@@ -157,6 +233,9 @@ impl FromStr for TriggerType {
             "api" => Ok(Self::Api),
             "cron" => Ok(Self::Cron),
             "fixed_rate" | "fixed-rate" | "fixedrate" => Ok(Self::FixedRate),
+            "fixed_delay" | "fixed-delay" | "fixeddelay" => Ok(Self::FixedDelay),
+            "once" | "one_time" | "one-time" | "once_at" | "once-at" => Ok(Self::Once),
+            "daily_time_interval" | "daily-time-interval" | "daily" | "calendar_daily" => Ok(Self::DailyTimeInterval),
             "manual" => Ok(Self::Manual),
             "workflow_shard" | "workflow-shard" | "workflowshard" => Ok(Self::WorkflowShard),
             "webhook" | "event_webhook" | "event-webhook" => Ok(Self::Webhook),
@@ -847,11 +926,11 @@ mod tests {
     use std::str::FromStr;
 
     use super::{
-        ExecutionMode, HealthState, InstanceStatus, ScheduleType, ScriptExecutionPolicy,
-        ScriptFilesystemPolicy, ScriptLanguage, ScriptNetworkPolicy, ScriptPolicyError,
-        ScriptReleaseGrantError, ScriptReleaseGrantSet, ScriptSandboxBackend, ScriptSecretPolicy,
-        ScriptStatus, TriggerType, WasmCapabilities, WasmProcessorSpec, WasmRuntimeKind,
-        WasmSpecError,
+        ExecutionMode, HealthState, InstanceStatus, MisfirePolicy, ScheduleType,
+        ScriptExecutionPolicy, ScriptFilesystemPolicy, ScriptLanguage, ScriptNetworkPolicy,
+        ScriptPolicyError, ScriptReleaseGrantError, ScriptReleaseGrantSet, ScriptSandboxBackend,
+        ScriptSecretPolicy, ScriptStatus, TriggerType, WasmCapabilities, WasmProcessorSpec,
+        WasmRuntimeKind, WasmSpecError,
     };
 
     #[test]
@@ -866,6 +945,13 @@ mod tests {
             Ok(ScheduleType::FixedRate)
         );
         assert_eq!(ScheduleType::Cron.as_str(), "cron");
+        assert_eq!(ScheduleType::from_str("once_at"), Ok(ScheduleType::Once));
+        assert_eq!(
+            MisfirePolicy::from_str("catch-up-limited"),
+            Ok(MisfirePolicy::CatchUpLimited)
+        );
+        assert_eq!(MisfirePolicy::from_str("latest-only"), Ok(MisfirePolicy::LatestOnly));
+        assert_eq!(MisfirePolicy::LatestOnly.as_str(), "latest_only");
     }
 
     #[test]
@@ -1049,6 +1135,7 @@ mod tests {
     #[test]
     fn trigger_and_status_values_are_stable() {
         assert_eq!(TriggerType::Api.as_str(), "api");
+        assert_eq!(TriggerType::FixedDelay.as_str(), "fixed_delay");
         assert_eq!(TriggerType::WorkflowShard.as_str(), "workflow_shard");
         assert_eq!(InstanceStatus::Pending.as_str(), "pending");
         assert_eq!(

@@ -1,8 +1,9 @@
-import { Alert, Button, Card, Drawer, Empty, Space, Table, Tag, Typography, message } from 'antd';
+import { Alert, Button, Card, Drawer, Empty, Popconfirm, Space, Table, Tag, Typography, message } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useEffect, useState } from 'react';
 
 import {
+  cancelInstance,
   listInstanceAttempts,
   listInstanceLogs,
   listJobInstances,
@@ -87,6 +88,16 @@ export function InstancesPage() {
     }
   };
 
+  const cancelRunningInstance = async (instance: JobInstanceSummary) => {
+    try {
+      const updated = await cancelInstance(instance.id);
+      message.success(`已取消实例 ${updated.id}`);
+      await load();
+    } catch (cause) {
+      message.error(cause instanceof Error ? cause.message : '取消失败');
+    }
+  };
+
   const columns: ColumnsType<JobInstanceSummary> = [
     { title: 'Instance', dataIndex: 'id', ellipsis: true, width: 140 },
     { title: 'Job', dataIndex: 'jobId', render: (value: string) => <strong>{jobName.get(value) ?? value}</strong> },
@@ -107,9 +118,18 @@ export function InstancesPage() {
       ),
     },
     {
-      title: 'Logs',
-      width: 100,
-      render: (_, instance) => <Button type="link" onClick={() => void openLogs(instance)}>查看日志</Button>,
+      title: 'Actions',
+      width: 180,
+      render: (_, instance) => (
+        <Space size={4}>
+          <Button type="link" onClick={() => void openLogs(instance)}>查看日志</Button>
+          {['pending', 'dispatching', 'running'].includes(instance.status) ? (
+            <Popconfirm title="取消实例" description="取消后会关闭对应队列项，Worker 后续结果会被视为过期。" onConfirm={() => void cancelRunningInstance(instance)}>
+              <Button type="link" danger>取消</Button>
+            </Popconfirm>
+          ) : null}
+        </Space>
+      ),
     },
   ];
 

@@ -6,7 +6,7 @@ use sea_orm::{
 };
 use tikee_core::{ExecutionMode, InstanceStatus, TriggerType};
 
-use crate::entities::{dispatch_queue, job, job_instance};
+use crate::entities::{app, dispatch_queue, job, job_instance, namespace};
 
 use super::util::{new_id, now_rfc3339};
 /// Minimal job instance creation input.
@@ -96,6 +96,7 @@ impl JobInstanceRepository {
             return Ok(None);
         };
 
+        let scope = job_scope(&self.db, &parent).await?;
         let now = now_rfc3339();
         let txn = self.db.begin().await?;
         let model = job_instance::ActiveModel {
@@ -122,6 +123,9 @@ impl JobInstanceRepository {
                 lease_until: Set(None),
                 fencing_token: Set(None),
                 worker_selector: Set(None),
+                namespace: Set(scope.as_ref().map(|scope| scope.0.clone())),
+                app: Set(scope.as_ref().map(|scope| scope.1.clone())),
+                worker_pool: Set(scope.as_ref().map(|scope| scope.2.clone())),
                 created_at: Set(now.clone()),
                 updated_at: Set(now),
             }
@@ -207,6 +211,30 @@ impl JobInstanceRepository {
             .one(&self.db)
             .await
             .map(|model| model.map(JobInstanceSummary::from))
+    }
+
+    /// Return the latest terminal instance for a job.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when database access fails.
+    pub async fn latest_terminal_by_job(
+        &self,
+        job_id: &str,
+    ) -> Result<Option<JobInstanceSummary>, sea_orm::DbErr> {
+        let rows = job_instance::Entity::find()
+            .filter(job_instance::Column::JobId.eq(job_id))
+            .filter(job_instance::Column::Status.is_in([
+                InstanceStatus::Succeeded.to_string(),
+                InstanceStatus::Failed.to_string(),
+                InstanceStatus::PartialFailed.to_string(),
+                InstanceStatus::Cancelled.to_string(),
+            ]))
+            .order_by_desc(job_instance::Column::UpdatedAt)
+            .limit(1)
+            .all(&self.db)
+            .await?;
+        Ok(rows.into_iter().next().map(JobInstanceSummary::from))
     }
 
     /// Count all instances grouped by their current status.
@@ -315,6 +343,25 @@ impl JobInstanceRepository {
             .await
             .map(|model| Some(JobInstanceSummary::from(model)))
     }
+}
+
+async fn job_scope(
+    db: &DatabaseConnection,
+    parent: &job::Model,
+) -> Result<Option<(String, String, String)>, sea_orm::DbErr> {
+    let Some(ns) = namespace::Entity::find_by_id(parent.namespace_id.clone())
+        .one(db)
+        .await?
+    else {
+        return Ok(None);
+    };
+    let Some(app) = app::Entity::find_by_id(parent.app_id.clone())
+        .one(db)
+        .await?
+    else {
+        return Ok(None);
+    };
+    Ok(Some((ns.name, app.name, "default".to_owned())))
 }
 
 fn duration_history_from_rows(rows: Vec<job_instance::Model>) -> JobDurationHistory {

@@ -62,12 +62,16 @@ const NODE_CATALOG = [
   { kind: 'end', label: 'End', limits: { in: 8, out: 0 } },
   { kind: 'job', label: 'Job', limits: { in: 8, out: 8 } },
   { kind: 'http', label: 'HTTP', limits: { in: 8, out: 8 } },
+  { kind: 'grpc', label: 'gRPC', limits: { in: 8, out: 8 } },
+  { kind: 'sql', label: 'SQL', limits: { in: 8, out: 8 } },
   { kind: 'condition', label: 'Condition', limits: { in: 8, out: 2 } },
   { kind: 'parallel', label: 'Parallel', limits: { in: 8, out: 16 } },
   { kind: 'join', label: 'Join', limits: { in: 16, out: 4 } },
   { kind: 'delay', label: 'Delay', limits: { in: 8, out: 8 } },
   { kind: 'approval', label: 'Approval', limits: { in: 8, out: 4 } },
   { kind: 'notification', label: 'Notify', limits: { in: 8, out: 8 } },
+  { kind: 'compensation', label: 'Compensate', limits: { in: 8, out: 4 } },
+  { kind: 'file_cleanup', label: 'FileClean', limits: { in: 8, out: 8 } },
   { kind: 'map', label: 'Map', limits: { in: 8, out: 8 } },
   { kind: 'map_reduce', label: 'MapReduce', limits: { in: 16, out: 4 } },
   { kind: 'sub_workflow', label: 'SubFlow', limits: { in: 8, out: 4 } },
@@ -127,12 +131,16 @@ function makeNode(kind: string, index: number): WorkflowNodeSpec {
   }
   const configByKind: Record<string, Record<string, unknown>> = {
     http: { method: 'GET', url: '', timeout_ms: 30000 },
+    grpc: { endpoint: 'https://grpc.example.com', service: '', method: '', allowedHosts: [] },
+    sql: { databaseUrl: '', allowedDatabaseUrls: [], sql: 'SELECT 1', dryRun: true, readOnly: true },
     condition: { expression: 'context.success == true', true_edge: 'on_success', false_edge: 'on_failure' },
     parallel: { strategy: 'fan-out' },
     join: { quorum: 'all' },
     delay: { seconds: '60' },
     approval: { approvers: 'role:ops', timeout: '24h' },
     notification: { channel: 'webhook', target: '', template: '' },
+    compensation: { compensates: '', strategy: 'saga' },
+    file_cleanup: { paths: [], allowedRoots: [], dryRun: true, recursive: false },
   };
   return { key, name: key, kind, config: { ui, ...(configByKind[kind] ?? {}) } };
 }
@@ -165,6 +173,10 @@ const EDGE_CONDITION_OPTIONS: Record<string, EdgeConditionOption[]> = {
   parallel: [
     { label: '并行分支 branch', value: 'always', color: '#8b5cf6' },
   ],
+  compensation: [
+    { label: '补偿完成 compensated', value: 'on_success', color: '#16a34a' },
+    { label: '补偿失败 failed', value: 'on_failure', color: '#ef4444' },
+  ],
   join: [
     { label: '汇聚完成 joined', value: 'on_success', color: '#2563eb' },
     { label: '汇聚失败 failed', value: 'on_failure', color: '#ef4444' },
@@ -173,6 +185,21 @@ const EDGE_CONDITION_OPTIONS: Record<string, EdgeConditionOption[]> = {
     { label: 'HTTP 成功 2xx', value: 'on_success', color: '#16a34a' },
     { label: 'HTTP 失败 non-2xx', value: 'on_failure', color: '#ef4444' },
     { label: '请求完成 always', value: 'always', color: '#8b5cf6' },
+  ],
+  grpc: [
+    { label: 'gRPC 成功', value: 'on_success', color: '#16a34a' },
+    { label: 'gRPC 失败', value: 'on_failure', color: '#ef4444' },
+    { label: '调用完成 always', value: 'always', color: '#8b5cf6' },
+  ],
+  sql: [
+    { label: 'SQL 成功', value: 'on_success', color: '#16a34a' },
+    { label: 'SQL 失败', value: 'on_failure', color: '#ef4444' },
+    { label: '执行完成 always', value: 'always', color: '#8b5cf6' },
+  ],
+  file_cleanup: [
+    { label: '清理成功', value: 'on_success', color: '#16a34a' },
+    { label: '清理失败', value: 'on_failure', color: '#ef4444' },
+    { label: '清理完成 always', value: 'always', color: '#8b5cf6' },
   ],
   script: [
     { label: '脚本成功', value: 'on_success', color: '#16a34a' },
@@ -574,6 +601,33 @@ function DagPreview({ definition, instance, jobs = [], workflows = [], currentWo
               </Space>
             ) : null}
 
+            {nodeKind(selectedNode) === 'grpc' ? (
+              <Space direction="vertical" style={{ width: '100%' }}>
+                <Typography.Text strong>gRPC 调用节点</Typography.Text>
+                <Space wrap>
+                  <Input placeholder="https://grpc.example.com" value={(selectedNode.config as { endpoint?: string } | undefined)?.endpoint ?? ''} style={{ width: 360 }} onChange={(event) => updateNodeConfig(selectedNode.key, { endpoint: event.target.value })} />
+                  <Input placeholder="package.Service" value={(selectedNode.config as { service?: string } | undefined)?.service ?? ''} style={{ width: 220 }} onChange={(event) => updateNodeConfig(selectedNode.key, { service: event.target.value })} />
+                  <Input placeholder="Method" value={(selectedNode.config as { method?: string } | undefined)?.method ?? ''} style={{ width: 180 }} onChange={(event) => updateNodeConfig(selectedNode.key, { method: event.target.value })} />
+                </Space>
+                <Input.TextArea rows={2} placeholder="allowedHosts，每行一个主机名" value={Array.isArray((selectedNode.config as { allowedHosts?: string[] } | undefined)?.allowedHosts) ? ((selectedNode.config as { allowedHosts?: string[] }).allowedHosts ?? []).join('\n') : ''} onChange={(event) => updateNodeConfig(selectedNode.key, { allowedHosts: event.target.value.split('\n').map((value) => value.trim()).filter(Boolean) })} />
+                <Typography.Text type="secondary">服务端会默认拒绝私网/回环 endpoint；payload 可在 JSON 定义中配置 typeUrl/valueBase64/json。</Typography.Text>
+              </Space>
+            ) : null}
+
+            {nodeKind(selectedNode) === 'sql' ? (
+              <Space direction="vertical" style={{ width: '100%' }}>
+                <Typography.Text strong>SQL 执行节点</Typography.Text>
+                <Input placeholder="sqlite://data.db?mode=ro" value={(selectedNode.config as { databaseUrl?: string } | undefined)?.databaseUrl ?? ''} onChange={(event) => updateNodeConfig(selectedNode.key, { databaseUrl: event.target.value })} />
+                <Input.TextArea rows={2} placeholder="allowedDatabaseUrls，每行一个完整 DSN" value={Array.isArray((selectedNode.config as { allowedDatabaseUrls?: string[] } | undefined)?.allowedDatabaseUrls) ? ((selectedNode.config as { allowedDatabaseUrls?: string[] }).allowedDatabaseUrls ?? []).join('\n') : ''} onChange={(event) => updateNodeConfig(selectedNode.key, { allowedDatabaseUrls: event.target.value.split('\n').map((value) => value.trim()).filter(Boolean) })} />
+                <Input.TextArea rows={4} placeholder="SELECT ..." value={(selectedNode.config as { sql?: string } | undefined)?.sql ?? ''} onChange={(event) => updateNodeConfig(selectedNode.key, { sql: event.target.value })} />
+                <Space wrap>
+                  <Select value={String((selectedNode.config as { dryRun?: boolean } | undefined)?.dryRun ?? true)} style={{ width: 160 }} options={[{ value: 'true', label: 'Dry-run 校验' }, { value: 'false', label: '实际执行' }]} onChange={(value) => updateNodeConfig(selectedNode.key, { dryRun: value === 'true' })} />
+                  <Select value={String((selectedNode.config as { readOnly?: boolean } | undefined)?.readOnly ?? true)} style={{ width: 160 }} options={[{ value: 'true', label: '只读 SQL' }, { value: 'false', label: '允许写入' }]} onChange={(value) => updateNodeConfig(selectedNode.key, { readOnly: value === 'true' })} />
+                </Space>
+                <Typography.Text type="secondary">默认 dry-run + readOnly；服务端强制 DSN 白名单，只读模式仅允许 SELECT/EXPLAIN/WITH。</Typography.Text>
+              </Space>
+            ) : null}
+
             {nodeKind(selectedNode) === 'condition' ? (
               <Space direction="vertical" style={{ width: '100%' }}>
                 <Typography.Text strong>条件分支节点</Typography.Text>
@@ -610,6 +664,15 @@ function DagPreview({ definition, instance, jobs = [], workflows = [], currentWo
               </Space>
             ) : null}
 
+
+            {nodeKind(selectedNode) === 'compensation' ? (
+              <Space direction="vertical" style={{ width: '100%' }}>
+                <Typography.Text strong>补偿节点</Typography.Text>
+                <Input addonBefore="补偿目标" placeholder="需要补偿的节点 key" value={(selectedNode.config as { compensates?: string } | undefined)?.compensates ?? ''} onChange={(event) => updateNodeConfig(selectedNode.key, { compensates: event.target.value })} />
+                <Input addonBefore="策略" placeholder="saga / rollback" value={(selectedNode.config as { strategy?: string } | undefined)?.strategy ?? 'saga'} onChange={(event) => updateNodeConfig(selectedNode.key, { strategy: event.target.value })} />
+              </Space>
+            ) : null}
+
             {nodeKind(selectedNode) === 'notification' ? (
               <Space direction="vertical" style={{ width: '100%' }}>
                 <Typography.Text strong>通知节点</Typography.Text>
@@ -618,6 +681,19 @@ function DagPreview({ definition, instance, jobs = [], workflows = [], currentWo
                   <Input placeholder="目标地址 / 群 / 收件人" value={(selectedNode.config as { target?: string } | undefined)?.target ?? ''} style={{ width: 360 }} onChange={(event) => updateNodeConfig(selectedNode.key, { target: event.target.value })} />
                 </Space>
                 <Input.TextArea rows={3} placeholder="通知模板" value={(selectedNode.config as { template?: string } | undefined)?.template ?? ''} onChange={(event) => updateNodeConfig(selectedNode.key, { template: event.target.value })} />
+              </Space>
+            ) : null}
+
+            {nodeKind(selectedNode) === 'file_cleanup' ? (
+              <Space direction="vertical" style={{ width: '100%' }}>
+                <Typography.Text strong>文件清理节点</Typography.Text>
+                <Input.TextArea rows={3} placeholder="待清理路径，每行一个绝对路径" value={Array.isArray((selectedNode.config as { paths?: string[] } | undefined)?.paths) ? ((selectedNode.config as { paths?: string[] }).paths ?? []).join('\n') : ''} onChange={(event) => updateNodeConfig(selectedNode.key, { paths: event.target.value.split('\n').map((value) => value.trim()).filter(Boolean) })} />
+                <Input.TextArea rows={2} placeholder="允许根目录 allowedRoots，每行一个绝对路径" value={Array.isArray((selectedNode.config as { allowedRoots?: string[] } | undefined)?.allowedRoots) ? ((selectedNode.config as { allowedRoots?: string[] }).allowedRoots ?? []).join('\n') : ''} onChange={(event) => updateNodeConfig(selectedNode.key, { allowedRoots: event.target.value.split('\n').map((value) => value.trim()).filter(Boolean) })} />
+                <Space wrap>
+                  <Select value={String((selectedNode.config as { dryRun?: boolean } | undefined)?.dryRun ?? true)} style={{ width: 160 }} options={[{ value: 'true', label: 'Dry-run 预演' }, { value: 'false', label: '实际删除' }]} onChange={(value) => updateNodeConfig(selectedNode.key, { dryRun: value === 'true' })} />
+                  <Select value={String((selectedNode.config as { recursive?: boolean } | undefined)?.recursive ?? false)} style={{ width: 160 }} options={[{ value: 'false', label: '仅文件' }, { value: 'true', label: '允许递归目录' }]} onChange={(value) => updateNodeConfig(selectedNode.key, { recursive: value === 'true' })} />
+                </Space>
+                <Typography.Text type="secondary">服务端会强制校验 allowedRoots、绝对路径和目录递归开关，默认仅预演。</Typography.Text>
               </Space>
             ) : null}
 
