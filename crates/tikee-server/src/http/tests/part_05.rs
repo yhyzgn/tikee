@@ -416,6 +416,30 @@
             .await
             .unwrap_or_else(|error| panic!("test operation should succeed: {error}"));
         assert_eq!(response.status(), axum::http::StatusCode::OK);
+
+        for action in ["create", "update", "delete"] {
+            let audit = app
+                .clone()
+                .oneshot(
+                    admin_request_builder(
+                        app.clone(),
+                        "GET",
+                        format!("/api/v1/audit-logs?action={action}&resource_type=user&resource_id={user_id}&page_size=1"),
+                    )
+                    .await,
+                )
+                .await
+                .unwrap_or_else(|error| panic!("user audit should respond: {error}"));
+            assert!(audit.status().is_success());
+            let body = axum::body::to_bytes(audit.into_body(), usize::MAX)
+                .await
+                .unwrap_or_else(|error| panic!("audit body should collect: {error}"));
+            let json: Value = serde_json::from_slice(&body)
+                .unwrap_or_else(|error| panic!("audit body should be JSON: {error}"));
+            assert_eq!(json["data"]["items"][0]["action"], action);
+            assert_eq!(json["data"]["items"][0]["resource_type"], "user");
+            assert_eq!(json["data"]["items"][0]["resource_id"], user_id);
+        }
     }
 
     async fn router() -> axum::Router {
