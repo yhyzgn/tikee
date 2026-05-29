@@ -1303,6 +1303,51 @@
 
 
 
+
+    #[tokio::test]
+    async fn cancel_instance_route_records_audit_log() {
+        let app = router().await;
+        let admin = admin_token(app.clone()).await;
+        let created = post_json_raw(
+            app.clone(),
+            "/api/v1/jobs",
+            r#"{"namespace":"default","app":"billing","name":"cancel-audit","scheduleType":"api","processorName":"demo.echo"}"#,
+            Some(&admin),
+        )
+        .await;
+        let job_id = created["data"]["id"]
+            .as_str()
+            .unwrap_or_else(|| panic!("job id should be present"));
+        let triggered = post_json_raw(
+            app.clone(),
+            &format!("/api/v1/jobs/{job_id}:trigger"),
+            r#"{"triggerType":"api","executionMode":"single"}"#,
+            Some(&admin),
+        )
+        .await;
+        let instance_id = triggered["data"]["id"]
+            .as_str()
+            .unwrap_or_else(|| panic!("instance id should be present"));
+        let cancelled = post_json_raw(
+            app.clone(),
+            &format!("/api/v1/instances/{instance_id}/cancel"),
+            "{}",
+            Some(&admin),
+        )
+        .await;
+        assert_eq!(cancelled["data"]["status"], "cancelled");
+
+        let audit = get_json_with_auth(
+            app,
+            "/api/v1/audit-logs?action=cancel&resource_type=job_instance&page_size=1",
+            &admin,
+        )
+        .await;
+        assert_eq!(audit["data"]["items"][0]["action"], "cancel");
+        assert_eq!(audit["data"]["items"][0]["resource_type"], "job_instance");
+        assert_eq!(audit["data"]["items"][0]["resource_id"], instance_id);
+    }
+
     #[tokio::test]
     async fn job_version_api_lists_and_rolls_back_snapshots() {
         let app = router().await;
