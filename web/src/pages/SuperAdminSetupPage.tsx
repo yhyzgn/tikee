@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { registerBootstrapAdmin, type BootstrapRegisterRequest } from '../api/client';
 import { ROUTE_META } from '../routes';
+import { TikeeLogo } from '../components/TikeeLogo';
 
 interface SuperAdminSetupPageProps {
   onRegistered: () => void;
@@ -17,6 +18,7 @@ export function SuperAdminSetupPage({ onRegistered }: SuperAdminSetupPageProps) 
   return (
     <div className="login-page">
       <Card className="login-card setup-card">
+        <div className="login-brand"><TikeeLogo size={64} showWordmark /></div>
         <Typography.Title level={2}>初始化管理员</Typography.Title>
         <Typography.Paragraph type="secondary">
           首次部署后需要创建唯一的初始化管理员账号。创建成功后注册入口会立即关闭，后续用户只能由管理员在站内手动添加。

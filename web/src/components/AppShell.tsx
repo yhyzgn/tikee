@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { hasPermission, usePrincipal } from './AuthGuard';
 import { MENU_ROUTE_META } from '../routes';
 import { DEFAULT_PRIMARY_COLOR, useThemeSettings } from '../theme';
+import { TikeeLogo } from './TikeeLogo';
 
 const { Header, Sider, Content } = Layout;
 
@@ -42,7 +43,7 @@ export function AppShell({ children, onLogout }: AppShellProps) {
     <Layout className="app-shell">
       <Sider breakpoint="lg" collapsedWidth="0" width={264} className="app-shell__sider">
         <div className="app-shell__brand">
-          <div className="app-shell__brand-mark">S</div>
+          <TikeeLogo size={44} />
           <div>
             <div className="app-shell__brand-title">tikee</div>
             <div className="app-shell__brand-subtitle">Task Platform</div>

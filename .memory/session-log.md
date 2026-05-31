@@ -1812,3 +1812,8 @@ Commit/push:
 - Reworked Web custom styles to use shared light/dark CSS variables for shell, cards, heroes, workflow canvases, topology fullscreen, API-Key panels, worker stats, and scheduling advice modules instead of hard-coded light surfaces.
 - Added `ThemeDarkMode.test.tsx` coverage to lock the custom module dark-mode variable contract; also cleaned existing lint blockers in Calendar and Jobs pages so Web lint is green.
 - Verification: `cd web && rtk bun test`; `cd web && rtk bun run lint`; `cd web && rtk bun run typecheck`; `rtk git diff --check -- . ':!.omx'`.
+
+### 2026-05-31 — Modern animated tikee logo
+- Added a repo-native `TikeeLogo` SVG React component with task-flow track, three orchestration nodes, arrow/tick motion, pulse animation, and dark-mode-compatible styling.
+- Replaced the sidebar placeholder brand mark and added wordmark logo treatment to login and bootstrap setup pages.
+- Verification: `cd web && rtk bun test --run src/pages/__tests__/TikeeLogo.test.tsx`; `cd web && rtk bun run typecheck`; `cd web && rtk bun run lint`; `cd web && rtk bun test`; `rtk git diff --check -- . ':!.omx'`.

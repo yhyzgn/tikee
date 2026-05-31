@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 
 import { getAuthToken, login, setAuthToken, type LoginRequest } from '../api/client';
 import { ROUTE_META } from '../routes';
+import { TikeeLogo } from '../components/TikeeLogo';
 
 function resolvePostLoginPath(state: unknown): string {
   if (
@@ -37,6 +38,7 @@ export function LoginPage() {
   return (
     <div className="login-page">
       <Card className="login-card">
+        <div className="login-brand"><TikeeLogo size={64} showWordmark /></div>
         <Typography.Title level={2}>登录 tikee</Typography.Title>
         <Typography.Paragraph type="secondary">
           使用管理员分配的账号登录。首次部署时请先完成初始化管理员注册。
