@@ -6,7 +6,7 @@ const styles = readFileSync(new URL('../../styles.css', import.meta.url), 'utf8'
 
 describe('dark mode theme coverage', () => {
   test('publishes data-theme and shared color tokens for custom modules', () => {
-    expect(appSource).toContain('document.documentElement.dataset.theme = mode');
+    expect(appSource).toContain('document.documentElement.dataset.theme = resolvedMode');
     expect(styles).toContain('html[data-theme="dark"]');
     expect(styles).toContain('--app-surface-solid');
     expect(styles).toContain('--app-text-strong');

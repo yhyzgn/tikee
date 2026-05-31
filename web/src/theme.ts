@@ -5,19 +5,22 @@ export const DEFAULT_INFO_COLOR = '#0ea5e9';
 export const PRIMARY_COLOR_STORAGE_KEY = 'tikee.primaryColor';
 export const THEME_MODE_STORAGE_KEY = 'tikee.themeMode';
 export type ThemeMode = 'light' | 'dark';
+export type ThemePreference = 'light' | 'dark' | 'system';
 
 export interface ThemeSettings {
   primaryColor: string;
-  mode: ThemeMode;
+  mode: ThemePreference;
+  resolvedMode: ThemeMode;
   setPrimaryColor: (color: string) => void;
   resetPrimaryColor: () => void;
-  setMode: (mode: ThemeMode) => void;
+  setMode: (mode: ThemePreference) => void;
   toggleMode: () => void;
 }
 
 export const ThemeSettingsContext = createContext<ThemeSettings>({
   primaryColor: DEFAULT_PRIMARY_COLOR,
-  mode: 'light',
+  mode: 'system',
+  resolvedMode: 'light',
   setPrimaryColor: () => undefined,
   resetPrimaryColor: () => undefined,
   setMode: () => undefined,
@@ -36,6 +39,11 @@ export function normalizeHexColor(value: string | null | undefined): string | nu
   return null;
 }
 
-export function normalizeThemeMode(value: string | null | undefined): ThemeMode {
-  return value === 'dark' ? 'dark' : 'light';
+export function normalizeThemeMode(value: string | null | undefined): ThemePreference {
+  if (value === 'light' || value === 'dark' || value === 'system') return value;
+  return 'system';
+}
+
+export function resolveThemeMode(mode: ThemePreference, systemPrefersDark: boolean): ThemeMode {
+  return mode === 'system' ? (systemPrefersDark ? 'dark' : 'light') : mode;
 }

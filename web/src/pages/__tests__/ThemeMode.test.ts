@@ -7,13 +7,16 @@ const themeSource = readFileSync(new URL('../../theme.ts', import.meta.url), 'ut
 const stylesSource = readFileSync(new URL('../../styles.css', import.meta.url), 'utf8');
 
 describe('runtime theme mode', () => {
-  test('persists light/dark mode and binds Ant Design algorithm', () => {
+  test('persists light/dark/system mode and binds Ant Design algorithm', () => {
     expect(themeSource).toContain('THEME_MODE_STORAGE_KEY');
     expect(themeSource).toContain('normalizeThemeMode');
     expect(appSource).toContain('theme.darkAlgorithm');
-    expect(appSource).toContain('document.documentElement.dataset.theme = mode');
-    expect(shellSource).toContain('切换暗色模式');
-    expect(shellSource).toContain('toggleMode');
+    expect(appSource).toContain("window.matchMedia('(prefers-color-scheme: dark)')");
+    expect(appSource).toContain('document.documentElement.dataset.theme = resolvedMode');
+    expect(appSource).toContain("mode === 'system'");
+    expect(themeSource).toContain("export type ThemePreference = 'light' | 'dark' | 'system'");
+    expect(shellSource).toContain('跟随系统');
+    expect(shellSource).toContain('setMode');
     expect(stylesSource).toContain("html[data-theme='dark']");
   });
 });

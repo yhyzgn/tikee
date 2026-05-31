@@ -8,7 +8,7 @@ import { AuthGuard, RequirePermission } from './components/AuthGuard';
 import { ForbiddenPage } from './components/ForbiddenPage';
 import { RouteFallback } from './components/RouteFallback';
 import { ROUTE_META } from './routes';
-import { DEFAULT_INFO_COLOR, DEFAULT_PRIMARY_COLOR, PRIMARY_COLOR_STORAGE_KEY, THEME_MODE_STORAGE_KEY, ThemeSettingsContext, normalizeHexColor, normalizeThemeMode, type ThemeMode } from './theme';
+import { DEFAULT_INFO_COLOR, DEFAULT_PRIMARY_COLOR, PRIMARY_COLOR_STORAGE_KEY, THEME_MODE_STORAGE_KEY, ThemeSettingsContext, normalizeHexColor, normalizeThemeMode, resolveThemeMode, type ThemeMode, type ThemePreference } from './theme';
 
 const Dashboard = lazy(() => import('./pages/Dashboard').then((module) => ({ default: module.Dashboard })));
 const InstancesPage = lazy(() => import('./pages/InstancesPage').then((module) => ({ default: module.InstancesPage })));
@@ -106,9 +106,13 @@ export function App() {
     if (typeof window === 'undefined') return DEFAULT_PRIMARY_COLOR;
     return normalizeHexColor(window.localStorage.getItem(PRIMARY_COLOR_STORAGE_KEY)) ?? DEFAULT_PRIMARY_COLOR;
   });
-  const [mode, setModeState] = useState<ThemeMode>(() => {
-    if (typeof window === 'undefined') return 'light';
+  const [mode, setModeState] = useState<ThemePreference>(() => {
+    if (typeof window === 'undefined') return 'system';
     return normalizeThemeMode(window.localStorage.getItem(THEME_MODE_STORAGE_KEY));
+  });
+  const [systemPrefersDark, setSystemPrefersDark] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
   const [bootstrap, setBootstrap] = useState<BootstrapStatusResponse | null>(null);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
@@ -124,13 +128,23 @@ export function App() {
     window.localStorage.removeItem(PRIMARY_COLOR_STORAGE_KEY);
   };
 
-  const setMode = (nextMode: ThemeMode) => {
+  const setMode = (nextMode: ThemePreference) => {
     const normalized = normalizeThemeMode(nextMode);
     setModeState(normalized);
     window.localStorage.setItem(THEME_MODE_STORAGE_KEY, normalized);
   };
 
-  const toggleMode = () => setMode(mode === 'dark' ? 'light' : 'dark');
+  const toggleMode = () => setMode(mode === 'system' ? resolvedMode : mode === 'dark' ? 'light' : 'dark');
+
+  const resolvedMode: ThemeMode = resolveThemeMode(mode, systemPrefersDark);
+
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = (event: MediaQueryListEvent) => setSystemPrefersDark(event.matches);
+    setSystemPrefersDark(media.matches);
+    media.addEventListener('change', handleChange);
+    return () => media.removeEventListener('change', handleChange);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -147,10 +161,11 @@ export function App() {
   useEffect(() => {
     document.documentElement.style.setProperty('--app-primary-color', primaryColor);
     document.documentElement.style.setProperty('--app-info-color', DEFAULT_INFO_COLOR);
-    document.documentElement.dataset.theme = mode;
-  }, [primaryColor, mode]);
+    document.documentElement.dataset.theme = resolvedMode;
+    document.documentElement.dataset.themePreference = mode;
+  }, [primaryColor, mode, resolvedMode]);
 
-  const themeSettings = useMemo(() => ({ primaryColor, mode, setPrimaryColor, resetPrimaryColor, setMode, toggleMode }), [primaryColor, mode]);
+  const themeSettings = useMemo(() => ({ primaryColor, mode, resolvedMode, setPrimaryColor, resetPrimaryColor, setMode, toggleMode }), [primaryColor, mode, resolvedMode]);
   const refreshBootstrap = () => {
     setBootstrap({ initialized: true, registrationOpen: false, bootstrapAdminUsername: null });
   };
@@ -159,12 +174,12 @@ export function App() {
     <ThemeSettingsContext.Provider value={themeSettings}>
       <ConfigProvider
         theme={{
-          algorithm: mode === 'dark' ? theme.darkAlgorithm : theme.defaultAlgorithm,
+          algorithm: resolvedMode === 'dark' ? theme.darkAlgorithm : theme.defaultAlgorithm,
           token: {
             colorPrimary: primaryColor,
             colorInfo: DEFAULT_INFO_COLOR,
-            colorBgBase: mode === 'dark' ? '#0f172a' : '#f6f8fc',
-            colorTextBase: mode === 'dark' ? '#e2e8f0' : '#172033',
+            colorBgBase: resolvedMode === 'dark' ? '#0f172a' : '#f6f8fc',
+            colorTextBase: resolvedMode === 'dark' ? '#e2e8f0' : '#172033',
             borderRadius: 12,
             controlHeight: 36,
             controlHeightSM: 28,

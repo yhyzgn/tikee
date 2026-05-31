@@ -1,5 +1,5 @@
 import { BulbOutlined, LogoutOutlined, MoonOutlined } from '@ant-design/icons';
-import { Avatar, Badge, Button, ColorPicker, Layout, Menu, Space, Switch, Tooltip, Typography } from 'antd';
+import { Avatar, Badge, Button, ColorPicker, Layout, Menu, Select, Space, Tooltip, Typography } from 'antd';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { hasPermission, usePrincipal } from './AuthGuard';
@@ -21,7 +21,7 @@ export function AppShell({ children, onLogout }: AppShellProps) {
   const username = principal?.username ?? '';
   const roles = principal?.roles ?? [];
   const isAdmin = roles.includes('admin');
-  const { primaryColor, mode, setPrimaryColor, resetPrimaryColor, toggleMode } = useThemeSettings();
+  const { primaryColor, mode, resolvedMode, setPrimaryColor, resetPrimaryColor, setMode } = useThemeSettings();
 
   const selectedKey = '/' + location.pathname.split('/').filter(Boolean)[0];
   const visibleRoutes = MENU_ROUTE_META.filter((route) => !route.permission || hasPermission(principal, route.permission.resource, route.permission.action));
@@ -66,13 +66,17 @@ export function AppShell({ children, onLogout }: AppShellProps) {
             <Typography.Text className="app-shell__subtitle">轻量、容器友好、Worker 主动隧道连接</Typography.Text>
           </div>
           <Space className="app-shell__user" size={14}>
-            <Tooltip title={mode === 'dark' ? '切换为亮色模式' : '切换为暗色模式'}>
-              <Switch
-                checked={mode === 'dark'}
-                checkedChildren={<MoonOutlined />}
-                unCheckedChildren={<BulbOutlined />}
-                onChange={toggleMode}
-                aria-label="切换暗色模式"
+            <Tooltip title={mode === 'system' ? `跟随系统：当前${resolvedMode === 'dark' ? '暗色' : '亮色'}` : '选择明暗主题'}>
+              <Select
+                aria-label="选择明暗主题"
+                value={mode}
+                onChange={setMode}
+                style={{ width: 116 }}
+                options={[
+                  { value: 'system', label: '跟随系统' },
+                  { value: 'light', label: <Space size={6}><BulbOutlined />亮色</Space> },
+                  { value: 'dark', label: <Space size={6}><MoonOutlined />暗色</Space> },
+                ]}
               />
             </Tooltip>
             <Tooltip title="设置全局主色调">

@@ -1832,3 +1832,9 @@ Commit/push:
 - Investigated why the previous logo resize was not visible: the change was small and the SVG viewBox still had enough padding that the rendered mark looked nearly unchanged.
 - Increased the sidebar logo to 64px and auth/setup logo to 96px, tightened the animated SVG viewBox, added explicit CSS sizing, and wired the static logo as the web favicon.
 - Verification: `cd web && rtk bun test --run src/pages/__tests__/TikeeLogo.test.tsx`; `cd web && rtk bun run typecheck`; `cd web && rtk bun run lint`; `cd web && rtk bun test`; `rtk git diff --check -- . ':!.omx'`.
+
+### 2026-05-31 — Add browser/system theme following
+- Extended Web theme preference from light/dark to light/dark/system, with system as the default for invalid or missing stored values.
+- App now resolves the active theme from `prefers-color-scheme`, listens for browser/OS theme changes, writes `data-theme` from the resolved mode, and keeps `data-theme-preference` for diagnostics.
+- Replaced the binary theme switch with a three-option selector: 跟随系统 / 亮色 / 暗色.
+- Verification: `cd web && rtk bun test --run src/pages/__tests__/ThemeMode.test.ts`; `cd web && rtk bun run typecheck`; `cd web && rtk bun run lint`; `cd web && rtk bun test`; `rtk git diff --check -- . ':!.omx'`.
