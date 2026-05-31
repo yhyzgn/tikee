@@ -8,7 +8,7 @@ export function TikeeLogo({ size = 44, className = '', showWordmark = false }: T
   const classes = ['tikee-logo', showWordmark ? 'tikee-logo--with-wordmark' : '', className].filter(Boolean).join(' ');
   return (
     <span className={classes} aria-label="tikee task orchestration logo" role="img">
-      <svg className="tikee-logo__mark" width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden="true">
+      <svg className="tikee-logo__mark" width={size} height={size} viewBox="4 4 56 56" fill="none" aria-hidden="true">
         <defs>
           <linearGradient id="tikee-logo-shell" x1="12" y1="7" x2="53" y2="58" gradientUnits="userSpaceOnUse">
             <stop stopColor="var(--app-primary-color)" />

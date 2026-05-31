@@ -1827,3 +1827,8 @@ Commit/push:
 - Increased the in-app sidebar logo from 44px to 52px and auth/setup logo from 64px to 76px with a larger wordmark.
 - Moved animated logo colors to theme-aware CSS variables so primary color and dark mode affect shell gradient, accent, track highlights, node fill, and inner panel contrast.
 - Verification: `cd web && rtk bun test --run src/pages/__tests__/TikeeLogo.test.tsx`; `cd web && rtk bun run typecheck`; `cd web && rtk bun run lint`; `cd web && rtk bun test`; `rtk git diff --check -- . ':!.omx'`.
+
+### 2026-05-31 — Make in-site tikee logo visibly larger
+- Investigated why the previous logo resize was not visible: the change was small and the SVG viewBox still had enough padding that the rendered mark looked nearly unchanged.
+- Increased the sidebar logo to 64px and auth/setup logo to 96px, tightened the animated SVG viewBox, added explicit CSS sizing, and wired the static logo as the web favicon.
+- Verification: `cd web && rtk bun test --run src/pages/__tests__/TikeeLogo.test.tsx`; `cd web && rtk bun run typecheck`; `cd web && rtk bun run lint`; `cd web && rtk bun test`; `rtk git diff --check -- . ':!.omx'`.

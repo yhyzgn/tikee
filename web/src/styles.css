@@ -1786,7 +1786,7 @@ html[data-theme="dark"] .ant-table-thead > tr > th {
 
 .tikee-logo__wordmark {
   color: var(--app-text-strong);
-  font-size: 29px;
+  font-size: 33px;
   font-weight: 850;
   letter-spacing: -0.055em;
 }
@@ -1799,6 +1799,16 @@ html[data-theme="dark"] .ant-table-thead > tr > th {
 
 .app-shell__brand .tikee-logo {
   flex: 0 0 auto;
+}
+
+.app-shell__brand .tikee-logo__mark {
+  width: 64px;
+  height: 64px;
+}
+
+.login-brand .tikee-logo__mark {
+  width: 96px;
+  height: 96px;
 }
 
 html[data-theme="dark"] .tikee-logo {

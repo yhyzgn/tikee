@@ -14,12 +14,13 @@ describe('tikee animated logo', () => {
     expect(logoSource).toContain('tikee-logo__arrow');
     expect(logoSource).toContain('tikee-logo__node');
     expect(logoSource).toContain('aria-label="tikee task orchestration logo"');
+    expect(logoSource).toContain('viewBox="4 4 56 56"');
   });
 
   test('uses the animated logo in shell and auth entry pages', () => {
-    expect(shellSource).toContain('<TikeeLogo size={52} />');
-    expect(loginSource).toContain('<TikeeLogo size={76} showWordmark />');
-    expect(setupSource).toContain('<TikeeLogo size={76} showWordmark />');
+    expect(shellSource).toContain('<TikeeLogo size={64} />');
+    expect(loginSource).toContain('<TikeeLogo size={96} showWordmark />');
+    expect(setupSource).toContain('<TikeeLogo size={96} showWordmark />');
   });
 
   test('styles logo motion and dark-mode compatibility', () => {
@@ -30,5 +31,6 @@ describe('tikee animated logo', () => {
     expect(styles).toContain('html[data-theme="dark"] .tikee-logo');
     expect(styles).toContain('--tikee-logo-accent');
     expect(styles).toContain('--tikee-logo-node-fill');
+    expect(styles).toContain('.app-shell__brand .tikee-logo__mark');
   });
 });
