@@ -22,6 +22,12 @@
   --app-canvas-grid: rgba(37, 99, 235, 0.055);
   --app-code-bg: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
   --app-warning-surface: #fffdf7;
+  --tikee-logo-accent: #7c3aed;
+  --tikee-logo-node-fill: #ffffff;
+  --tikee-logo-line-start: #dbeafe;
+  --tikee-logo-line-end: #e0f2fe;
+  --tikee-logo-inner-fill: rgba(255, 255, 255, 0.12);
+  --tikee-logo-inner-stroke: rgba(255, 255, 255, 0.28);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: var(--app-text);
   background: var(--app-bg);
@@ -47,6 +53,12 @@ html[data-theme="dark"] {
   --app-canvas-grid: rgba(96, 165, 250, 0.10);
   --app-code-bg: linear-gradient(180deg, #111827 0%, #1e293b 100%);
   --app-warning-surface: #1f1a11;
+  --tikee-logo-accent: color-mix(in srgb, var(--app-primary-color) 58%, #a78bfa);
+  --tikee-logo-node-fill: #f8fafc;
+  --tikee-logo-line-start: color-mix(in srgb, var(--app-primary-color) 28%, #dbeafe);
+  --tikee-logo-line-end: color-mix(in srgb, var(--app-info-color) 38%, #e0f2fe);
+  --tikee-logo-inner-fill: rgba(15, 23, 42, 0.18);
+  --tikee-logo-inner-stroke: rgba(248, 250, 252, 0.26);
   color-scheme: dark;
 }
 
@@ -392,7 +404,7 @@ body {
   display: block;
   width: 48px;
   height: 5px;
-  margin-bottom: 18px;
+  margin-bottom: 20px;
   border-radius: 999px;
   background: linear-gradient(90deg, var(--app-primary-color), var(--app-info-color));
 }
@@ -1042,7 +1054,7 @@ body {
 }
 
 .worker-history-list {
-  margin-bottom: 18px;
+  margin-bottom: 20px;
 }
 
 .worker-history-list__item {
@@ -1711,6 +1723,12 @@ html[data-theme="dark"] .ant-table-thead > tr > th {
 
 
 .tikee-logo {
+  --tikee-logo-accent: color-mix(in srgb, var(--app-primary-color) 55%, #7c3aed);
+  --tikee-logo-node-fill: #ffffff;
+  --tikee-logo-line-start: color-mix(in srgb, var(--app-primary-color) 18%, #dbeafe);
+  --tikee-logo-line-end: color-mix(in srgb, var(--app-info-color) 20%, #e0f2fe);
+  --tikee-logo-inner-fill: rgba(255, 255, 255, 0.12);
+  --tikee-logo-inner-stroke: rgba(255, 255, 255, 0.28);
   display: inline-flex;
   align-items: center;
   gap: 12px;
@@ -1768,7 +1786,7 @@ html[data-theme="dark"] .ant-table-thead > tr > th {
 
 .tikee-logo__wordmark {
   color: var(--app-text-strong);
-  font-size: 26px;
+  font-size: 29px;
   font-weight: 850;
   letter-spacing: -0.055em;
 }
@@ -1776,7 +1794,7 @@ html[data-theme="dark"] .ant-table-thead > tr > th {
 .login-brand {
   display: flex;
   justify-content: center;
-  margin-bottom: 18px;
+  margin-bottom: 20px;
 }
 
 .app-shell__brand .tikee-logo {
@@ -1784,6 +1802,12 @@ html[data-theme="dark"] .ant-table-thead > tr > th {
 }
 
 html[data-theme="dark"] .tikee-logo {
+  --tikee-logo-accent: color-mix(in srgb, var(--app-primary-color) 50%, #a78bfa);
+  --tikee-logo-node-fill: #f8fafc;
+  --tikee-logo-line-start: color-mix(in srgb, var(--app-primary-color) 28%, #dbeafe);
+  --tikee-logo-line-end: color-mix(in srgb, var(--app-info-color) 38%, #e0f2fe);
+  --tikee-logo-inner-fill: rgba(15, 23, 42, 0.18);
+  --tikee-logo-inner-stroke: rgba(248, 250, 252, 0.26);
   color: var(--app-text-strong);
 }
 

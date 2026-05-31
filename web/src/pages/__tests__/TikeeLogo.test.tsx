@@ -17,9 +17,9 @@ describe('tikee animated logo', () => {
   });
 
   test('uses the animated logo in shell and auth entry pages', () => {
-    expect(shellSource).toContain('<TikeeLogo size={44} />');
-    expect(loginSource).toContain('<TikeeLogo size={64} showWordmark />');
-    expect(setupSource).toContain('<TikeeLogo size={64} showWordmark />');
+    expect(shellSource).toContain('<TikeeLogo size={52} />');
+    expect(loginSource).toContain('<TikeeLogo size={76} showWordmark />');
+    expect(setupSource).toContain('<TikeeLogo size={76} showWordmark />');
   });
 
   test('styles logo motion and dark-mode compatibility', () => {
@@ -28,5 +28,7 @@ describe('tikee animated logo', () => {
     expect(styles).toContain('@keyframes tikee-logo-arrow');
     expect(styles).toContain('.tikee-logo__flow');
     expect(styles).toContain('html[data-theme="dark"] .tikee-logo');
+    expect(styles).toContain('--tikee-logo-accent');
+    expect(styles).toContain('--tikee-logo-node-fill');
   });
 });
