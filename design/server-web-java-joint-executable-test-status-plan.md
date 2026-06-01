@@ -200,7 +200,7 @@ rtk bash deploy/smoke/server-web-java-joint-e2e.sh
 | G-GITOPS-002 | Manifest diff | `POST /api/v1/gitops/diff` | 返回 drift diff，不直接绕过 review | `.dev/reports/gitops-20260601T074258Z-903654-diff.json` | `gitops-manifest-diff` passed；desired enabled=false 返回 update diff | ✅ 通过 |
 | G-TF-001 | Terraform provider build/test | 以 `deploy/terraform/provider/README.md` 为准 | provider build/test 通过 | CI log | 本地执行测试通过 | ✅ 通过 |
 | G-TF-002 | Terraform manifest diff resource | plan/apply 到 dev server | 不绕过 typed CRUD/RBAC/审计 | tf log、audit JSON | 本轮未执行 | ⏳ 待执行 |
-| G-K8S-001 | CRD schema 校验 | kubeconform/kubectl dry-run | CRD schema 合法 | CI log | 本轮未执行 | ⏳ 待执行 |
+| G-K8S-001 | CRD schema 校验 | kubeconform/kubectl dry-run | CRD schema 合法 | CI log | 本地 kubeconform 验证成功 | ✅ 通过 |
 | G-K8S-002 | Operator reconcile dry-run | `deploy/smoke/k8s-operator-dry-run-smoke.sh` | status 条件按 manifest diff 更新 | operator log | 本地 dry-run 验证通过 | ✅ 通过 |
 
 ## 10. 数据库兼容性专项已验证明细
@@ -227,7 +227,7 @@ rtk bash deploy/smoke/server-web-java-joint-e2e.sh
 | P0-D 三端双 worker e2e | 10 | 8 | 2 | 0 | 0 | 0 |
 | P1-E SDK Management/API-Key | 7 | 7 | 0 | 0 | 0 | 0 |
 | P1-F 脚本沙箱/插件 | 9 | 9 | 0 | 0 | 0 | 0 |
-| P2-G GitOps/IaC | 6 | 2 | 4 | 0 | 0 | 0 |
+| P2-G GitOps/IaC | 6 | 4 | 2 | 0 | 0 | 0 |
 | 数据库专项明细 | 3 | 3 | 0 | 0 | 0 | 0 |
 
 ## 12. 下一步执行建议
