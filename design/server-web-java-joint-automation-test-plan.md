@@ -202,13 +202,13 @@ python3 -m json.tool .dev/reports/*java-demo*.json | sed -n '1,220p'
 
 | ID | 功能/测试项 | 覆盖组件 | 执行方式 | 断言标准 | 证据产物 | 状态 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| E-KEY-001 | 后台维护 Service Account 并创建 SDK API-Key | server + web | Web/API 先创建/选择 Service Account，再创建 key | key 格式 `tk-` + 64 位大小写字母数字，且绑定已有 active Service Account | API response screenshot | ⏳ 待执行 | 只在创建弹窗显示明文 |
-| E-KEY-002 | 创建时复制提醒 | web | 点击 key 文本 | hover primary、cursor pointer、复制成功提示 | screenshot/video | ⏳ 待执行 | 弹窗必须手动确认关闭 |
-| E-KEY-003 | 列表脱敏显示 | web | 打开 API-Key 列表 | 中间脱敏，两端明文，无复制按钮 | screenshot | ⏳ 待执行 | 防止复制脱敏值误用 |
-| E-KEY-004 | 编辑名称/作用域/有效期 | server + web | 编辑 API-Key | key 值不变，元数据更新 | API response / audit | ⏳ 待执行 | 不再“刷新生成新 key” |
-| E-KEY-005 | Java management client 使用 key | Java SDK + server | Java SDK management 测试 | 可按 app scope 调用允许接口，越权失败 | Gradle report | ⏳ 待执行 | SDK 端不走用户 token |
-| E-KEY-006 | 审计记录 | server | 查 audit logs | service account create/update/disable 与 key create/update/revoke/use 有审计 | audit JSON | ⏳ 待执行 | 权限链路闭环 |
-| E-KEY-007 | 禁用 Service Account | server + web | 禁用已有 Service Account | 关联 active API-Key 被吊销，旧 key 再调用失败 | API response / audit | ⏳ 待执行 | 机器身份生命周期闭环 |
+| E-KEY-001 | 后台维护 Service Account 并创建 SDK API-Key | server + web | Web/API 先创建/选择 Service Account，再创建 key | key 格式 `tk-` + 64 位大小写字母数字，且绑定已有 active Service Account | `.dev/reports/sdk-api-key-20260601T065021Z-794536-service-account.json`、`.dev/reports/sdk-api-key-20260601T065021Z-794536-create.json` | ✅ 通过 | API live 已验证；Web 截图归入 P0-C |
+| E-KEY-002 | 创建时复制提醒 | web | 点击 key 文本 | hover primary、cursor pointer、复制成功提示 | screenshot/video | ⏳ 待执行 | 纯 Web 交互项，留待 P0-C 浏览器 e2e |
+| E-KEY-003 | 列表脱敏显示 | web | 打开 API-Key 列表 | 中间脱敏，两端明文，无复制按钮 | `.dev/reports/sdk-api-key-20260601T065021Z-794536-key-list.json` | ✅ 通过 | API list 已验证无明文/无 hash；Web 截图归入 P0-C |
+| E-KEY-004 | 编辑名称/作用域/有效期 | server + web | 编辑 API-Key | key 值不变，元数据更新 | `.dev/reports/sdk-api-key-20260601T065021Z-794536-update.json`、audit JSON | ✅ 通过 | API live 已验证；Web 表单截图归入 P0-C |
+| E-KEY-005 | Java management client 使用 key | Java SDK + server | Java SDK management 测试 | 可按 app scope 调用允许接口，越权失败 | `.dev/reports/sdk-api-key-20260601T065021Z-794536-java-test/TEST-HttpTikeeJobClientLiveTest.xml` | ✅ 通过 | live JUnit `tests=1 skipped=0 failures=0` |
+| E-KEY-006 | 审计记录 | server | 查 audit logs | service account create/update/disable 与 key create/update/revoke/use 有审计 | `.dev/reports/sdk-api-key-20260601T065021Z-794536-audit-*.json` | ✅ 通过 | 已覆盖 SA create/update/disable 与 key create/update/revoke/use |
+| E-KEY-007 | 禁用 Service Account | server + web | 禁用已有 Service Account | 关联 active API-Key 被吊销，旧 key 再调用失败 | `.dev/reports/sdk-api-key-20260601T065021Z-794536-service-account-disable.json`、revoked-key JSON | ✅ 通过 | API live 已验证；Web 操作截图归入 P0-C |
 
 ### 6.6 P1 阶段 F：脚本沙箱与插件任务联合验证
 

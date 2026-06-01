@@ -6,9 +6,82 @@ source "$ROOT_DIR/deploy/smoke/lib/tikee-smoke-lib.sh"
 API_URL="${TIKEE_HTTP_URL:-http://127.0.0.1:19090}"
 REPORT_DIR="${TIKEE_API_KEY_REPORT_DIR:-$TIKEE_SMOKE_REPORT_DIR}"
 RUN_ID="${TIKEE_API_KEY_RUN_ID:-sdk-api-key-$(date -u +%Y%m%dT%H%M%SZ)-$$}"
+SERVER_LOG="$REPORT_DIR/${RUN_ID}-server.log"
+SERVER_PID=""
+OWN_SERVER=0
 mkdir -p "$REPORT_DIR"
 
-tikee_smoke_wait_for_http server "$API_URL/readyz" 30
+cleanup() {
+  local code=$?
+  if [[ "$OWN_SERVER" == "1" && -n "$SERVER_PID" ]] && kill -0 "$SERVER_PID" >/dev/null 2>&1; then
+    kill "$SERVER_PID" >/dev/null 2>&1 || true
+    wait "$SERVER_PID" 2>/dev/null || true
+  fi
+  exit "$code"
+}
+trap cleanup EXIT INT TERM
+
+start_server_if_needed() {
+  if curl -fsS "$API_URL/readyz" >/dev/null 2>&1; then
+    return
+  fi
+  OWN_SERVER=1
+  local config="$REPORT_DIR/${RUN_ID}-config.toml"
+  cat > "$config" <<CFG
+[server]
+listen_addr = "127.0.0.1:19090"
+worker_tunnel_addr = "127.0.0.1:19998"
+
+[storage]
+database_url = "sqlite://$REPORT_DIR/${RUN_ID}.db?mode=rwc"
+
+[cluster]
+mode = "standalone"
+node_id = "standalone"
+peers = []
+
+[auth]
+local_login_enabled = true
+
+[auth.api_tokens]
+default_ttl_seconds = 43200
+min_ttl_seconds = 300
+max_ttl_seconds = 2592000
+
+[auth.oidc]
+enabled = false
+scopes = ["openid", "profile", "email"]
+
+[transport_security.http]
+tls_enabled = false
+mtls_required = false
+
+[transport_security.worker_tunnel]
+tls_enabled = false
+mtls_required = false
+
+[observability.tracing]
+enabled = false
+headers = []
+
+[alert_retry]
+enabled = false
+interval_seconds = 60
+batch_size = 50
+max_attempts = 3
+backoff_seconds = 300
+
+[script_governance]
+CFG
+  (cd "$ROOT_DIR" && cargo run --bin tikee -- serve --config "$config" >"$SERVER_LOG" 2>&1) &
+  SERVER_PID=$!
+  tikee_smoke_wait_for_http server "$API_URL/readyz" 120 || {
+    tail -n 160 "$SERVER_LOG" >&2 || true
+    return 1
+  }
+}
+
+start_server_if_needed
 tikee_smoke_login "$API_URL"
 
 service_account_body="$(python3 - "$RUN_ID" <<'PY'
@@ -19,6 +92,7 @@ print(json.dumps({
   'description': 'Smoke-test SDK machine identity',
   'namespace': 'default',
   'app': 'default',
+  'workerPool': 'default-pool',
 }))
 PY
 )"
@@ -32,7 +106,21 @@ assert summary['name'].endswith('-sa')
 assert summary['status']=='active'
 assert summary['namespace']=='default'
 assert summary['app']=='default'
+assert summary.get('workerPool')=='default-pool'
 print('service account creation expectation passed')
+PY
+tikee_smoke_api "$API_URL" GET /api/v1/management/service-accounts > "$REPORT_DIR/${RUN_ID}-service-accounts-list.json"
+service_account_update_file="$REPORT_DIR/${RUN_ID}-service-account-update.json"
+tikee_smoke_api "$API_URL" PATCH "/api/v1/management/service-accounts/$service_account_id" \
+  '{"name":"updated-sdk-smoke-sa","description":"Updated smoke-test SDK machine identity","namespace":"default","app":"default","workerPool":"default-pool","status":"active"}' \
+  > "$service_account_update_file"
+python3 - "$service_account_update_file" <<'PY'
+import json, sys
+summary=json.load(open(sys.argv[1], encoding='utf-8'))['data']
+assert summary['name']=='updated-sdk-smoke-sa'
+assert summary['status']=='active'
+assert summary['workerPool']=='default-pool'
+print('service account update expectation passed')
 PY
 
 create_body="$(python3 - "$RUN_ID" "$service_account_id" <<'PY'
@@ -43,7 +131,7 @@ print(json.dumps({
   'namespace': 'default',
   'app': 'default',
   'service_account_id': service_account_id,
-  'scopes': ['jobs:read', 'jobs:manage', 'jobs:execute'],
+  'scopes': ['jobs:read', 'jobs:write', 'instances:execute'],
   'expires_at': None,
 }))
 PY
@@ -61,14 +149,52 @@ summary=payload['data']['key']
 assert summary['namespace']=='default'
 assert summary['app']=='default'
 assert summary['service_account_id']
-assert 'jobs:manage' in summary['scopes']
+assert 'jobs:write' in summary['scopes']
 print('api key creation expectation passed')
+PY
+
+revoke_create_body="$(python3 - "$RUN_ID" "$service_account_id" <<'PY'
+import json, sys
+run_id, service_account_id = sys.argv[1:3]
+print(json.dumps({
+  'name': f'{run_id}-revoke-key',
+  'namespace': 'default',
+  'app': 'default',
+  'service_account_id': service_account_id,
+  'scopes': ['jobs:read'],
+  'expires_at': None,
+}))
+PY
+)"
+revoke_create_file="$REPORT_DIR/${RUN_ID}-revoke-key-create.json"
+tikee_smoke_api "$API_URL" POST /api/v1/management/api-keys "$revoke_create_body" > "$revoke_create_file"
+revoke_key_id="$(tikee_smoke_json_get data.key.id < "$revoke_create_file")"
+revoke_file="$REPORT_DIR/${RUN_ID}-revoke-key.json"
+tikee_smoke_api "$API_URL" DELETE "/api/v1/management/api-keys/$revoke_key_id" > "$revoke_file"
+
+list_file="$REPORT_DIR/${RUN_ID}-key-list.json"
+tikee_smoke_api "$API_URL" GET /api/v1/management/api-keys > "$list_file"
+python3 - "$list_file" "$api_key" "$key_id" <<'PY'
+import json, sys
+payload=json.load(open(sys.argv[1], encoding='utf-8'))
+plain=sys.argv[2]
+key_id=sys.argv[3]
+text=json.dumps(payload, ensure_ascii=False)
+assert plain not in text
+assert 'key_hash' not in text
+items=payload['data']
+match=next(item for item in items if item['id']==key_id)
+display=match['key_prefix']
+assert display.startswith(plain[:12]), display
+assert display.endswith(plain[-8:]), display
+assert '••••' in display, display
+print('api key list redaction expectation passed')
 PY
 
 job_body="$(python3 - "$RUN_ID" <<'PY'
 import json, sys
 run_id=sys.argv[1]
-print(json.dumps({'namespace':'default','app':'default','name':f'{run_id}-sdk-job','schedule_type':'api','processor_name':'demo.echo','enabled':True}))
+print(json.dumps({'namespace':'default','app':'default','name':f'{run_id}-sdk-job','scheduleType':'api','processorName':'demo.echo','enabled':True}))
 PY
 )"
 job_file="$REPORT_DIR/${RUN_ID}-sdk-job.json"
@@ -82,21 +208,122 @@ assert payload['data']['app']=='default'
 print('sdk api key scoped job creation expectation passed')
 PY
 
-update_body='{"name":"updated-management-key","scopes":["jobs:read","jobs:execute"],"expires_at":null}'
+denied_file="$REPORT_DIR/${RUN_ID}-sdk-denied.json"
+denied_status="$(curl -sS -o "$denied_file" -w '%{http_code}' -X POST "$API_URL/api/v1/jobs" -H "x-tikee-api-key: $api_key" -H 'content-type: application/json' -d "{\"namespace\":\"default\",\"app\":\"other\",\"name\":\"${RUN_ID}-blocked\",\"scheduleType\":\"api\",\"processorName\":\"demo.echo\",\"enabled\":true}")"
+if [[ "$denied_status" != "403" ]]; then
+  echo "expected other app request to be forbidden, got $denied_status" >&2
+  cat "$denied_file" >&2 || true
+  exit 1
+fi
+
+java_report_dir="$REPORT_DIR/${RUN_ID}-java-test"
+mkdir -p "$java_report_dir"
+(
+  cd "$ROOT_DIR/sdks/java"
+  TIKEE_LIVE_MANAGEMENT_ENDPOINT="$API_URL" \
+  TIKEE_LIVE_MANAGEMENT_API_KEY="$api_key" \
+  TIKEE_LIVE_MANAGEMENT_NAMESPACE=default \
+  TIKEE_LIVE_MANAGEMENT_APP=default \
+  TIKEE_LIVE_MANAGEMENT_OTHER_APP=other \
+  ./gradlew :tikee:test --tests com.yhyzgn.tikee.management.client.HttpTikeeJobClientLiveTest --no-daemon --rerun-tasks
+) > "$java_report_dir/gradle.log" 2>&1 || {
+  cat "$java_report_dir/gradle.log" >&2 || true
+  exit 1
+}
+cp "$ROOT_DIR/sdks/java/tikee/build/test-results/test/TEST-com.yhyzgn.tikee.management.client.HttpTikeeJobClientLiveTest.xml" "$java_report_dir/TEST-HttpTikeeJobClientLiveTest.xml"
+
+update_body='{"name":"updated-management-key","scopes":["jobs:read","instances:execute"],"expires_at":null}'
 update_file="$REPORT_DIR/${RUN_ID}-update.json"
 tikee_smoke_api "$API_URL" PATCH "/api/v1/management/api-keys/$key_id" "$update_body" > "$update_file"
 python3 - "$update_file" <<'PY'
 import json, sys
 summary=json.load(open(sys.argv[1], encoding='utf-8'))['data']
 assert summary['name']=='updated-management-key'
-assert summary['scopes']==['jobs:read','jobs:execute']
+assert summary['scopes']==['jobs:read','instances:execute']
 print('api key metadata update expectation passed')
 PY
 
+post_update_forbidden_file="$REPORT_DIR/${RUN_ID}-post-update-forbidden.json"
+post_update_status="$(curl -sS -o "$post_update_forbidden_file" -w '%{http_code}' -X POST "$API_URL/api/v1/jobs" -H "x-tikee-api-key: $api_key" -H 'content-type: application/json' -d "{\"namespace\":\"default\",\"app\":\"default\",\"name\":\"${RUN_ID}-blocked-by-scope\",\"scheduleType\":\"api\",\"processorName\":\"demo.echo\",\"enabled\":true}")"
+if [[ "$post_update_status" != "403" ]]; then
+  echo "expected updated key without jobs:write to be forbidden, got $post_update_status" >&2
+  cat "$post_update_forbidden_file" >&2 || true
+  exit 1
+fi
+
+for action in sdk_api_key_create sdk_api_key_update sdk_api_key_authenticate; do
+  audit_file="$REPORT_DIR/${RUN_ID}-audit-${action}.json"
+  tikee_smoke_api "$API_URL" GET "/api/v1/audit-logs?action=$action&resource_type=sdk_api_key&resource_id=$key_id&page_size=20" > "$audit_file"
+  python3 - "$audit_file" "$action" "$key_id" <<'PY'
+import json, sys
+payload=json.load(open(sys.argv[1], encoding='utf-8'))
+action=sys.argv[2]
+key_id=sys.argv[3]
+items=payload['data']['items']
+assert items, f'missing audit action {action}'
+assert any(item['action']==action and item['resource_id']==key_id for item in items)
+print(f'audit expectation passed: {action}')
+PY
+done
+
+revoke_audit_file="$REPORT_DIR/${RUN_ID}-audit-sdk_api_key_revoke.json"
+tikee_smoke_api "$API_URL" GET "/api/v1/audit-logs?action=sdk_api_key_revoke&resource_type=sdk_api_key&resource_id=$revoke_key_id&page_size=5" > "$revoke_audit_file"
+python3 - "$revoke_audit_file" "$revoke_key_id" <<'PY'
+import json, sys
+items=json.load(open(sys.argv[1], encoding='utf-8'))['data']['items']
+resource_id=sys.argv[2]
+assert any(item['action']=='sdk_api_key_revoke' and item['resource_id']==resource_id for item in items)
+print('api key revoke audit expectation passed')
+PY
+
+sa_audit_file="$REPORT_DIR/${RUN_ID}-audit-service-account-create.json"
+tikee_smoke_api "$API_URL" GET "/api/v1/audit-logs?action=service_account_create&resource_type=service_account&resource_id=$service_account_id&page_size=5" > "$sa_audit_file"
+python3 - "$sa_audit_file" "$service_account_id" <<'PY'
+import json, sys
+items=json.load(open(sys.argv[1], encoding='utf-8'))['data']['items']
+resource_id=sys.argv[2]
+assert any(item['resource_id']==resource_id for item in items)
+print('service account create audit expectation passed')
+PY
+sa_update_audit_file="$REPORT_DIR/${RUN_ID}-audit-service-account-update.json"
+tikee_smoke_api "$API_URL" GET "/api/v1/audit-logs?action=service_account_update&resource_type=service_account&resource_id=$service_account_id&page_size=5" > "$sa_update_audit_file"
+python3 - "$sa_update_audit_file" "$service_account_id" <<'PY'
+import json, sys
+items=json.load(open(sys.argv[1], encoding='utf-8'))['data']['items']
+resource_id=sys.argv[2]
+assert any(item['resource_id']==resource_id for item in items)
+print('service account update audit expectation passed')
+PY
+
+disable_file="$REPORT_DIR/${RUN_ID}-service-account-disable.json"
+tikee_smoke_api "$API_URL" DELETE "/api/v1/management/service-accounts/$service_account_id" > "$disable_file"
+revoked_status="$(curl -sS -o "$REPORT_DIR/${RUN_ID}-revoked-key-rejected.json" -w '%{http_code}' "$API_URL/api/v1/jobs" -H "x-tikee-api-key: $api_key")"
+if [[ "$revoked_status" != "401" ]]; then
+  echo "expected disabled service account key to be unauthorized, got $revoked_status" >&2
+  cat "$REPORT_DIR/${RUN_ID}-revoked-key-rejected.json" >&2 || true
+  exit 1
+fi
+disable_audit_file="$REPORT_DIR/${RUN_ID}-audit-service-account-disable.json"
+tikee_smoke_api "$API_URL" GET "/api/v1/audit-logs?action=service_account_disable&resource_type=service_account&resource_id=$service_account_id&page_size=5" > "$disable_audit_file"
+python3 - "$disable_audit_file" "$service_account_id" <<'PY'
+import json, sys
+items=json.load(open(sys.argv[1], encoding='utf-8'))['data']['items']
+resource_id=sys.argv[2]
+assert any(item['resource_id']==resource_id for item in items)
+print('service account disable audit expectation passed')
+PY
+
 tikee_smoke_record_case service-account-create passed "$service_account_file" "created managed service account identity"
+tikee_smoke_record_case service-account-update passed "$service_account_update_file" "updated service account metadata without breaking key binding"
 tikee_smoke_record_case sdk-api-key-create passed "$create_file" "created tk-* key bound to existing service account and verified app scope"
+tikee_smoke_record_case sdk-api-key-revoke passed "$revoke_file" "revoked secondary SDK API key and verified revoke audit"
+tikee_smoke_record_case sdk-api-key-list-redacted passed "$list_file" "listed API keys without plaintext or hashes"
 tikee_smoke_record_case sdk-api-key-use passed "$job_file" "created job using x-tikee-api-key"
+tikee_smoke_record_case sdk-api-key-scope-deny passed "$denied_file" "denied SDK key write outside bound app"
 tikee_smoke_record_case sdk-api-key-update passed "$update_file" "updated metadata without rotating key"
+tikee_smoke_record_case java-management-client-api-key passed "$java_report_dir/TEST-HttpTikeeJobClientLiveTest.xml" "Java management client used live x-tikee-api-key against server"
+tikee_smoke_record_case sdk-api-key-audit passed "$REPORT_DIR/${RUN_ID}-audit-sdk_api_key_authenticate.json" "verified SDK key create/update/use audit events"
+tikee_smoke_record_case service-account-disable-cascade passed "$disable_file" "disabled service account revoked bound SDK API key"
 report="$REPORT_DIR/${RUN_ID}.json"
 tikee_smoke_finalize_report "$report" passed >/dev/null
 echo "report: $report"

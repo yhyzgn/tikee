@@ -170,13 +170,13 @@ rtk bash deploy/smoke/server-web-java-joint-e2e.sh
 
 | ID | 测试项 | 执行方式 | 核心断言 | 证据产物 | 当前测试结果 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- |
-| E-KEY-001 | Service Account 创建 | API/Web 创建 SA | SA 绑定 namespace/app/workerPool，状态 active | API JSON、screenshot | 本轮未执行 | ⏳ 待执行 |
-| E-KEY-002 | SDK API-Key 创建 | API/Web 创建 key | key 格式正确，只在创建弹窗显示明文 | API JSON、screenshot | 本轮未执行 | ⏳ 待执行 |
-| E-KEY-003 | 列表脱敏 | 打开 API-Key 列表 | 中间脱敏，两端明文，无复制脱敏值误导 | screenshot | 本轮未执行 | ⏳ 待执行 |
-| E-KEY-004 | key 元数据编辑 | 编辑名称/作用域/有效期 | key 值不变，元数据更新 | API JSON、audit JSON | 本轮未执行 | ⏳ 待执行 |
-| E-KEY-005 | Java management client 用 key | Java SDK management 测试 | 授权 scope 可调用，越权失败 | Gradle report、API response | 本轮未执行 | ⏳ 待执行 |
-| E-KEY-006 | 审计记录 | 查询 audit logs | SA/key create/update/revoke/use 均有审计 | audit JSON | 本轮未执行 | ⏳ 待执行 |
-| E-KEY-007 | 禁用 SA 级联 | 禁用 SA 后使用旧 key | 关联 active key 被吊销，旧 key 调用失败 | API JSON、audit JSON | 本轮未执行 | ⏳ 待执行 |
+| E-KEY-001 | Service Account 创建 | API/Web 创建 SA | SA 绑定 namespace/app/workerPool，状态 active | `.dev/reports/sdk-api-key-20260601T065021Z-794536-service-account.json` | `service-account-create` passed | ✅ 通过 |
+| E-KEY-002 | SDK API-Key 创建 | API/Web 创建 key | key 格式正确，只在创建弹窗显示明文 | `.dev/reports/sdk-api-key-20260601T065021Z-794536-create.json` | `sdk-api-key-create` passed，明文仅创建响应返回 | ✅ 通过 |
+| E-KEY-003 | 列表脱敏 | 打开 API-Key 列表 | 中间脱敏，两端明文，无复制脱敏值误导 | `.dev/reports/sdk-api-key-20260601T065021Z-794536-key-list.json` | `sdk-api-key-list-redacted` passed；无明文/无 hash | ✅ 通过 |
+| E-KEY-004 | key 元数据编辑 | 编辑名称/作用域/有效期 | key 值不变，元数据更新 | `.dev/reports/sdk-api-key-20260601T065021Z-794536-update.json`、audit JSON | `sdk-api-key-update` passed；未返回新明文 | ✅ 通过 |
+| E-KEY-005 | Java management client 用 key | Java SDK management 测试 | 授权 scope 可调用，越权失败 | `.dev/reports/sdk-api-key-20260601T065021Z-794536-java-test/TEST-HttpTikeeJobClientLiveTest.xml` | live JUnit `tests=1 skipped=0 failures=0` | ✅ 通过 |
+| E-KEY-006 | 审计记录 | 查询 audit logs | SA/key create/update/revoke/use 均有审计 | `.dev/reports/sdk-api-key-20260601T065021Z-794536-audit-*.json` | create/update/authenticate/revoke + SA create/update/disable audit 均通过 | ✅ 通过 |
+| E-KEY-007 | 禁用 SA 级联 | 禁用 SA 后使用旧 key | 关联 active key 被吊销，旧 key 调用失败 | `.dev/reports/sdk-api-key-20260601T065021Z-794536-service-account-disable.json`、revoked-key JSON | `service-account-disable-cascade` passed；旧 key 返回 401 | ✅ 通过 |
 
 ## 8. P1-F：脚本沙箱与插件任务联合验证
 
@@ -225,7 +225,7 @@ rtk bash deploy/smoke/server-web-java-joint-e2e.sh
 | P0-B Server + Java demo | 16 | 16 | 0 | 0 | 0 | 0 |
 | P0-C Server + Web | 12 | 1 | 11 | 0 | 0 | 0 |
 | P0-D 三端双 worker e2e | 10 | 8 | 2 | 0 | 0 | 0 |
-| P1-E SDK Management/API-Key | 7 | 0 | 7 | 0 | 0 | 0 |
+| P1-E SDK Management/API-Key | 7 | 7 | 0 | 0 | 0 | 0 |
 | P1-F 脚本沙箱/插件 | 9 | 9 | 0 | 0 | 0 | 0 |
 | P2-G GitOps/IaC | 6 | 0 | 6 | 0 | 0 | 0 |
 | 数据库专项明细 | 3 | 3 | 0 | 0 | 0 | 0 |
@@ -233,7 +233,7 @@ rtk bash deploy/smoke/server-web-java-joint-e2e.sh
 ## 12. 下一步执行建议
 
 1. `✅ A-SRV-004` clippy debt 已修复并重跑通过；后续继续保持 `rtk cargo clippy --workspace --all-targets --all-features -- -D warnings` 为合并前必跑。
-2. `✅ P1-F` 脚本沙箱/插件已补齐；下一步转向 `⏳ P1-E SDK Management/API-Key` 或 `⏳ P0-C Web e2e`。
+2. `✅ P1-E/P1-F` 已补齐 live/API/Java 验证；下一步转向 `⏳ P0-C Web e2e`、`⏳ D-WEB-*` 或 `⏳ P2-G GitOps/IaC`。
 3. 补齐 `⏳ C-* / D-WEB-*`：浏览器级 UI e2e、截图、登录态重定向、详情页日志一致性。
-4. 再执行 P1-E、P1-F、P2-G 的 live/CI 项，继续用图标状态回填。
+4. 再执行 P2-G 的 live/CI 项，并补齐剩余 Web 端截图/e2e，继续用图标状态回填。
 5. 每次执行后将本文件对应行的“当前测试结果”和“状态”改为实际结果，禁止未跑即标 `✅ 通过`。
