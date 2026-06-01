@@ -21,3 +21,14 @@ Notes:
 - Configure TLS/mTLS by mounting cert files and setting `TIKEE__TRANSPORT_SECURITY__*` environment overrides or a derived config file.
 - Workers still initiate outbound gRPC to `${TIKEE_WORKER_TUNNEL_PUBLIC_ENDPOINT}`; do not expose business pod/container ports for scheduling.
 - Use `deploy/worker/identity.env.example` for stable `client_instance_id` and worker pool labels.
+
+
+## Database compatibility matrix
+
+Use the dedicated compose asset when validating storage portability across supported database backends:
+
+```bash
+./scripts/db-compat-smoke.sh
+```
+
+It starts PostgreSQL 16 and MySQL 8.4 test services from `deploy/compose/database-compat-compose.yml` when Docker is available. For externally managed databases, set `TIKEE_DB_COMPAT_COMPOSE=false` plus `TIKEE_TEST_POSTGRES_URL` and/or `TIKEE_TEST_MYSQL_URL`.

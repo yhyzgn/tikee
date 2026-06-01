@@ -23,7 +23,9 @@
 | Rust | 项目当前 toolchain | 以 `cargo` 实测为准 | 📝 执行时回填 |
 | Bun/Node | web 现有依赖要求 | `web/package.json` 中脚本使用 Bun | 📝 执行时回填 |
 | Java | JDK 17+ | Spring Boot demo / Gradle | 📝 执行时回填 |
-| SQLite | 本地文件 | 自动化使用 `.dev/e2e/*.db` | 📝 执行时回填 |
+| SQLite | 本地文件 | 自动化使用 `.dev/e2e/*.db`，并由 `scripts/db-compat-smoke.sh` 覆盖存储兼容 smoke | 📝 执行时回填 |
+| PostgreSQL | 13+，推荐 16+ | `deploy/compose/database-compat-compose.yml` 或外部 `TIKEE_TEST_POSTGRES_URL` | 📝 执行时回填 |
+| MySQL | 8.0+ / 8.4 LTS，`utf8mb4` | `deploy/compose/database-compat-compose.yml` 或外部 `TIKEE_TEST_MYSQL_URL` | 📝 执行时回填 |
 | curl/python3 | 必须存在 | smoke 脚本依赖 | 📝 执行时回填 |
 | 浏览器 | Chromium | 后续 Playwright/截图验收 | 📝 执行时回填 |
 
@@ -113,6 +115,9 @@ rtk bash deploy/smoke/java-demo-integration-smoke.sh
 | A-JAVA-001 | Java SDK 单元测试 | Java SDK | `rtk bash -lc 'cd sdks/java && ./gradlew test --no-daemon'` | 不仅全部通过，还必须确认 SDK 请求结构、API-Key header、worker registration/election payload 符合协议 | Gradle test report | 📝 执行时回填 | 包含 management/API-Key/worker client |
 | A-JAVA-002 | Java worker client targeted 测试 | Java SDK | `rtk bash -lc 'cd sdks/java && ./gradlew :tikee:test --tests com.yhyzgn.tikee.worker.client.GrpcTikeeWorkerClientTest --no-daemon'` | 全部通过 | Gradle test report | 📝 执行时回填 | 验证结构化 registration/election |
 | A-DEMO-001 | Java Spring demo 单元测试 | Java demo | `rtk bash -lc 'cd examples/java/spring-worker-demo && ./gradlew test --no-daemon'` | 全部通过 | Gradle test report | 📝 执行时回填 | demo processor 与配置检查 |
+| A-DB-001 | SQLite 存储兼容 smoke | storage | `rtk cargo test -p tikee-storage --test database_compat sqlite_database_compatibility_smoke -- --nocapture` | 空 schema bootstrap、幂等迁移、scope/job/version/plugin/script/instance/log 业务断言全部通过 | CI log | 📝 执行时回填 | 本地必跑 |
+| A-DB-002 | PostgreSQL 存储兼容 smoke | storage + PostgreSQL | `rtk bash scripts/db-compat-smoke.sh` 或设置 `TIKEE_TEST_POSTGRES_URL` 后运行 external smoke | PostgreSQL 上迁移幂等，RBAC seed、索引唯一性、JSON/text、bool/int、日志 Unicode 断言通过 | CI log / DB version | 📝 执行时回填 | Docker 或外部 DB 必选其一 |
+| A-DB-003 | MySQL 存储兼容 smoke | storage + MySQL | `rtk bash scripts/db-compat-smoke.sh` 或设置 `TIKEE_TEST_MYSQL_URL` 后运行 external smoke | MySQL 8.0+/8.4 上迁移幂等，`utf8mb4` 文本、JSON text、bool/int、日志 Unicode 断言通过 | CI log / DB version | 📝 执行时回填 | Docker 或外部 DB 必选其一 |
 
 ### 6.2 P0 阶段 B：Server + Java demo 集成 smoke
 

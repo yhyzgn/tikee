@@ -8,8 +8,8 @@ use sea_orm_migration::prelude::*;
 
 use self::{
     columns::{
-        big_integer_col, big_integer_null, boolean_col, integer_col, integer_null, string_col,
-        string_null, string_pk, text_col, text_null,
+        big_integer_col, big_integer_null, boolean_col, integer_col, integer_null,
+        short_string_col, string_col, string_null, string_pk, text_col, text_null,
     },
     iden::{
         AlertDeliveryAttempts, AlertEvents, AlertRules, Apps, AuditLogs, AuthSessions,
@@ -411,7 +411,7 @@ async fn create_scripts(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
                 .col(string_col(Scripts::Name))
                 .col(string_col(Scripts::Language))
                 .col(string_col(Scripts::Version))
-                .col(string_col(Scripts::Content))
+                .col(text_col(Scripts::Content))
                 .col(string_col(Scripts::Status))
                 .col(string_null(Scripts::ReleasedVersionId))
                 .col(big_integer_null(Scripts::ReleasedVersionNumber))
@@ -458,9 +458,9 @@ async fn create_audit_logs(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
                 .col(string_col(AuditLogs::Action))
                 .col(string_col(AuditLogs::ResourceType))
                 .col(string_col(AuditLogs::ResourceId))
-                .col(string_null(AuditLogs::Detail))
-                .col(string_null(AuditLogs::Before))
-                .col(string_null(AuditLogs::After))
+                .col(text_null(AuditLogs::Detail))
+                .col(text_null(AuditLogs::Before))
+                .col(text_null(AuditLogs::After))
                 .col(string_null(AuditLogs::TraceId))
                 .col(string_col(AuditLogs::Result))
                 .col(string_null(AuditLogs::FailureReason))
@@ -547,7 +547,7 @@ async fn create_script_versions(manager: &SchemaManager<'_>) -> Result<(), DbErr
                 .col(string_pk(ScriptVersions::Id))
                 .col(string_col(ScriptVersions::ScriptId))
                 .col(big_integer_col(ScriptVersions::VersionNumber))
-                .col(string_col(ScriptVersions::Content))
+                .col(text_col(ScriptVersions::Content))
                 .col(string_col(ScriptVersions::ContentSha256))
                 .col(string_col(ScriptVersions::Language))
                 .col(string_col(ScriptVersions::Status))
@@ -571,7 +571,7 @@ async fn create_workflow_tables(manager: &SchemaManager<'_>) -> Result<(), DbErr
                 .if_not_exists()
                 .col(string_pk(Workflows::Id))
                 .col(string_col(Workflows::Name))
-                .col(string_col(Workflows::Definition))
+                .col(text_col(Workflows::Definition))
                 .col(string_col(Workflows::Status))
                 .col(string_col(Workflows::CreatedBy))
                 .col(string_col(Workflows::CreatedAt))
@@ -591,7 +591,7 @@ async fn create_workflow_tables(manager: &SchemaManager<'_>) -> Result<(), DbErr
                 .col(string_col(WorkflowNodes::Kind))
                 .col(string_null(WorkflowNodes::JobId))
                 .col(string_null(WorkflowNodes::ProcessorName))
-                .col(string_null(WorkflowNodes::Config))
+                .col(text_null(WorkflowNodes::Config))
                 .col(string_col(WorkflowNodes::CreatedAt))
                 .to_owned(),
         )
@@ -605,7 +605,7 @@ async fn create_workflow_tables(manager: &SchemaManager<'_>) -> Result<(), DbErr
                 .col(string_col(WorkflowEdges::WorkflowId))
                 .col(string_col(WorkflowEdges::FromNodeKey))
                 .col(string_col(WorkflowEdges::ToNodeKey))
-                .col(string_col(WorkflowEdges::Condition))
+                .col(text_col(WorkflowEdges::Condition))
                 .col(string_col(WorkflowEdges::CreatedAt))
                 .to_owned(),
         )
@@ -654,9 +654,9 @@ async fn create_workflow_shards(manager: &SchemaManager<'_>) -> Result<(), DbErr
                 .col(string_col(WorkflowShards::NodeKey))
                 .col(integer_col(WorkflowShards::ShardIndex))
                 .col(string_col(WorkflowShards::Status))
-                .col(string_col(WorkflowShards::Input))
-                .col(string_null(WorkflowShards::Output))
-                .col(string_null(WorkflowShards::Checkpoint))
+                .col(text_col(WorkflowShards::Input))
+                .col(text_null(WorkflowShards::Output))
+                .col(text_null(WorkflowShards::Checkpoint))
                 .col(integer_col(WorkflowShards::RetryCount))
                 .col(string_null(WorkflowShards::JobInstanceId))
                 .col(string_col(WorkflowShards::CreatedAt))
@@ -704,7 +704,7 @@ async fn create_instance_events(manager: &SchemaManager<'_>) -> Result<(), DbErr
                 .col(string_col(InstanceEvents::InstanceType))
                 .col(string_col(InstanceEvents::EventType))
                 .col(string_col(InstanceEvents::Message))
-                .col(string_null(InstanceEvents::Payload))
+                .col(text_null(InstanceEvents::Payload))
                 .col(string_col(InstanceEvents::CreatedAt))
                 .to_owned(),
         )
@@ -1031,11 +1031,11 @@ async fn create_worker_lifecycle_tables(manager: &SchemaManager<'_>) -> Result<(
                 .table(WorkerLogicalInstances::Table)
                 .if_not_exists()
                 .col(string_pk(WorkerLogicalInstances::Id))
-                .col(string_col(WorkerLogicalInstances::NamespaceName))
-                .col(string_col(WorkerLogicalInstances::AppName))
-                .col(string_col(WorkerLogicalInstances::Cluster))
-                .col(string_col(WorkerLogicalInstances::Region))
-                .col(string_col(WorkerLogicalInstances::ClientInstanceId))
+                .col(short_string_col(WorkerLogicalInstances::NamespaceName))
+                .col(short_string_col(WorkerLogicalInstances::AppName))
+                .col(short_string_col(WorkerLogicalInstances::Cluster))
+                .col(short_string_col(WorkerLogicalInstances::Region))
+                .col(short_string_col(WorkerLogicalInstances::ClientInstanceId))
                 .col(string_null(WorkerLogicalInstances::CurrentWorkerId))
                 .col(big_integer_col(WorkerLogicalInstances::CurrentGeneration))
                 .col(string_col(WorkerLogicalInstances::Status))
@@ -1102,7 +1102,7 @@ async fn create_jobs(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
                 .col(string_col(Jobs::MisfirePolicy))
                 .col(string_null(Jobs::ScheduleStartAt))
                 .col(string_null(Jobs::ScheduleEndAt))
-                .col(string_null(Jobs::ScheduleCalendarJson))
+                .col(text_null(Jobs::ScheduleCalendarJson))
                 .col(string_null(Jobs::ProcessorName))
                 .col(string_null(Jobs::ProcessorType))
                 .col(string_null(Jobs::ScriptId))
@@ -1131,7 +1131,7 @@ async fn create_job_versions(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
                 .col(string_col(JobVersions::MisfirePolicy))
                 .col(string_null(JobVersions::ScheduleStartAt))
                 .col(string_null(JobVersions::ScheduleEndAt))
-                .col(string_null(JobVersions::ScheduleCalendarJson))
+                .col(text_null(JobVersions::ScheduleCalendarJson))
                 .col(string_null(JobVersions::ProcessorName))
                 .col(string_null(JobVersions::ProcessorType))
                 .col(string_null(JobVersions::ScriptId))

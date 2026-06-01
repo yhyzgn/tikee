@@ -23,7 +23,9 @@ Out of scope for this plan:
 - Python/Node SDKs.
 - Go SDK run-loop.
 - Helm/K8s production deployment.
-- External OIDC, TLS/mTLS, external DB, and external observability stacks.
+- External OIDC, TLS/mTLS, and external observability stacks.
+
+Database compatibility is covered by the dedicated storage matrix in `docs/operations/database-compatibility-test-plan.md`; Java demo integration may keep using SQLite unless the test objective is full deployment matrix validation.
 
 ## Test matrix
 

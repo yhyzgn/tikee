@@ -5,7 +5,7 @@ where
     T: IntoIden,
 {
     ColumnDef::new(column)
-        .string()
+        .string_len(191)
         .not_null()
         .primary_key()
         .take()
@@ -15,14 +15,21 @@ pub(super) fn string_col<T>(column: T) -> ColumnDef
 where
     T: IntoIden,
 {
-    ColumnDef::new(column).string().not_null().take()
+    ColumnDef::new(column).string_len(191).not_null().take()
 }
 
 pub(super) fn string_null<T>(column: T) -> ColumnDef
 where
     T: IntoIden,
 {
-    ColumnDef::new(column).string().null().take()
+    ColumnDef::new(column).string_len(191).null().take()
+}
+
+pub(super) fn short_string_col<T>(column: T) -> ColumnDef
+where
+    T: IntoIden,
+{
+    ColumnDef::new(column).string_len(128).not_null().take()
 }
 
 pub(super) fn text_col<T>(column: T) -> ColumnDef

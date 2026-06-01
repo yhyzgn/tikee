@@ -70,7 +70,7 @@ pub async fn connect_and_migrate(database_url: &str) -> Result<DatabaseConnectio
         .max_connections(16)
         .min_connections(1)
         .connect_timeout(Duration::from_secs(8))
-        .sqlx_logging(false)
+        .sqlx_logging(std::env::var_os("TIKEE_SQLX_LOGGING").is_some())
         .idle_timeout(Duration::from_mins(1));
     configure_sqlite_connect_options(database_url, &mut options);
 
