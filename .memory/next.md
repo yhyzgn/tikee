@@ -14,7 +14,7 @@ Continue hardening remaining Phase4 service-governance edges while preserving th
 
 ## P2 — ecosystem / advanced differentiation
 - PowerJob and XXL-JOB migration tooling.
-- GitOps/IaC manifest export/diff is implemented; remaining P2 work is real Terraform Provider plus K8s CRD controller/operator (current files are contract/CRD samples only).
+- GitOps/IaC manifest export/diff is implemented; remaining P2 work is real Terraform Provider plus K8s CRD controller/operator (current files are contract/CRD samples only; Terraform Provider tests/build G-TF-001 and K8s CRD schema validation G-K8S-001 & G-K8S-002 are locally tested and verified).
 - Task dependency discovery/topology, workflow replay, intelligent scheduling.
 - Plugin system, advanced webhook/event sources, task versioning/canary rollback.
 
