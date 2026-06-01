@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 
-import { ApiClientError, createAppScope, createCalendar, createJob, createNamespace, createPlugin, createSdkApiKey, createServiceAccount, createWorkerPool, deletePlugin, disableServiceAccount, dryRunWorkflow, getAuthToken, listInstanceLogs, getJobImpact, getJobSchedulingAdvice, getJobTopology, getWorkflowReplay, listJobVersions, listJobs, listNamespaces, listPlugins, listServiceAccounts, listWorkerPools, login, rollbackJob, setAuthErrorHandler, setAuthToken, triggerJob, triggerJobWebhookEvent, updateJob, updatePlugin, updateSdkApiKey, updateServiceAccount, updateWorkflow } from './client';
+import { ApiClientError, createAppScope, createCalendar, createJob, createNamespace, createPlugin, createSdkApiKey, createServiceAccount, createWorkerPool, deletePlugin, disableServiceAccount, dryRunWorkflow, getAuthToken, listInstanceAttempts, listInstanceLogs, getJobImpact, getJobSchedulingAdvice, getJobTopology, getWorkflowReplay, listJobVersions, listJobs, listNamespaces, listPlugins, listServiceAccounts, listWorkerPools, login, rollbackJob, setAuthErrorHandler, setAuthToken, triggerJob, triggerJobWebhookEvent, updateJob, updatePlugin, updateSdkApiKey, updateServiceAccount, updateWorkflow } from './client';
 
 const originalFetch = globalThis.fetch;
 
@@ -84,6 +84,21 @@ describe('api client envelope handling', () => {
 
     await expect(listInstanceLogs('inst_1', { governanceOnly: true })).resolves.toEqual(body.data);
     expect(fetch).toHaveBeenCalledWith('/api/v1/instances/inst_1/logs?page_token=script_execution_governance', expect.any(Object));
+  });
+
+  test('loads instance attempts so the UI can show executor worker status and update time', async () => {
+    const body = {
+      code: 0,
+      message: 'success',
+      data: {
+        items: [{ id: 'att_1', instanceId: 'inst_1', workerId: 'worker_1', status: 'succeeded', createdAt: '2026-06-01T00:00:00Z', updatedAt: '2026-06-01T00:00:02Z' }],
+        nextPageToken: null,
+      },
+    };
+    globalThis.fetch = mock(async () => new Response(JSON.stringify(body))) as unknown as typeof fetch;
+
+    await expect(listInstanceAttempts('inst_1')).resolves.toEqual(body.data);
+    expect(fetch).toHaveBeenCalledWith('/api/v1/instances/inst_1/attempts', expect.any(Object));
   });
 
   test('normalizes legacy workflow edge conditions before workflow mutations', async () => {

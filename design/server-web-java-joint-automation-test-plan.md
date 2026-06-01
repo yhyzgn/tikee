@@ -182,7 +182,7 @@ python3 -m json.tool .dev/reports/*java-demo*.json | sed -n '1,220p'
 | D-FAILOVER-001 | Master demo 停止后 follower 晋升 | worker election | kill 当前 master demo 进程 | 另一个 worker 变 `isMaster=true` | workers JSON timeline | ✅ 通过 | 需要轮询至 lease/transport error 生效 |
 | D-FAILOVER-002 | failover 后 single 任务成功 | dispatcher + Java demo | 再触发 `demo.echo` | instance 成功，worker 为新 master | instance JSON/logs | ✅ 通过 | 验证无额外锁情况下有序调度 |
 | D-WEB-001 | Web Worker 页展示切换 | web + server | failover 前后各截图一次 | UI Master/Follower 状态随 API 改变 | screenshots | ⏳ 待执行 | 验收可观测性 |
-| D-WEB-002 | Web 实例详情日志 | web + server | 打开实例详情 | 控制台/processor 输出显示在实例日志中且无重复 | screenshot + logs JSON | ⏳ 待执行 | 覆盖前期日志问题 |
+| D-WEB-002 | Web 实例详情日志 | web + server | 打开实例详情 | 控制台/processor 输出显示在实例日志中且无重复 | `.dev/reports/web-instance-logs-20260601T0730-test.log`、`.dev/reports/web-typecheck-20260601T0730.log` | ✅ 通过 | UI 模型已覆盖执行器/广播子执行和日志 worker 列；live 截图仍可在双 worker e2e 补充 |
 
 建议把此阶段脚本化为：`deploy/smoke/server-web-java-joint-e2e.sh`。脚本输出：
 
