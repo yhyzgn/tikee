@@ -196,8 +196,8 @@ rtk bash deploy/smoke/server-web-java-joint-e2e.sh
 
 | ID | 测试项 | 执行方式 | 核心断言 | 证据产物 | 当前测试结果 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- |
-| G-GITOPS-001 | Manifest 导出 | `GET /api/v1/gitops/manifest` | YAML/JSON 可解析，有 checksum | manifest file | 本轮未执行 | ⏳ 待执行 |
-| G-GITOPS-002 | Manifest diff | `POST /api/v1/gitops/diff` | 返回 drift diff，不直接绕过 review | diff JSON | 本轮未执行 | ⏳ 待执行 |
+| G-GITOPS-001 | Manifest 导出 | `GET /api/v1/gitops/manifest` | YAML/JSON 可解析，有 checksum | `.dev/reports/gitops-20260601T074258Z-903654-manifest.json` | `gitops-manifest-export` passed；YAML 含 apiVersion，checksum 为 sha256，包含 seeded Job | ✅ 通过 |
+| G-GITOPS-002 | Manifest diff | `POST /api/v1/gitops/diff` | 返回 drift diff，不直接绕过 review | `.dev/reports/gitops-20260601T074258Z-903654-diff.json` | `gitops-manifest-diff` passed；desired enabled=false 返回 update diff | ✅ 通过 |
 | G-TF-001 | Terraform provider build/test | 以 `deploy/terraform/provider/README.md` 为准 | provider build/test 通过 | CI log | 本轮未执行 | ⏳ 待执行 |
 | G-TF-002 | Terraform manifest diff resource | plan/apply 到 dev server | 不绕过 typed CRUD/RBAC/审计 | tf log、audit JSON | 本轮未执行 | ⏳ 待执行 |
 | G-K8S-001 | CRD schema 校验 | kubeconform/kubectl dry-run | CRD schema 合法 | CI log | 本轮未执行 | ⏳ 待执行 |
@@ -227,7 +227,7 @@ rtk bash deploy/smoke/server-web-java-joint-e2e.sh
 | P0-D 三端双 worker e2e | 10 | 8 | 2 | 0 | 0 | 0 |
 | P1-E SDK Management/API-Key | 7 | 7 | 0 | 0 | 0 | 0 |
 | P1-F 脚本沙箱/插件 | 9 | 9 | 0 | 0 | 0 | 0 |
-| P2-G GitOps/IaC | 6 | 0 | 6 | 0 | 0 | 0 |
+| P2-G GitOps/IaC | 6 | 2 | 4 | 0 | 0 | 0 |
 | 数据库专项明细 | 3 | 3 | 0 | 0 | 0 | 0 |
 
 ## 12. 下一步执行建议

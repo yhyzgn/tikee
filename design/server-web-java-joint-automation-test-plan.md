@@ -232,8 +232,8 @@ python3 -m json.tool .dev/reports/*java-demo*.json | sed -n '1,220p'
 
 | ID | 功能/测试项 | 覆盖组件 | 执行方式 | 断言标准 | 证据产物 | 状态 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| G-GITOPS-001 | Manifest 导出 | server | `GET /api/v1/gitops/manifest` | YAML/JSON 可解析，有 checksum | manifest file | ⏳ 待执行 | 作为 IaC 输入 |
-| G-GITOPS-002 | Manifest diff | server + web | `POST /api/v1/gitops/diff` | 返回 drift diff | diff JSON | ⏳ 待执行 | review-first |
+| G-GITOPS-001 | Manifest 导出 | server | `GET /api/v1/gitops/manifest` | YAML/JSON 可解析，有 checksum | `.dev/reports/gitops-20260601T074258Z-903654-manifest.json` | ✅ 通过 | `rtk bash deploy/smoke/gitops-live-smoke.sh` |
+| G-GITOPS-002 | Manifest diff | server + web | `POST /api/v1/gitops/diff` | 返回 drift diff | `.dev/reports/gitops-20260601T074258Z-903654-diff.json` | ✅ 通过 | `rtk bash deploy/smoke/gitops-live-smoke.sh` |
 | G-TF-001 | Terraform provider build/test | deploy/terraform/provider | provider 测试命令 | build/test 通过 | CI log | ⏳ 待执行 | 具体命令以 provider README 为准 |
 | G-TF-002 | Terraform manifest diff resource | Terraform + server | plan/apply 到 dev server | 不绕过 typed CRUD/RBAC/审计 | tf log + audit | ⏳ 待执行 | P2 nightly |
 | G-K8S-001 | CRD schema 校验 | deploy/k8s/crd | kubeconform/kubectl dry-run | CRD schema 合法 | CI log | ⏳ 待执行 | 无集群时 dry-run |
