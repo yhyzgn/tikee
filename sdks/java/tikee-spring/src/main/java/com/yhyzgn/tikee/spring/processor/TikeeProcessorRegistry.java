@@ -4,7 +4,7 @@ import com.yhyzgn.tikee.processor.TikeeProcessor;
 import com.yhyzgn.tikee.processor.TikeeProcessorKind;
 import com.yhyzgn.tikee.processor.TaskContext;
 import com.yhyzgn.tikee.processor.TaskOutcome;
-import com.yhyzgn.tikee.worker.StructuredWorkerCapabilityProvider;
+import com.yhyzgn.tikee.worker.WorkerCapabilityProvider;
 import com.yhyzgn.tikee.worker.WorkerCapabilitySet;
 import java.lang.reflect.Method;
 import java.util.Collections;
@@ -21,7 +21,7 @@ import org.springframework.core.annotation.AnnotationUtils;
 /**
  * Discovers {@link TikeeProcessor} annotations from Spring beans.
  */
-public class TikeeProcessorRegistry implements BeanPostProcessor, StructuredWorkerCapabilityProvider {
+public class TikeeProcessorRegistry implements BeanPostProcessor, WorkerCapabilityProvider {
     private final Map<String, TikeeProcessorHandler> handlers = new LinkedHashMap<>();
     private final Map<String, ProcessorDeclaration> declarations = new LinkedHashMap<>();
     private final Set<String> processedBeans = new HashSet<>();

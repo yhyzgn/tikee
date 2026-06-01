@@ -12,7 +12,7 @@ import com.yhyzgn.tikee.script.ScriptSandboxBackend;
 import com.yhyzgn.tikee.wasm.WasmRunnerPolicy;
 import com.yhyzgn.tikee.wasm.WasmRunnerRegistry;
 import com.yhyzgn.tikee.wasm.WasmRunnerTask;
-import com.yhyzgn.tikee.worker.StructuredWorkerCapabilityProvider;
+import com.yhyzgn.tikee.worker.WorkerCapabilityProvider;
 import com.yhyzgn.tikee.worker.WorkerCapabilitySet;
 import com.yhyzgn.tikee.worker.WorkerRegistration;
 import io.grpc.ManagedChannel;
@@ -526,7 +526,7 @@ public final class GrpcTikeeWorkerClient implements TikeeWorkerClient {
 
     private Worker.WorkerCapabilities structuredRegistrationCapabilities() {
         WorkerCapabilitySet capabilities = registration.structuredCapabilities();
-        if (processor instanceof StructuredWorkerCapabilityProvider provider) {
+        if (processor instanceof WorkerCapabilityProvider provider) {
             capabilities = capabilities.merge(provider.workerCapabilities());
         } else if (processor instanceof ProcessorCapabilityProvider provider) {
             capabilities = capabilities.merge(legacyProcessorCapabilities(provider.capabilities()));
