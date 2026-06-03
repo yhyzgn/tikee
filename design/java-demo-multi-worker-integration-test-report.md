@@ -65,8 +65,7 @@
 | 手动触发 seed 生成的 8 个 API jobs 并等待实例完成 | 已触发 8 个 seed jobs；7 个业务 processor succeeded，`fail-api` 走预期失败路径；实例日志均已采集 | `/home/neo/Projects/neo/pub/tikee/.dev/reports/java-multi-worker-20260603T044644Z-205593/final-e2e-summary.json`、`/home/neo/Projects/neo/pub/tikee/.dev/reports/java-multi-worker-20260603T044644Z-205593/trigger-results.json`、`/home/neo/Projects/neo/pub/tikee/.dev/reports/java-multi-worker-20260603T044644Z-205593/retrigger-sql-result.json` | ✅ 通过 |
 | SQL plugin job 调度绑定 | 首次触发暴露 seed 缺口：`sql-sync-api` 未带 `processorType=sql` 时被当作 SDK processor 匹配并 fail-closed；已修 `scripts/dev-integration-seed.sh` 注册 SQL plugin 并创建 `processorType=sql` job，PATCH 当前临时 DB 后重触发成功 | `/home/neo/Projects/neo/pub/tikee/.dev/reports/java-multi-worker-20260603T044644Z-205593/sql-job-patch.json`、`/home/neo/Projects/neo/pub/tikee/.dev/reports/java-multi-worker-20260603T044644Z-205593/retrigger-sql-result.json` | ✅ 已修复并通过 |
 | worker pool quota 对调度拥塞/并发限制的压力测试 | 已补存储层专项压力回归：`max_concurrency=1` 会阻止同池第二个 running claim；`max_queue_depth=1` 会在 active depth 超限时背压并在深度下降后恢复；拥塞池不会饿死后续开放池 | `cargo test -p tikee-storage worker_pool_ --all-features` | ✅ 通过 |
-| 已初始化 dev DB 上的默认账号登录路径 | 完整联调改用临时 SQLite DB，bootstrap 注册 `smoke_admin/Tikee@2026!` 成功；已初始化本机 dev DB 仍不应假设默认账号有效 | `/home/neo/Projects/neo/pub/tikee/.dev/reports/java-multi-worker-20260603T044644Z-205593/login.json`、`/home/neo/Projects/neo/pub/tikee/.dev/reports/java-multi-worker-20260603T044644Z-205593/seed.log` | ✅ 临时库通过 / ⚠️ dev DB 环境相关 |
-| 非 SQLite 数据库上的 seed API 验证 | 本轮完整联合冒烟仍使用临时 SQLite | DB 兼容性专项计划中分别跑 PostgreSQL/MySQL | ⚠️ 另有专项 |
+| 非 SQLite 数据库上的 seed API 验证 | 已使用 PostgreSQL 16 与 MySQL 8.4 compose 服务分别启动 tikee server，并通过真实 HTTP API 跑 `scripts/dev-integration-seed.sh`；两端均创建 3 namespaces、4 apps、5 worker pools、SQL plugin、8 jobs | `/home/neo/Projects/neo/pub/tikee/.dev/reports/db-seed-compat-20260603T060134Z/postgres-seed.log`、`/home/neo/Projects/neo/pub/tikee/.dev/reports/db-seed-compat-20260603T060134Z/postgres-jobs.json`、`/home/neo/Projects/neo/pub/tikee/.dev/reports/db-seed-compat-20260603T060134Z/postgres-worker-pools.json`、`/home/neo/Projects/neo/pub/tikee/.dev/reports/db-seed-compat-20260603T060134Z/postgres-plugins.json`、`/home/neo/Projects/neo/pub/tikee/.dev/reports/db-seed-compat-20260603T060134Z/mysql-seed.log`、`/home/neo/Projects/neo/pub/tikee/.dev/reports/db-seed-compat-20260603T060134Z/mysql-jobs.json`、`/home/neo/Projects/neo/pub/tikee/.dev/reports/db-seed-compat-20260603T060134Z/mysql-worker-pools.json`、`/home/neo/Projects/neo/pub/tikee/.dev/reports/db-seed-compat-20260603T060134Z/mysql-plugins.json` | ✅ 通过 |
 
 ## 3. 联调数据设计
 
@@ -384,9 +383,9 @@ scripts/start-java-demo-workers.sh --stop
 
 ## 8. 风险与建议
 
-1. **默认账号不可假设**
-   - 已初始化 dev DB 中默认账号可能不存在或密码不同。
-   - 后续脚本执行建议显式传入 admin token。
+1. **已初始化 dev DB 默认账号不作为验收项**
+   - 本轮完整验证使用临时库 bootstrap 管理员完成；已初始化 dev DB 中默认账号可能不存在或密码不同，这是环境状态而非功能缺口。
+   - `scripts/dev-integration-seed.sh` 支持 `TIKEE_SMOKE_AUTH_TOKEN` / `TIKEE_ADMIN_TOKEN` / 显式账号密码，实际 dev DB 使用时应传入当前有效管理员凭据。
 
 2. **完整联合测试已在临时 SQLite 环境跑通，但建议沉淀为自动化脚本**
    - 本轮已启动 5 个 demo worker 并完成 `seed -> start workers -> trigger -> wait -> collect logs` 闭环。
@@ -410,6 +409,7 @@ scripts/start-java-demo-workers.sh --stop
 - ✅ 文档已补充
 - ✅ 完整多 worker 在线触发闭环已执行并采集证据
 - ✅ worker pool quota 拥塞/并发限制专项回归通过
+- ✅ PostgreSQL/MySQL seed API 兼容专项通过
 
 ## 10. Worker Pool quota 拥塞/并发限制专项结果
 
@@ -432,3 +432,25 @@ scripts/start-java-demo-workers.sh --stop
 ```bash
 cargo test -p tikee-storage worker_pool_ --all-features
 ```
+
+## 11. 非 SQLite seed API 兼容专项结果
+
+本专项使用 `deploy/compose/database-compat-compose.yml` 启动 PostgreSQL 16 与 MySQL 8.4，分别以对应 DSN 启动 tikee server，并通过真实 HTTP 管理 API 执行 `scripts/dev-integration-seed.sh`。
+
+- 运行目录：`/home/neo/Projects/neo/pub/tikee/.dev/reports/db-seed-compat-20260603T060134Z`
+- PostgreSQL API：`http://127.0.0.1:19090`
+- MySQL API：`http://127.0.0.1:19091`
+- 验证资产：`scripts/db-seed-api-compat-smoke.sh`
+
+| 数据库 | 验证内容 | 结果 |
+| --- | --- | --- |
+| PostgreSQL 16 | bootstrap/login、namespace/app/worker pool/quota、SQL plugin、8 个 seed jobs | ✅ 通过 |
+| MySQL 8.4 | bootstrap/login、namespace/app/worker pool/quota、SQL plugin、8 个 seed jobs | ✅ 通过 |
+
+验证命令：
+
+```bash
+scripts/db-seed-api-compat-smoke.sh
+```
+
+本轮手动执行证据包含：`postgres-seed.log`、`postgres-jobs.json`、`postgres-worker-pools.json`、`postgres-plugins.json`、`mysql-seed.log`、`mysql-jobs.json`、`mysql-worker-pools.json`、`mysql-plugins.json`。
