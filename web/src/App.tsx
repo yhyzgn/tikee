@@ -1,4 +1,6 @@
 import { ConfigProvider, theme } from 'antd';
+import antdEnUS from 'antd/locale/en_US';
+import antdZhCN from 'antd/locale/zh_CN';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 
@@ -8,6 +10,7 @@ import { AuthGuard, RequirePermission } from './components/AuthGuard';
 import { ForbiddenPage } from './components/ForbiddenPage';
 import { RouteFallback } from './components/RouteFallback';
 import { ROUTE_META } from './routes';
+import { useI18n } from './i18n';
 import { DEFAULT_INFO_COLOR, DEFAULT_PRIMARY_COLOR, PRIMARY_COLOR_STORAGE_KEY, THEME_MODE_STORAGE_KEY, ThemeSettingsContext, normalizeHexColor, normalizeThemeMode, resolveThemeMode, type ThemeMode, type ThemePreference } from './theme';
 
 const Dashboard = lazy(() => import('./pages/Dashboard').then((module) => ({ default: module.Dashboard })));
@@ -102,6 +105,7 @@ function AppLayout() {
 }
 
 export function App() {
+  const { locale } = useI18n();
   const [primaryColor, setPrimaryColorState] = useState(() => {
     if (typeof window === 'undefined') return DEFAULT_PRIMARY_COLOR;
     return normalizeHexColor(window.localStorage.getItem(PRIMARY_COLOR_STORAGE_KEY)) ?? DEFAULT_PRIMARY_COLOR;
@@ -173,6 +177,7 @@ export function App() {
   return (
     <ThemeSettingsContext.Provider value={themeSettings}>
       <ConfigProvider
+        locale={locale === 'en-US' ? antdEnUS : antdZhCN}
         theme={{
           algorithm: resolvedMode === 'dark' ? theme.darkAlgorithm : theme.defaultAlgorithm,
           token: {
