@@ -14,9 +14,119 @@ This package provides:
 
 Dispatch routing must use structured capability fields. Legacy free-form `Capabilities` remain operator metadata only.
 
-The vendored proto is generated with official `protoc-gen-go` / `protoc-gen-go-grpc`; `scripts/generate-workerpb.sh` regenerates bindings and splits the generated protobuf file into sub-1500-line package files to preserve the repository source-size rule.
+## Build and test
+
+The generated Worker Tunnel protobuf bindings are committed under `internal/workerpb`, so an application that only imports and runs the SDK does not need `protoc` at runtime.
+
+`protoc` is required in the Go SDK development environment when you regenerate protobuf bindings with `scripts/generate-workerpb.sh`. CI images and developer containers that run this script must install:
+
+- `protoc`, the Protocol Buffers compiler
+- `protoc-gen-go`
+- `protoc-gen-go-grpc`
 
 ```bash
 cd sdks/go/tikee
 go test ./...
+```
+
+## Regenerating protobuf bindings
+
+The vendored proto is generated with official `protoc-gen-go` / `protoc-gen-go-grpc`; `scripts/generate-workerpb.sh` regenerates bindings and splits the generated protobuf file into sub-1500-line package files to preserve the repository source-size rule.
+
+```bash
+cd sdks/go/tikee
+go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
+go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.2
+export PATH="$(go env GOPATH)/bin:$PATH"
+./scripts/generate-workerpb.sh
+```
+
+If `protoc` is missing, the script fails with `protoc is required on PATH`.
+
+## Installing `protoc` locally
+
+Use the system package manager for the base compiler, then install the Go plugins with `go install` as shown above.
+
+```bash
+# Debian / Ubuntu
+sudo apt-get update
+sudo apt-get install -y protobuf-compiler
+
+# Fedora / RHEL / CentOS Stream
+sudo dnf install -y protobuf-compiler
+
+# Alpine
+sudo apk add --no-cache protobuf
+
+# Arch Linux
+sudo pacman -S --needed protobuf
+
+# macOS with Homebrew
+brew install protobuf
+```
+
+## Dockerfile examples
+
+### Debian / Ubuntu based Go image
+
+```Dockerfile
+FROM golang:1.25-bookworm AS build
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends protobuf-compiler \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11 \
+    && go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.2
+ENV PATH="/go/bin:${PATH}"
+
+WORKDIR /src
+COPY . .
+RUN cd sdks/go/tikee && ./scripts/generate-workerpb.sh && go test ./...
+```
+
+### Alpine based Go image
+
+```Dockerfile
+FROM golang:1.25-alpine AS build
+
+RUN apk add --no-cache protobuf
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11 \
+    && go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.2
+ENV PATH="/go/bin:${PATH}"
+
+WORKDIR /src
+COPY . .
+RUN cd sdks/go/tikee && ./scripts/generate-workerpb.sh && go test ./...
+```
+
+### Fedora based Go image
+
+```Dockerfile
+FROM fedora:43 AS build
+
+RUN dnf install -y golang protobuf-compiler \
+    && dnf clean all
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11 \
+    && go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.2
+ENV PATH="/root/go/bin:${PATH}"
+
+WORKDIR /src
+COPY . .
+RUN cd sdks/go/tikee && ./scripts/generate-workerpb.sh && go test ./...
+```
+
+### Runtime image for applications using committed generated code
+
+If the image only builds or runs an application that imports the SDK and does not call `scripts/generate-workerpb.sh`, it can omit `protoc`:
+
+```Dockerfile
+FROM golang:1.25-bookworm AS build
+WORKDIR /src
+COPY . .
+RUN go test ./... && go build -o /out/worker ./examples/go/worker-demo
+
+FROM gcr.io/distroless/base-debian12
+COPY --from=build /out/worker /worker
+ENTRYPOINT ["/worker"]
 ```
