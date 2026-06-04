@@ -37,8 +37,16 @@ func main() {
 	}
 	processor := tikee.TaskProcessorFunc(func(_ context.Context, task tikee.TaskContext) (tikee.TaskOutcome, error) {
 		switch task.ProcessorName {
-		case "", "demo.echo", "demo.context", "demo.bytes", "demo.heartbeat":
-			return tikee.TaskOutcome{Success: true, Message: "go demo processed " + task.ProcessorName}, nil
+		case "", "demo.echo":
+			return tikee.TaskOutcome{Success: true, Message: "go demo echo processed"}, nil
+		case "demo.context":
+			return tikee.TaskOutcome{Success: true, Message: fmt.Sprintf("go demo context processed instance=%s", task.InstanceID)}, nil
+		case "demo.bytes":
+			return tikee.TaskOutcome{Success: true, Message: fmt.Sprintf("go demo bytes processed payload_bytes=%d", len(task.Payload))}, nil
+		case "demo.heartbeat":
+			return tikee.TaskOutcome{Success: true, Message: "go demo heartbeat processed"}, nil
+		case "billing.sql-sync":
+			return tikee.TaskOutcome{Success: true, Message: "go demo sql plugin processed"}, nil
 		case "demo.fail":
 			return tikee.Failed("go demo intentional failure"), nil
 		default:

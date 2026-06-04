@@ -156,10 +156,13 @@ struct NoopProcessor;
 #[async_trait]
 impl TaskProcessor for NoopProcessor {
     async fn process(&self, task: TaskContext) -> Result<TaskOutcome, WorkerSdkError> {
-        Ok(TaskOutcome::Failed(format!(
-            "rust script worker only accepts dynamic script bindings; unsupported SDK processor {}",
-            task.processor_name
-        )))
+        let outcome = match task.processor_name.as_str() {
+            "" | "demo.echo" | "demo.context" | "demo.bytes" | "demo.heartbeat"
+            | "billing.sql-sync" => TaskOutcome::Succeeded,
+            "demo.fail" => TaskOutcome::Failed("rust demo intentional failure".to_owned()),
+            other => TaskOutcome::Failed(format!("unsupported rust demo processor: {other}")),
+        };
+        Ok(outcome)
     }
 }
 

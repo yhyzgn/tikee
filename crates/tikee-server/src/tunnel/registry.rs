@@ -402,7 +402,9 @@ impl WorkerRegistry {
         required_capability: Option<&str>,
     ) -> Vec<String> {
         let Some(required_capability) = required_capability else {
-            return self.find_eligible_workers_with_requirement(namespace, app, None).await;
+            return self
+                .find_eligible_workers_with_requirement(namespace, app, None)
+                .await;
         };
         let Some(requirement) = WorkerRequirement::from_legacy(required_capability) else {
             return Vec::new();
@@ -1158,7 +1160,11 @@ mod tests {
             .await;
         assert!(legacy_script_workers.is_empty());
         let legacy_python_workers = registry
-            .find_eligible_workers_with_capability("finance", "billing", Some("legacy-script-python"))
+            .find_eligible_workers_with_capability(
+                "finance",
+                "billing",
+                Some("legacy-script-python"),
+            )
             .await;
         assert!(legacy_python_workers.is_empty());
         let python_workers = registry
