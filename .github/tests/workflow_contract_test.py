@@ -105,6 +105,20 @@ class WorkflowContractTest(unittest.TestCase):
             job_block = workflow_job_block(CI, job)
             self.assertIn("needs: workflow-policy", job_block)
 
+
+    def test_deferred_python_and_node_gates_allow_only_documented_placeholders(self):
+        python_job = workflow_job_block(CI, "python-sdk-demo")
+        self.assertIn("if [ -d sdks/python ]; then", python_job)
+        self.assertIn("examples/python/worker-demo/README.md", python_job)
+        self.assertIn("Planned placeholder", python_job)
+        self.assertIn("only the documented placeholder is present", python_job)
+
+        node_job = workflow_job_block(CI, "nodejs-sdk-demo")
+        self.assertIn("if [ -d sdks/nodejs ] || [ -d sdks/node ]; then", node_job)
+        self.assertIn("examples/nodejs/worker-demo/README.md", node_job)
+        self.assertIn("Planned placeholder", node_job)
+        self.assertIn("only the documented placeholder is present", node_job)
+
     def test_legacy_aggregate_release_workflow_is_removed(self):
         self.assertFalse((WORKFLOWS / "release.yml").exists())
 

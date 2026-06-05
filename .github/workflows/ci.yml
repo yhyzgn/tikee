@@ -157,11 +157,23 @@ jobs:
       - uses: actions/checkout@v6
       - name: Verify Python SDK/demo is explicitly deferred
         run: |
-          if [ -d sdks/python ] || [ -d examples/python ]; then
-            echo "::error::Python SDK/demo directories exist but CI has no real Python SDK/demo test command yet. Wire the package tests and demo smoke instead of leaving a deferred gate."
+          if [ -d sdks/python ]; then
+            echo "::error::Python SDK directory exists but CI has no real Python SDK test command yet. Wire package tests instead of leaving a deferred gate."
             exit 1
           fi
-          echo "Python SDK/demo is intentionally deferred; no runnable Python SDK/demo directories exist."
+          if [ -d examples/python ]; then
+            placeholder="examples/python/worker-demo/README.md"
+            unexpected="$(find examples/python -type f ! -path "$placeholder" -print -quit)"
+            if [ -n "$unexpected" ]; then
+              echo "::error::Python demo contains runnable-looking files outside the documented placeholder: $unexpected"
+              exit 1
+            fi
+            if [ ! -f "$placeholder" ] || ! grep -q "Planned placeholder" "$placeholder"; then
+              echo "::error::Python demo placeholder README is missing or no longer declares itself deferred. Wire real demo tests before changing it."
+              exit 1
+            fi
+          fi
+          echo "Python SDK/demo is intentionally deferred; only the documented placeholder is present."
 
   nodejs-sdk-demo:
     name: Node.js SDK + demo / deferred
@@ -171,11 +183,23 @@ jobs:
       - uses: actions/checkout@v6
       - name: Verify Node.js SDK/demo is explicitly deferred
         run: |
-          if [ -d sdks/nodejs ] || [ -d sdks/node ] || [ -d examples/nodejs ] || [ -d examples/node ]; then
-            echo "::error::Node.js SDK/demo directories exist but CI has no real Node.js SDK/demo test command yet. Wire the package tests and demo smoke instead of leaving a deferred gate."
+          if [ -d sdks/nodejs ] || [ -d sdks/node ]; then
+            echo "::error::Node.js SDK directory exists but CI has no real Node.js SDK test command yet. Wire package tests instead of leaving a deferred gate."
             exit 1
           fi
-          echo "Node.js SDK/demo is intentionally deferred; no runnable Node.js SDK/demo directories exist."
+          if [ -d examples/nodejs ] || [ -d examples/node ]; then
+            placeholder="examples/nodejs/worker-demo/README.md"
+            unexpected="$(find examples/nodejs examples/node -type f ! -path "$placeholder" -print -quit 2>/dev/null || true)"
+            if [ -n "$unexpected" ]; then
+              echo "::error::Node.js demo contains runnable-looking files outside the documented placeholder: $unexpected"
+              exit 1
+            fi
+            if [ ! -f "$placeholder" ] || ! grep -q "Planned placeholder" "$placeholder"; then
+              echo "::error::Node.js demo placeholder README is missing or no longer declares itself deferred. Wire real demo tests before changing it."
+              exit 1
+            fi
+          fi
+          echo "Node.js SDK/demo is intentionally deferred; only the documented placeholder is present."
 
   other-deploy-tools:
     name: Other / deploy tooling
