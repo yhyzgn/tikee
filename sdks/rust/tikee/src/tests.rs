@@ -79,7 +79,10 @@ fn container_script_runner_runtime_path_advertises_canonical_backend() {
 fn task_outcome_success_can_carry_operator_message() {
     let outcome = TaskOutcome::Success("rust demo echo processed".to_owned());
 
-    assert_eq!(outcome.message().as_deref(), Some("rust demo echo processed"));
+    assert_eq!(
+        outcome.message().as_deref(),
+        Some("rust demo echo processed")
+    );
     assert!(outcome.failure_class().is_none());
 }
 

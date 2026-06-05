@@ -215,10 +215,12 @@ impl ScriptRunnerRegistry {
             .runners
             .values()
             .filter_map(|runner| {
-                runner.advertised_sandbox_backend().map(|backend| ScriptRunnerCapability {
-                    language: runner.kind().as_str().to_owned(),
-                    sandbox_backend: backend,
-                })
+                runner
+                    .advertised_sandbox_backend()
+                    .map(|backend| ScriptRunnerCapability {
+                        language: runner.kind().as_str().to_owned(),
+                        sandbox_backend: backend,
+                    })
             })
             .collect::<Vec<_>>();
         runners.sort_by(|left, right| left.language.cmp(&right.language));
