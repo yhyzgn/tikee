@@ -48,6 +48,69 @@ const displayExecutionNodes = (
   );
 };
 
+
+const renderExecutionResult = (instance: JobInstanceSummary | null) => {
+  const result = instance?.result;
+  if (!result) {
+    return (
+      <Card size="small" className="instance-result-card instance-result-card--empty" title="执行结果" style={{ marginTop: 16 }}>
+        <div className="instance-result-empty">
+          <Typography.Text strong>暂无执行结果</Typography.Text>
+          <Typography.Text type="secondary">实例进入运行、重试或完成后会在这里展示 Worker 返回的具体结果。</Typography.Text>
+        </div>
+      </Card>
+    );
+  }
+
+  const statusColor = result.success ? 'success' : 'error';
+  const statusText = result.success ? '任务执行成功' : '任务执行失败';
+  const messageText = result.message || 'Worker 未返回结果消息';
+
+  return (
+    <Card
+      size="small"
+      className={`instance-result-card instance-result-card--${result.success ? 'success' : 'failed'}`}
+      title="执行结果"
+      style={{ marginTop: 16 }}
+    >
+      <div className="instance-result-panel">
+        <div className="instance-result-panel__summary">
+          <div className="instance-result-panel__status">
+            <span className="instance-result-panel__status-dot" />
+            <div>
+              <Typography.Text strong className="instance-result-panel__status-title">{statusText}</Typography.Text>
+              <Typography.Text type="secondary" className="instance-result-panel__status-subtitle">Worker 返回的最终执行结果</Typography.Text>
+            </div>
+          </div>
+          <Tag color={statusColor} className="instance-result-panel__tag">{String(result.success)}</Tag>
+        </div>
+
+        <div className="instance-result-panel__meta-grid">
+          <div className="instance-result-panel__meta-item">
+            <span>Worker</span>
+            <Typography.Text code title={result.workerId}>{result.workerId || '-'}</Typography.Text>
+          </div>
+          <div className="instance-result-panel__meta-item">
+            <span>Completed At</span>
+            <Typography.Text className="instance-result-panel__time">{result.completedAt || '-'}</Typography.Text>
+          </div>
+          <div className="instance-result-panel__meta-item">
+            <span>Status</span>
+            <Tag color={statusColor} className="instance-status-tag">{result.success ? 'succeeded' : 'failed'}</Tag>
+          </div>
+        </div>
+
+        <div className="instance-result-panel__message">
+          <span>Message</span>
+          <Typography.Paragraph className="instance-result-panel__message-body">
+            {messageText}
+          </Typography.Paragraph>
+        </div>
+      </div>
+    </Card>
+  );
+};
+
 export function InstancesPage() {
   const [jobs, setJobs] = useState<JobSummary[]>([]);
   const [instances, setInstances] = useState<JobInstanceSummary[]>([]);
@@ -266,29 +329,7 @@ export function InstancesPage() {
             locale={{ emptyText: selectedInstance?.executionMode === 'single' ? '暂无执行器信息' : '暂无广播子执行' }}
           />
         </Card>
-        {selectedInstance?.result ? (
-          <Card size="small" className="instance-log-section" title="执行结果" style={{ marginTop: 16 }}>
-            <Alert
-              type={selectedInstance.result.success ? 'success' : 'error'}
-              showIcon
-              message={selectedInstance.result.success ? '任务执行成功' : '任务执行失败'}
-              description={(
-                <Space direction="vertical" size={6} style={{ width: '100%' }}>
-                  <Space wrap>
-                    <Tag color={selectedInstance.result.success ? 'green' : 'red'}>{String(selectedInstance.result.success)}</Tag>
-                    <Typography.Text code>{selectedInstance.result.workerId}</Typography.Text>
-                    <Typography.Text type="secondary">{selectedInstance.result.completedAt}</Typography.Text>
-                  </Space>
-                  <Typography.Paragraph style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
-                    {selectedInstance.result.message || 'Worker 未返回结果消息'}
-                  </Typography.Paragraph>
-                </Space>
-              )}
-            />
-          </Card>
-        ) : (
-          <Alert type="info" showIcon message="暂无执行结果" description="实例进入运行、重试或完成后会在这里展示 Worker 返回的具体结果。" style={{ marginTop: 16 }} />
-        )}
+        {renderExecutionResult(selectedInstance)}
         <Space align="center" style={{ marginTop: 24, marginBottom: 12 }}>
           <Typography.Title level={5} style={{ margin: 0 }}>执行日志</Typography.Title>
           {selectedInstance ? (

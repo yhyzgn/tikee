@@ -126,6 +126,7 @@ describe('instance execution result view', () => {
     expect(source).toContain('执行结果');
     expect(source).toContain('任务执行成功');
     expect(source).toContain('任务执行失败');
-    expect(source).toContain('selectedInstance.result.message');
+    expect(source).toContain('instance-result-panel__message-body');
+    expect(source).toContain('renderExecutionResult(selectedInstance)');
   });
 });

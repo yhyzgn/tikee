@@ -168,3 +168,171 @@ html[data-theme="dark"] {
     padding-inline: 8px;
   }
 }
+
+.instance-result-card.ant-card {
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--app-primary-color) 14%, var(--app-border));
+  background: var(--app-surface-solid) !important;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
+}
+
+.instance-result-card .ant-card-head {
+  min-height: 44px;
+  border-bottom-color: color-mix(in srgb, var(--app-primary-color) 14%, var(--app-border));
+}
+
+.instance-result-card--success {
+  border-left: 4px solid var(--terminal-green);
+}
+
+.instance-result-card--failed {
+  border-left: 4px solid var(--terminal-red);
+}
+
+.instance-result-card--empty {
+  border-left: 4px solid var(--app-border-strong);
+}
+
+.instance-result-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.instance-result-panel__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--app-border);
+  border-radius: 16px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--app-surface-muted) 88%, transparent), color-mix(in srgb, var(--app-surface-soft) 94%, transparent));
+}
+
+.instance-result-panel__status {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.instance-result-panel__status-dot {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--terminal-green);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--terminal-green) 15%, transparent);
+}
+
+.instance-result-card--failed .instance-result-panel__status-dot {
+  background: var(--terminal-red);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--terminal-red) 15%, transparent);
+}
+
+.instance-result-panel__status-title.ant-typography,
+.instance-result-panel__status-subtitle.ant-typography {
+  display: block;
+}
+
+.instance-result-panel__status-title.ant-typography {
+  color: var(--app-text-strong);
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.instance-result-panel__status-subtitle.ant-typography {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.instance-result-panel__tag.ant-tag {
+  margin-inline-end: 0;
+  min-width: 72px;
+  justify-content: center;
+  text-transform: uppercase;
+}
+
+.instance-result-panel__meta-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) minmax(220px, 1fr) minmax(132px, 0.6fr);
+  gap: 10px;
+}
+
+.instance-result-panel__meta-item {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--app-border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--app-surface-muted) 72%, transparent);
+}
+
+.instance-result-panel__meta-item > span,
+.instance-result-panel__message > span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--app-text-subtle);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.instance-result-panel__meta-item .ant-typography,
+.instance-result-panel__time.ant-typography {
+  max-width: 100%;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.instance-result-panel__message {
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--app-primary-color) 12%, var(--app-border));
+  border-radius: 16px;
+  background: var(--app-code-bg);
+}
+
+.instance-result-panel__message-body.ant-typography {
+  max-height: 220px;
+  margin: 0;
+  overflow: auto;
+  color: var(--app-text);
+  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12.5px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.instance-result-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px 16px;
+  border: 1px dashed var(--app-border-strong);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--app-surface-muted) 72%, transparent);
+}
+
+@media (max-width: 1100px) {
+  .instance-result-panel__meta-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .instance-result-panel__summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .instance-result-panel__tag.ant-tag {
+    align-self: flex-start;
+  }
+}
