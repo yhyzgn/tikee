@@ -402,15 +402,14 @@ html[data-theme="dark"] {
 
 .instance-result-nodes__node-head .ant-typography {
   min-width: 0;
-  max-width: min(100%, 260px);
+  flex: 1 1 auto;
 }
 
 .instance-result-nodes__node-head .ant-typography code {
-  display: block;
-  max-width: 100%;
-  overflow: hidden;
+  display: inline-block;
+  max-width: none;
+  overflow: visible;
   border-radius: 6px;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

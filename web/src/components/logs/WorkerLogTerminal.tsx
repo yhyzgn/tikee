@@ -21,6 +21,8 @@ export const groupLogsByWorker = (logs: JobInstanceLogSummary[]): WorkerLogGroup
 };
 
 
+const formatLogSequence = (sequence: number) => `#${String(sequence).padStart(3, '0')}`;
+
 const renderLogMessage = (log: JobInstanceLogSummary) => {
   const message = log.governanceEvent === 'script_execution_governance'
     ? (log.governanceMessage ?? log.message)
@@ -46,7 +48,7 @@ export function WorkerLogTerminal({ groups }: WorkerLogTerminalProps) {
           <div className="instance-log-terminal" role="log" aria-label={`Worker ${group.workerId} execution logs`}>
             {group.logs.map((log) => (
               <div key={log.id} className="instance-log-terminal__line">
-                <span className="instance-log-terminal__seq">#{log.sequence}</span>
+                <span className="instance-log-terminal__seq">{formatLogSequence(log.sequence)}</span>
                 <time className="instance-log-terminal__time" dateTime={log.createdAt}>{formatLogTimestamp(log.createdAt)}</time>
                 <span className={`instance-log-terminal__level instance-log-terminal__level--${log.level}`}>{log.level}</span>
                 <span className="instance-log-terminal__message">{renderLogMessage(log)}</span>

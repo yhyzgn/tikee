@@ -112,6 +112,8 @@ describe('instance list worker visibility and grouped logs', () => {
 
   test('shows log timestamps and binds terminal highlight colors to theme tokens', () => {
     expect(source).toContain('formatLogTimestamp(log.createdAt)');
+    expect(source).toContain("String(sequence).padStart(3, '0')");
+    expect(source).toContain('formatLogSequence(log.sequence)');
     expect(source).toContain('formatIsoOffset');
     expect(source).toContain('grid-template-columns: var(--instance-log-seq-width, 6ch) max-content max-content minmax(0, 1fr)');
     expect(source).toContain('text-align: right');
@@ -139,6 +141,8 @@ describe('instance execution result view', () => {
     expect(source).toContain('instance-result-nodes__meta-row');
     expect(source).toContain('.instance-result-nodes__node-head .ant-typography code');
     expect(source).toContain('border-radius: 6px;');
+    expect(source).toContain('overflow: visible;');
+    expect(source).toContain('max-width: none;');
     expect(source).toContain('instance-result-nodes__message');
     expect(source).toContain('node.result?.message');
     expect(source).not.toContain('renderBroadcastResults(instance, attempts, logs)');
