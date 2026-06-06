@@ -51,11 +51,13 @@ describe('job schedule form governance', () => {
   test('offers namespace and app comboboxes from existing scope data while allowing free input', () => {
     expect(source).toContain('AutoComplete');
     expect(source).toContain('scopePairs');
-    expect(source).toContain('defaultCreateScope');
     expect(source).toContain('namespaceOptions');
     expect(source).toContain('appOptionsForNamespace(createNamespace)');
     expect(source).toContain('applyNamespaceSelection(form, value)');
     expect(source).toContain('filterOption={scopeFilterOption}');
+    expect(source).toContain('form.setFieldsValue({ scheduleType:');
+    expect(source).not.toContain('namespace: defaultCreateScope.namespace');
+    expect(source).not.toContain('app: defaultCreateScope.app');
     expect(source).not.toContain('<Form.Item name="namespace" label="Namespace" rules={[{ required: true }]}><Input placeholder="default" /></Form.Item>');
     expect(source).not.toContain('<Form.Item name="app" label="App" rules={[{ required: true }]}><Input placeholder="default" /></Form.Item>');
   });

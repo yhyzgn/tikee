@@ -129,7 +129,6 @@ export function JobsPage() {
   useEffect(() => { if (active) void load(); }, [active, load]);
 
   const scopePairs = useMemo(() => collectScopePairs(jobs, workers, calendars), [jobs, workers, calendars]);
-  const defaultCreateScope = scopePairs[0] ?? { namespace: 'default', app: 'default' };
   const namespaceOptions = useMemo(() => Array.from(new Set(scopePairs.map((scope) => scope.namespace)))
     .sort()
     .map((value) => ({ value, label: value })), [scopePairs]);
@@ -220,7 +219,7 @@ export function JobsPage() {
   const openCreateDrawer = () => {
     form.resetFields();
     setCreateProcessorSearch('');
-    form.setFieldsValue({ namespace: defaultCreateScope.namespace, app: defaultCreateScope.app, scheduleType: 'api', enabled: true, fixedRateUnit: 's', fixedRateJitterUnit: 's', executorKind: 'sdk', canaryPercent: 0, misfirePolicy: 'fire_once', retryPolicy: DEFAULT_RETRY_POLICY });
+    form.setFieldsValue({ scheduleType: 'api', enabled: true, fixedRateUnit: 's', fixedRateJitterUnit: 's', executorKind: 'sdk', canaryPercent: 0, misfirePolicy: 'fire_once', retryPolicy: DEFAULT_RETRY_POLICY });
     setCreateDrawerOpen(true);
   };
 
@@ -506,7 +505,7 @@ export function JobsPage() {
         <Form
           form={form}
           layout="vertical"
-          initialValues={{ namespace: 'default', app: 'default', scheduleType: 'api', enabled: true, canaryPercent: 0, misfirePolicy: 'fire_once', retryPolicy: DEFAULT_RETRY_POLICY }}
+          initialValues={{ scheduleType: 'api', enabled: true, canaryPercent: 0, misfirePolicy: 'fire_once', retryPolicy: DEFAULT_RETRY_POLICY }}
           onFinish={async (values) => {
             if (!canWriteJobs) { message.error('当前账号无权限创建任务'); return; }
             try {
