@@ -401,8 +401,15 @@ html[data-theme="dark"] {
 }
 
 .instance-result-nodes__node-head .ant-typography {
+  min-width: 0;
   max-width: min(100%, 260px);
+}
+
+.instance-result-nodes__node-head .ant-typography code {
+  display: block;
+  max-width: 100%;
   overflow: hidden;
+  border-radius: 6px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

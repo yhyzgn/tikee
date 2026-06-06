@@ -137,6 +137,8 @@ describe('instance execution result view', () => {
     expect(source).toContain('广播节点结果');
     expect(source).toContain('instance-result-nodes__list');
     expect(source).toContain('instance-result-nodes__meta-row');
+    expect(source).toContain('.instance-result-nodes__node-head .ant-typography code');
+    expect(source).toContain('border-radius: 6px;');
     expect(source).toContain('instance-result-nodes__message');
     expect(source).toContain('node.result?.message');
     expect(source).not.toContain('renderBroadcastResults(instance, attempts, logs)');
