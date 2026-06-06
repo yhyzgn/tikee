@@ -55,30 +55,43 @@ jobs:
           toolchain: 1.95.0
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
-      - name: Install protoc
+      - name: Install pinned protoc
         shell: bash
         run: |
           set -euo pipefail
-          case "${{ runner.os }}" in
-            Linux)
-              sudo apt-get update
-              sudo apt-get install -y protobuf-compiler
+          PROTOC_VERSION=25.8
+          case "${{ runner.os }}:${{ matrix.target }}" in
+            Linux:*)
+              PROTOC_ASSET="protoc-${PROTOC_VERSION}-linux-x86_64.zip"
+              PROTOC_BIN_NAME="protoc"
               ;;
-            macOS)
-              brew update
-              brew install protobuf
+            macOS:*)
+              PROTOC_ASSET="protoc-${PROTOC_VERSION}-osx-universal_binary.zip"
+              PROTOC_BIN_NAME="protoc"
               ;;
-            Windows)
-              choco install protoc -y --no-progress
-              echo 'C:\ProgramData\chocolatey\bin' >> "$GITHUB_PATH"
-              echo 'C:\ProgramData\chocolatey\lib\protoc\tools\bin' >> "$GITHUB_PATH"
+            Windows:*)
+              PROTOC_ASSET="protoc-${PROTOC_VERSION}-win64.zip"
+              PROTOC_BIN_NAME="protoc.exe"
               ;;
             *)
-              echo "unsupported runner OS: ${{ runner.os }}" >&2
+              echo "unsupported runner OS/target: ${{ runner.os }}:${{ matrix.target }}" >&2
               exit 1
               ;;
           esac
-          protoc --version
+          PROTOC_DIR="$PWD/.protoc-${PROTOC_VERSION}"
+          rm -rf "$PROTOC_DIR"
+          mkdir -p "$PROTOC_DIR"
+          curl -fsSLo protoc.zip "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/${PROTOC_ASSET}"
+          unzip -q protoc.zip -d "$PROTOC_DIR"
+          PROTOC_BIN="$PROTOC_DIR/bin/$PROTOC_BIN_NAME"
+          if [ ! -x "$PROTOC_BIN" ]; then
+            echo "downloaded protoc binary is missing or not executable: $PROTOC_BIN" >&2
+            find "$PROTOC_DIR" -maxdepth 3 -type f -print >&2
+            exit 1
+          fi
+          echo "$PROTOC_DIR/bin" >> "$GITHUB_PATH"
+          echo "PROTOC=$PROTOC_BIN" >> "$GITHUB_ENV"
+          "$PROTOC_BIN" --version
       - name: Build server binary
         run: cargo build --release --locked --bin tikeo --target ${{ matrix.target }}
       - name: Stage server release payload
