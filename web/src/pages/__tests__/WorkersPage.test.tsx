@@ -21,6 +21,7 @@ describe('Worker cluster page redesign', () => {
     expect(pageSource).toContain('const workerData = await listWorkers();');
     expect(pageSource).toContain('setWorkers(workerData);');
     expect(pageSource).toContain('WORKER_REFRESH_INTERVAL_MS');
+    expect(pageSource).toContain('const WORKER_REFRESH_INTERVAL_MS = 3_000;');
     expect(pageSource).toContain('refresh({ silent: true })');
     expect(pageSource).not.toContain('DispatchQueuePanel');
     expect(pageSource).toContain('ROUTE_META.dispatchQueue.path');

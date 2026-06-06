@@ -9,7 +9,7 @@ import { ROUTE_META } from '../routes';
 import { useRouteActive } from '../hooks/useRouteActivation';
 import { useNavigate } from 'react-router-dom';
 
-const WORKER_REFRESH_INTERVAL_MS = 5_000;
+const WORKER_REFRESH_INTERVAL_MS = 3_000;
 
 export function WorkersPage() {
   const [workers, setWorkers] = useState<WorkerListResponse>({ online: 0, items: [] });

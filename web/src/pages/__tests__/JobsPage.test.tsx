@@ -48,6 +48,18 @@ describe('job schedule form governance', () => {
     expect(source).not.toContain('script:${script.id}');
   });
 
+  test('offers namespace and app comboboxes from existing scope data while allowing free input', () => {
+    expect(source).toContain('AutoComplete');
+    expect(source).toContain('scopePairs');
+    expect(source).toContain('defaultCreateScope');
+    expect(source).toContain('namespaceOptions');
+    expect(source).toContain('appOptionsForNamespace(createNamespace)');
+    expect(source).toContain('applyNamespaceSelection(form, value)');
+    expect(source).toContain('filterOption={scopeFilterOption}');
+    expect(source).not.toContain('<Form.Item name="namespace" label="Namespace" rules={[{ required: true }]}><Input placeholder="default" /></Form.Item>');
+    expect(source).not.toContain('<Form.Item name="app" label="App" rules={[{ required: true }]}><Input placeholder="default" /></Form.Item>');
+  });
+
   test('replays edit drawer values after remount and converts lifecycle date values', () => {
     expect(source).toContain('useEffect(() => {');
     expect(source).toContain('if (!editingJob) return;');
