@@ -154,9 +154,10 @@ public final class SandboxToolResolver {
     }
 
     public Optional<String> resolveInterpreterCommand(String binary) {
-        return runtimeAvailable(binary, "--version")
-            ? Optional.of(binary)
-            : Optional.empty();
+        boolean available = "sh".equals(binary)
+            ? runtimeAvailable(binary, "-c", "exit 0")
+            : runtimeAvailable(binary, "--version");
+        return available ? Optional.of(binary) : Optional.empty();
     }
 
     public Optional<String> resolveRhaiCommand() {
