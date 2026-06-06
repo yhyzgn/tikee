@@ -42,11 +42,11 @@ ON CONFLICT(id) DO UPDATE SET
   role = excluded.role,
   bootstrap_admin = excluded.bootstrap_admin;
 
-INSERT INTO jobs (id, namespace_id, app_id, name, schedule_type, schedule_expr, processor_name, enabled, created_at, updated_at)
+INSERT INTO jobs (id, namespace_id, app_id, name, schedule_type, schedule_expr, processor_name, misfire_policy, enabled, canary_percent, created_at, updated_at)
 VALUES
-  ('job-dev-api-hello', 'ns-dev-default', 'app-dev-default', 'api-hello', 'api', NULL, 'demo.echo', 1, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
-  ('job-dev-fixed-rate-heartbeat', 'ns-dev-default', 'app-dev-default', 'fixed-rate-heartbeat', 'fixed_rate', '30s', 'demo.heartbeat', 1, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
-  ('job-dev-cron-minute-report', 'ns-dev-default', 'app-dev-default', 'cron-minute-report', 'cron', '0/30 * * * * * *', 'demo.report', 1, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
+  ('job-dev-api-hello', 'ns-dev-default', 'app-dev-default', 'api-hello', 'api', NULL, 'demo.echo', 'ignore', 1, 0, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+  ('job-dev-fixed-rate-heartbeat', 'ns-dev-default', 'app-dev-default', 'fixed-rate-heartbeat', 'fixed_rate', '30s', 'demo.heartbeat', 'ignore', 1, 0, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+  ('job-dev-cron-minute-report', 'ns-dev-default', 'app-dev-default', 'cron-minute-report', 'cron', '0/30 * * * * * *', 'demo.report', 'ignore', 1, 0, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
 ON CONFLICT(id) DO UPDATE SET
   namespace_id = excluded.namespace_id,
   app_id = excluded.app_id,
@@ -54,7 +54,9 @@ ON CONFLICT(id) DO UPDATE SET
   schedule_type = excluded.schedule_type,
   schedule_expr = excluded.schedule_expr,
   processor_name = excluded.processor_name,
+  misfire_policy = excluded.misfire_policy,
   enabled = excluded.enabled,
+  canary_percent = excluded.canary_percent,
   updated_at = excluded.updated_at;
 
 INSERT INTO job_instances (id, job_id, status, trigger_type, execution_mode, created_at, updated_at)
@@ -173,7 +175,10 @@ Write-Output $result
 ', 'approved', 'script-version-dev-powershell-example-1', 1, 10, 67108864, 0, '[]', '{"resources":{"timeout_ms":10000,"max_memory_bytes":67108864,"max_output_bytes":1048576},"network":{"enabled":false,"allowed_hosts":[]},"filesystem":{"read_only_paths":[],"writable_paths":[]},"secrets":{"refs":[]},"env_vars":[],"sandbox":{"backend":"auto"}}', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
   ('script-dev-rhai-example', 'dev-rhai-script-example', 'rhai', '1.0.0', 'let result = "rhai script example ok";
 print(result);
-', 'approved', 'script-version-dev-rhai-example-1', 1, 10, 67108864, 0, '[]', '{"resources":{"timeout_ms":10000,"max_memory_bytes":67108864,"max_output_bytes":1048576},"network":{"enabled":false,"allowed_hosts":[]},"filesystem":{"read_only_paths":[],"writable_paths":[]},"secrets":{"refs":[]},"env_vars":[],"sandbox":{"backend":"auto"}}', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
+', 'approved', 'script-version-dev-rhai-example-1', 1, 10, 67108864, 0, '[]', '{"resources":{"timeout_ms":10000,"max_memory_bytes":67108864,"max_output_bytes":1048576},"network":{"enabled":false,"allowed_hosts":[]},"filesystem":{"read_only_paths":[],"writable_paths":[]},"secrets":{"refs":[]},"env_vars":[],"sandbox":{"backend":"auto"}}', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+  ('script-dev-rhai-object-example', 'dev-rhai-object-script-example', 'rhai', '1.0.0', 'let result = #{ language: "rhai", status: "ok", "case": "manual-acceptance" };
+print(result);
+', 'approved', 'script-version-dev-rhai-object-example-1', 1, 10, 67108864, 0, '[]', '{"resources":{"timeout_ms":10000,"max_memory_bytes":67108864,"max_output_bytes":1048576},"network":{"enabled":false,"allowed_hosts":[]},"filesystem":{"read_only_paths":[],"writable_paths":[]},"secrets":{"refs":[]},"env_vars":[],"sandbox":{"backend":"auto"}}', 'usr-admin', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
 ON CONFLICT(id) DO UPDATE SET
   name = excluded.name,
   language = excluded.language,
@@ -211,7 +216,10 @@ Write-Output $result
 ', '737738c0056b58812b5f2849766b0d00f526d35a1c07f5c5fc6b802f56c06097', 'powershell', 'approved', 10, 67108864, 0, '[]', '{"resources":{"timeout_ms":10000,"max_memory_bytes":67108864,"max_output_bytes":1048576},"network":{"enabled":false,"allowed_hosts":[]},"filesystem":{"read_only_paths":[],"writable_paths":[]},"secrets":{"refs":[]},"env_vars":[],"sandbox":{"backend":"auto"}}', 'usr-admin', '2026-01-01T00:00:00Z'),
   ('script-version-dev-rhai-example-1', 'script-dev-rhai-example', 1, 'let result = "rhai script example ok";
 print(result);
-', 'c5fbea054ea991344bda993da92f06498e28822e57f8e6c51c77d694f1d4b6c9', 'rhai', 'approved', 10, 67108864, 0, '[]', '{"resources":{"timeout_ms":10000,"max_memory_bytes":67108864,"max_output_bytes":1048576},"network":{"enabled":false,"allowed_hosts":[]},"filesystem":{"read_only_paths":[],"writable_paths":[]},"secrets":{"refs":[]},"env_vars":[],"sandbox":{"backend":"auto"}}', 'usr-admin', '2026-01-01T00:00:00Z')
+', 'c5fbea054ea991344bda993da92f06498e28822e57f8e6c51c77d694f1d4b6c9', 'rhai', 'approved', 10, 67108864, 0, '[]', '{"resources":{"timeout_ms":10000,"max_memory_bytes":67108864,"max_output_bytes":1048576},"network":{"enabled":false,"allowed_hosts":[]},"filesystem":{"read_only_paths":[],"writable_paths":[]},"secrets":{"refs":[]},"env_vars":[],"sandbox":{"backend":"auto"}}', 'usr-admin', '2026-01-01T00:00:00Z'),
+  ('script-version-dev-rhai-object-example-1', 'script-dev-rhai-object-example', 1, 'let result = #{ language: "rhai", status: "ok", "case": "manual-acceptance" };
+print(result);
+', '146ca4d31bdd3bdb2cf87ef600ee7fec70f839c081fbca0cd621eac290169306', 'rhai', 'approved', 10, 67108864, 0, '[]', '{"resources":{"timeout_ms":10000,"max_memory_bytes":67108864,"max_output_bytes":1048576},"network":{"enabled":false,"allowed_hosts":[]},"filesystem":{"read_only_paths":[],"writable_paths":[]},"secrets":{"refs":[]},"env_vars":[],"sandbox":{"backend":"auto"}}', 'usr-admin', '2026-01-01T00:00:00Z')
 ON CONFLICT(id) DO UPDATE SET
   script_id = excluded.script_id,
   version_number = excluded.version_number,
@@ -227,14 +235,15 @@ ON CONFLICT(id) DO UPDATE SET
   created_by = excluded.created_by,
   created_at = excluded.created_at;
 
-INSERT INTO jobs (id, namespace_id, app_id, name, schedule_type, schedule_expr, processor_name, enabled, created_at, updated_at, script_id)
+INSERT INTO jobs (id, namespace_id, app_id, name, schedule_type, schedule_expr, processor_name, misfire_policy, enabled, canary_percent, created_at, updated_at, script_id)
 VALUES
-  ('job-dev-script-shell-example', 'ns-dev-default', 'app-dev-default', 'dev-shell-script-job', 'api', NULL, NULL, 1, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 'script-dev-shell-example'),
-  ('job-dev-script-python-example', 'ns-dev-default', 'app-dev-default', 'dev-python-script-job', 'api', NULL, NULL, 1, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 'script-dev-python-example'),
-  ('job-dev-script-javascript-example', 'ns-dev-default', 'app-dev-default', 'dev-javascript-script-job', 'api', NULL, NULL, 1, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 'script-dev-javascript-example'),
-  ('job-dev-script-typescript-example', 'ns-dev-default', 'app-dev-default', 'dev-typescript-script-job', 'api', NULL, NULL, 1, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 'script-dev-typescript-example'),
-  ('job-dev-script-powershell-example', 'ns-dev-default', 'app-dev-default', 'dev-powershell-script-job', 'api', NULL, NULL, 1, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 'script-dev-powershell-example'),
-  ('job-dev-script-rhai-example', 'ns-dev-default', 'app-dev-default', 'dev-rhai-script-job', 'api', NULL, NULL, 1, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 'script-dev-rhai-example')
+  ('job-dev-script-shell-example', 'ns-dev-default', 'app-dev-default', 'dev-shell-script-job', 'api', NULL, NULL, 'ignore', 1, 0, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 'script-dev-shell-example'),
+  ('job-dev-script-python-example', 'ns-dev-default', 'app-dev-default', 'dev-python-script-job', 'api', NULL, NULL, 'ignore', 1, 0, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 'script-dev-python-example'),
+  ('job-dev-script-javascript-example', 'ns-dev-default', 'app-dev-default', 'dev-javascript-script-job', 'api', NULL, NULL, 'ignore', 1, 0, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 'script-dev-javascript-example'),
+  ('job-dev-script-typescript-example', 'ns-dev-default', 'app-dev-default', 'dev-typescript-script-job', 'api', NULL, NULL, 'ignore', 1, 0, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 'script-dev-typescript-example'),
+  ('job-dev-script-powershell-example', 'ns-dev-default', 'app-dev-default', 'dev-powershell-script-job', 'api', NULL, NULL, 'ignore', 1, 0, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 'script-dev-powershell-example'),
+  ('job-dev-script-rhai-example', 'ns-dev-default', 'app-dev-default', 'dev-rhai-script-job', 'api', NULL, NULL, 'ignore', 1, 0, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 'script-dev-rhai-example'),
+  ('job-dev-script-rhai-object-example', 'ns-dev-default', 'app-dev-default', 'dev-rhai-object-script-job', 'api', NULL, NULL, 'ignore', 1, 0, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 'script-dev-rhai-object-example')
 ON CONFLICT(id) DO UPDATE SET
   namespace_id = excluded.namespace_id,
   app_id = excluded.app_id,
@@ -242,7 +251,9 @@ ON CONFLICT(id) DO UPDATE SET
   schedule_type = excluded.schedule_type,
   schedule_expr = excluded.schedule_expr,
   processor_name = excluded.processor_name,
+  misfire_policy = excluded.misfire_policy,
   enabled = excluded.enabled,
+  canary_percent = excluded.canary_percent,
   script_id = excluded.script_id,
   updated_at = excluded.updated_at;
 

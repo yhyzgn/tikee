@@ -10,6 +10,7 @@ import { ROUTE_META } from '../routes';
 import { useRouteActive } from '../hooks/useRouteActivation';
 import { useUrlQueryState } from '../hooks/useUrlQueryState';
 import { TABLE_PAGE_SIZE_OPTIONS, usePersistentTablePageSize } from '../utils/pagination';
+import { durationExpr, parseFixedRate } from './jobs/jobSchedule';
 
 type JobFormValues = Omit<CreateJobRequest & UpdateJobRequest, 'scheduleStartAt' | 'scheduleEndAt'> & {
   executorKind?: 'sdk' | 'script' | 'plugin';
@@ -143,19 +144,6 @@ export function JobsPage() {
   const scriptOptions = scripts
     .filter((script) => script.status === 'approved')
     .map((script) => ({ value: script.id, label: `${script.name} · ${script.language} · ${script.id}` }));
-  const durationExpr = (value?: number | null, unit?: string | null) => value ? `${value}${unit || 's'}` : null;
-  const parseFixedRate = (expr?: string | null) => {
-    const [interval, ...options] = String(expr ?? '').trim().split(';').map((item) => item.trim()).filter(Boolean);
-    const match = interval.match(/^(\d+(?:\.\d+)?)(ns|us|ms|s|m|h|d|w|month|year)$/);
-    const jitterOption = options.find((item) => item.startsWith('jitter='))?.slice('jitter='.length) ?? '';
-    const jitterMatch = jitterOption.match(/^(\d+(?:\.\d+)?)(ns|us|ms|s|m|h|d|w|month|year)$/);
-    return {
-      fixedRateValue: match ? Number(match[1]) : undefined,
-      fixedRateUnit: match?.[2] ?? 's',
-      fixedRateJitterValue: jitterMatch ? Number(jitterMatch[1]) : undefined,
-      fixedRateJitterUnit: jitterMatch?.[2] ?? 's',
-    };
-  };
   const normalizeSchedule = <T extends { scheduleType?: string; scheduleExpr?: string | null; fixedRateValue?: number; fixedRateUnit?: string; fixedRateJitterValue?: number; fixedRateJitterUnit?: string; scheduleCalendarRef?: string | null }>(values: T) => {
     if (values.scheduleType === 'api') return { ...values, scheduleExpr: null };
     if (values.scheduleType === 'fixed_rate') {
