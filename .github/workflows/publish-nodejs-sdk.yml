@@ -98,7 +98,11 @@ jobs:
             exit 0
           fi
           npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
-          npm publish --access public
+          NPM_DIST_TAG="latest"
+          case "${{ steps.version.outputs.tag }}" in
+            v0.*|*-*) NPM_DIST_TAG="next" ;;
+          esac
+          npm publish --access public --tag "$NPM_DIST_TAG"
       - name: Upload Node.js SDK package to GitHub Release
         uses: softprops/action-gh-release@v3
         with:

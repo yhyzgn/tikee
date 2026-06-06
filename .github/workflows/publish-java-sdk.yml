@@ -107,8 +107,20 @@ jobs:
           print(f"MAVEN_SIGNING_KEY_ID configured: {'yes' if key_id else 'no'} length={len(key_id)}")
           print(f"Maven signing key armor bytes: {len(key.encode('utf-8'))}")
           PY
-          gpg --batch --show-keys --with-colons /tmp/tikeo-maven-signing-key.asc \
+          set +e
+          GPG_METADATA=$(gpg --batch --show-keys --with-colons /tmp/tikeo-maven-signing-key.asc 2>/tmp/tikeo-gpg-warnings.log)
+          GPG_STATUS=$?
+          set -e
+          printf '%s\n' "$GPG_METADATA" \
             | awk -F: '/^(sec|fpr|uid):/ { if ($1 == "sec") print "gpg secret key algorithm=" $4 " keyid=" $5; else if ($1 == "fpr") print "gpg fingerprint=" $10; else if ($1 == "uid") print "gpg uid present" }'
+          if ! printf '%s\n' "$GPG_METADATA" | grep -q '^sec:'; then
+            echo "No secret key metadata found in MAVEN_SIGNING_KEY; gpg status=$GPG_STATUS" >&2
+            sed 's/.*/gpg warning redacted/' /tmp/tikeo-gpg-warnings.log >&2 || true
+            exit 1
+          fi
+          if [ "$GPG_STATUS" -ne 0 ]; then
+            echo "gpg reported non-fatal armor warnings while metadata was still readable; continuing to Gradle signing validation."
+          fi
       - name: Publish Java SDK to Maven Central
         working-directory: sdks/java
         env:
