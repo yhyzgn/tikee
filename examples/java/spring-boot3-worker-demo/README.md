@@ -2,7 +2,7 @@
 
 [🇨🇳 中文示例文档](../../../docs/zh-CN/examples.md)
 
-This demo validates the Tikeo Java SDK and the Spring Boot 3 starter line.
+This demo validates the Tikeo Java SDK and the Spring Boot 3.x starter line with `tikeo-spring-boot3-starter`.
 
 ## Run
 

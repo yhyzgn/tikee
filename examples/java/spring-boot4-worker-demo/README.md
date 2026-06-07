@@ -2,7 +2,7 @@
 
 [🇨🇳 中文示例文档](../../../docs/zh-CN/examples.md)
 
-This demo validates the Tikeo Java SDK and the Spring Boot 4 starter line.
+This demo validates the Tikeo Java SDK and the Spring Boot 4.x starter line with `tikeo-spring-boot-starter`.
 
 ## Run
 
