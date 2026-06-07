@@ -68,12 +68,13 @@ Tikeo is designed to be the default answer when someone asks:
 
 | Signal | Why it matters |
 | --- | --- |
-| **5 production SDK tracks** | **Java · Rust · Go · Python · Node.js** workers follow one contract instead of one Java-first executor model. |
+| **5 production SDK tracks** | **Java · Rust · Go · Python · Node.js** workers follow one contract, and the same worker cluster can mix languages instead of becoming a Java-only executor model. |
 | **Outbound Worker Tunnel** | Workers connect out; production services do **not** need inbound task-execution ports. |
 | **Structured capability routing** | Dispatch matches typed **SDK processors**, **plugin processors**, and **script runners**. No magic string parsing. |
 | **Sandbox-first script jobs** | `auto` selects **SRT** for native scripts and **Deno** for JS/TS, with **WASM/V8/container** paths available explicitly. |
 | **Workflow + topology UX** | Visual workflow canvas, dependency topology, impact analysis, replay data, and per-worker broadcast results. |
 | **Operations-grade evidence** | **Retries**, **misfire policy**, **task logs**, **audit logs**, **OpenTelemetry**, metrics, and file logs answer “what happened?” |
+| **Multi-DB deployment freedom** | Start with **SQLite** locally, then run production with **PostgreSQL** or **MySQL** using maintained Compose profiles and migration compatibility. |
 | **Cloud-native release surface** | Docker, Compose, Helm, Kubernetes CRD/operator, Terraform provider, GitOps diff, and cross-platform release assets. |
 
 <p align="center">
@@ -149,20 +150,43 @@ studied as a demo.
 
 ## Tikeo vs. XXL-Job vs. PowerJob
 
-This is not a “feature-count flex.” It is the difference between a job scheduler and an orchestration
-platform.
+This is not a “feature-count flex.” It is the difference between a classic Java job scheduler and a
+cloud-native orchestration control plane. The original Tikeo design reviewed XXL-Job and PowerJob at
+architecture level and intentionally replaces their hardest platform limits: inbound executor ports,
+DB-lock leadership, Java-first runtime assumptions, weak script isolation, and status-only operations.
+
+### Executive comparison radar
+
+| Advanced capability | Tikeo advantage | XXL-Job / PowerJob tradeoff |
+| --- | --- | --- |
+| ☁️ **Cloud-native public service model** | **Server and workers can live in different containers, namespaces, clusters, VPCs, or clouds.** Workers dial out over gRPC/HTTP2 tunnel; business pods do not need inbound execution ports. | XXL-Job admin calls executors; PowerJob server calls worker addresses. This is awkward behind NAT, mesh gateways, private pods, and cross-cluster boundaries. |
+| 🐳 **Deployment surface** | **Docker, Compose, Helm, K8s CRD/operator, Terraform provider, GitOps diff, systemd, bare-metal config, and cross-platform release assets** are maintained as first-class surfaces. | Deployable, but not designed as an IaC/GitOps-first platform product. |
+| 🗳️ **Cluster coordination** | **Raft/fencing based server ownership** plus structured worker-domain master election avoids global DB scheduling locks and makes ownership observable. | XXL-Job relies on DB lock patterns; PowerJob mixes DB lock/currentServer/PING-style election instead of durable consensus. |
+| 🔌 **Worker networking** | **Outbound Worker Tunnel** carries registration, dispatch, heartbeats, task logs, and results over one controlled channel. No worker Service/port is required by default. | Executor/worker side must be reachable, configured, and protected as an inbound service. |
+| ⚡ **Performance posture** | **Rust native control plane + gRPC/protobuf + Tokio + compact containers** target low startup latency, stable memory, no JVM warm-up, and efficient long-running services. | JVM-based platforms are mature but carry JVM memory floor, warm-up behavior, larger images, and heavier dependency trees. |
+| 🧠 **Unified orchestration model** | Cron, fixed-rate, API triggers, workflows, broadcast, scripts, plugins, retry/misfire, logs, and audit share one instance/evidence model. | Features are often split across scheduler paths, executor callbacks, local worker state, or plugin conventions. |
+| 🛡️ **Script and plugin governance** | Script type is separate from sandbox backend. `auto` prefers lightweight SRT/Deno/WASM paths, with Docker/Podman/container used explicitly when desired. Immutable versions, digest checks, approvals, grants, and runtime logs are first-class. | Script execution exists, but typically behaves like host-side code execution or processor extension rather than a governed sandbox product. |
+| 🧩 **Cross-language worker clusters** | Java, Rust, Go, Python, and Node.js workers follow the same tunnel, structured capability, retry, logging, sandbox, and management API contracts. **One worker cluster can mix languages** while dispatch still uses typed capabilities instead of language silos. | Primarily Java-first adoption model; mixed-language fleets usually become custom integration work. |
+| 🗄️ **Multi-DB compatibility** | Development can start on SQLite while production can run PostgreSQL or MySQL with tested migration/repository compatibility and Compose profiles. | Typically tied more tightly to one primary relational backend and deployment assumption. |
+| 🔍 **Evidence-first operations** | Terminal-style instance logs, per-worker broadcast results, retry attempts, audit trails, workflow replay bundles, metrics, file logs, and OpenTelemetry traces are designed for incident review. | Traditional scheduler dashboards often answer “status” faster than “why exactly did this happen?” |
+
+### Detailed product matrix
 
 | Evaluation axis | Tikeo | XXL-Job | PowerJob |
 | --- | --- | --- | --- |
 | **Platform role** | ✅ **Full orchestration platform**: jobs, workflows, workers, scripts, plugins, RBAC, observability, IaC. | Mature Java job scheduler. | Mature Java distributed job platform. |
-| **Worker connection model** | ✅ **Outbound Worker Tunnel** with lease/fencing and structured registration. | Executor registration/callback style. | Worker server model. |
-| **Routing contract** | ✅ **Typed SDK/plugin/script capabilities**; no convention parsing. | Name/string oriented. | Name/tag oriented. |
-| **Language ecosystem** | ✅ **Java · Rust · Go · Python · Node.js** SDK parity. | Primarily Java ecosystem. | Primarily Java ecosystem. |
+| **Worker connection model** | ✅ **Outbound gRPC/HTTP2 Worker Tunnel** with lease, generation, fencing, structured registration, task logs, and results. | Admin/executor callback model; executor reachability matters. | Worker server/address model; worker reachability matters. |
+| **Inbound worker ports** | ✅ **Not required by default** for business workers; only the Tikeo server exposes management and tunnel entrypoints. | Usually required for executors. | Usually required for workers. |
+| **Cloud-native deployment** | ✅ **Docker, Compose, Helm, K8s CRD/operator, Terraform provider, GitOps diff**, plus systemd/bare-metal templates. | Deployable, but not GitOps/IaC-first. | Deployable, but not GitOps/IaC-first. |
+| **Cluster ownership** | ✅ **Raft + fencing token** server scheduling ownership; structured worker-cluster master election for ordered dispatch domains. | MySQL lock style coordination. | DB lock + server election mechanisms, not durable consensus-first design. |
+| **Resource profile** | ✅ **Native Rust control plane** designed for compact images, fast startup, predictable memory, and no JVM warm-up. | Java/Spring runtime footprint. | Java/Spring/Akka/Vert.x style footprint and multi-component runtime. |
+| **Routing contract** | ✅ **Typed SDK/plugin/script capabilities**; no magic string parsing. | Name/string oriented. | Name/tag oriented. |
+| **Language ecosystem** | ✅ **Java · Rust · Go · Python · Node.js** SDK parity; the same logical worker cluster can include workers written in different languages. | Primarily Java ecosystem. | Primarily Java ecosystem. |
+| **Database engines** | ✅ **SQLite for local/dev, PostgreSQL and MySQL for production**, with migration and repository compatibility smoke coverage. | Primarily MySQL-oriented deployment. | Primarily MySQL/H2-oriented deployment. |
 | **Script execution** | ✅ **Governed versions + digest checks + SRT/Deno/WASM/V8/container** strategy. | Script execution exists but is not a full sandbox governance product. | Processor-focused; sandbox governance is not the center. |
 | **Workflow UX** | ✅ **Workflow canvas + topology + impact analysis + replay-ready execution data.** | Basic scheduling-centric views. | Workflow support, less focused on typed sandbox + SDK parity. |
-| **Security model** | ✅ **Owner bootstrap, RBAC matrix, opaque sessions, API keys, tenant scopes, audit trails.** | Admin/user model. | Admin/user model. |
-| **Observability** | ✅ **OpenTelemetry, metrics, task logs, file logs, audit logs, worker grouping.** | Traditional operations/logs. | Traditional operations/logs. |
-| **Cloud-native assets** | ✅ **Docker, Compose, Helm, K8s CRD/operator, Terraform provider, GitOps diff.** | Deployable, but not GitOps/IaC-first. | Deployable, but not GitOps/IaC-first. |
+| **Security model** | ✅ **Owner bootstrap, RBAC matrix, opaque sessions, API keys, tenant scopes, audit trails, TLS/mTLS readiness.** | Admin/user model. | Admin/user model. |
+| **Observability** | ✅ **OpenTelemetry, metrics, task logs, file logs, audit logs, worker grouping, replay bundles.** | Traditional operations/logs. | Traditional operations/logs. |
 | **Best fit** | Teams building an internal orchestration platform, not just a cron replacement. | Java teams wanting a familiar scheduler. | Java teams wanting distributed job execution. |
 
 **Short version:** choose Tikeo when you want a modern orchestration control plane; choose legacy
@@ -172,12 +196,16 @@ schedulers only when you intentionally want a narrower Java-first scheduler.
 
 If your scheduler shortlist includes these requirements, Tikeo should move to the top:
 
-- [x] **Multi-language workers** without losing one platform contract.
-- [x] **Workflow + topology visualization** instead of job-list-only operations.
-- [x] **Script sandbox governance** with explicit backend selection and default lightweight auto mode.
-- [x] **RBAC + API-Key + audit** for real admin operations.
-- [x] **OpenTelemetry + metrics + durable logs** for production troubleshooting.
-- [x] **Helm + Terraform + K8s CRD/operator** for platform engineering teams.
+- [x] **Workers cannot expose inbound ports** because they run inside K8s namespaces, private VPCs, NAT, service mesh, or customer networks.
+- [x] **Docker/Compose/K8s/Helm/Terraform/GitOps** must be part of the product, not examples bolted on later.
+- [x] **Server scheduling ownership should not depend on a global DB lock**; you want Raft/fencing-style ownership evidence.
+- [x] **Worker service clusters need deterministic master election** for ordered dispatch without adding another distributed lock.
+- [x] **Multi-language workers** must share one platform contract across Java, Rust, Go, Python, and Node.js — even inside the same worker fleet.
+- [x] **Multiple database engines** are required: SQLite for fast local bootstrap, PostgreSQL/MySQL for production and team environments.
+- [x] **Script sandbox governance** must support lightweight defaults and explicit runtime policy instead of “just run shell on the host.”
+- [x] **Performance and resource footprint matter**: native server, compact images, no JVM warm-up, stable memory behavior.
+- [x] **Workflow + topology visualization** should show dependencies, impact, replay data, and per-worker broadcast results.
+- [x] **RBAC + API-Key + audit + OTel + durable logs** are required for real platform operations.
 
 ## Architecture
 
