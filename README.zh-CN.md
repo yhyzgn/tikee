@@ -23,7 +23,13 @@
 </p>
 
 <p align="center">
-  <img alt="Java SDK" src="https://img.shields.io/badge/Java%20SDK-net.tikeo%3Atikeo%400.1.0--SNAPSHOT-b07219?style=flat-square&logo=openjdk" />
+  <img alt="Java core SDK" src="https://img.shields.io/badge/Java%20core-net.tikeo%3Atikeo%400.1.0--SNAPSHOT-b07219?style=flat-square&logo=openjdk" />
+  <img alt="Java Spring 7 SDK" src="https://img.shields.io/badge/Java%20Spring%207-net.tikeo%3Atikeo--spring%400.1.0--SNAPSHOT-b07219?style=flat-square&logo=spring" />
+  <img alt="Java Spring 5 SDK" src="https://img.shields.io/badge/Java%20Spring%205-net.tikeo%3Atikeo--spring5%400.1.0--SNAPSHOT-b07219?style=flat-square&logo=spring" />
+  <img alt="Java Spring 6 SDK" src="https://img.shields.io/badge/Java%20Spring%206-net.tikeo%3Atikeo--spring6%400.1.0--SNAPSHOT-b07219?style=flat-square&logo=spring" />
+  <img alt="Java Spring Boot 4 starter" src="https://img.shields.io/badge/Boot%204%20starter-net.tikeo%3Atikeo--spring--boot--starter%400.1.0--SNAPSHOT-6db33f?style=flat-square&logo=springboot" />
+  <img alt="Java Spring Boot 3 starter" src="https://img.shields.io/badge/Boot%203%20starter-net.tikeo%3Atikeo--spring--boot3--starter%400.1.0--SNAPSHOT-6db33f?style=flat-square&logo=springboot" />
+  <img alt="Java Spring Boot 2 starter" src="https://img.shields.io/badge/Boot%202%20starter-net.tikeo%3Atikeo--spring--boot2--starter%400.1.0--SNAPSHOT-6db33f?style=flat-square&logo=springboot" />
   <img alt="Rust SDK" src="https://img.shields.io/badge/Rust%20SDK-tikeo%400.1.0-ce422b?style=flat-square&logo=rust" />
   <img alt="Go SDK" src="https://img.shields.io/badge/Go%20SDK-github.com%2Fyhyzgn%2Ftikeo%2Fsdks%2Fgo%2Ftikeo-00add8?style=flat-square&logo=go" />
   <img alt="Python SDK" src="https://img.shields.io/badge/Python%20SDK-tikeo%400.1.0-3776ab?style=flat-square&logo=python" />
