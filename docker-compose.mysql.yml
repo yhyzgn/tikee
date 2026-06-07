@@ -1,10 +1,46 @@
 services:
   tikeo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${TIKEO_IMAGE:-yhyzgn/tikeo-server:local}
     command: ["serve", "--config", "/app/config/mysql.toml"]
     depends_on:
       mysql:
         condition: service_healthy
-    volumes: []
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      MIMALLOC_PURGE_DELAY: ${MIMALLOC_PURGE_DELAY:-0}
+      MIMALLOC_PURGE_DECOMMITS: ${MIMALLOC_PURGE_DECOMMITS:-1}
+      MIMALLOC_ABANDONED_PAGE_PURGE: ${MIMALLOC_ABANDONED_PAGE_PURGE:-1}
+    ports:
+      - "${TIKEO_HTTP_PORT:-9090}:9090"
+      - "${TIKEO_WORKER_TUNNEL_PORT:-9998}:9998"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9090/readyz >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    image: ${TIKEO_WEB_IMAGE:-yhyzgn/tikeo-web:local}
+    depends_on:
+      tikeo:
+        condition: service_healthy
+    ports:
+      - "${TIKEO_WEB_PORT:-8080}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+    restart: unless-stopped
 
   mysql:
     image: mysql:8.4
@@ -26,6 +62,22 @@ services:
       timeout: 5s
       retries: 60
       start_period: 20s
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.0.1
+    profiles: ["observability"]
+    depends_on:
+      tikeo:
+        condition: service_healthy
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--web.enable-lifecycle"
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/tikeo-recording-rules.yml:/etc/prometheus/tikeo-recording-rules.yml:ro
+    ports:
+      - "${TIKEO_PROMETHEUS_PORT:-9091}:9090"
     restart: unless-stopped
 
 volumes:

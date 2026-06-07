@@ -464,7 +464,6 @@ open http://127.0.0.1:${TIKEO_WEB_PORT:-8080}
 ```bash
 cp deploy/compose/tikeo.env.example .env
 DOCKER_BUILDKIT=1 docker compose --env-file .env \
-  -f docker-compose.yml \
   -f docker-compose.postgres.yml \
   up -d --build
 curl -fsS http://127.0.0.1:${TIKEO_HTTP_PORT:-9090}/readyz
@@ -475,7 +474,6 @@ curl -fsS http://127.0.0.1:${TIKEO_HTTP_PORT:-9090}/readyz
 ```bash
 cp deploy/compose/tikeo.env.example .env
 DOCKER_BUILDKIT=1 docker compose --env-file .env \
-  -f docker-compose.yml \
   -f docker-compose.mysql.yml \
   up -d --build
 curl -fsS http://127.0.0.1:${TIKEO_HTTP_PORT:-9090}/readyz
@@ -597,7 +595,7 @@ helm upgrade --install tikeo ./deploy/helm/tikeo \
 | 路径 | 适用时机 |
 | --- | --- |
 | `docker-compose.yml` | 想用 SQLite 最快完成本地产品评估。 |
-| `docker-compose.postgres.yml` / `docker-compose.mysql.yml` | 想验证真实数据库可移植性。 |
+| `docker-compose.postgres.yml` / `docker-compose.mysql.yml` | 想直接启动 PostgreSQL 或 MySQL 的完整 server + web + database 栈。 |
 | `deploy/systemd/` | 在 VM 或裸机主机上运行 Tikeo。 |
 | `deploy/helm/tikeo/` | 将控制面部署到 Kubernetes。 |
 | `deploy/k8s/operator/` | 希望使用 CRD-based GitOps drift review。 |

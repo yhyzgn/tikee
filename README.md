@@ -492,7 +492,6 @@ open http://127.0.0.1:${TIKEO_WEB_PORT:-8080}
 ```bash
 cp deploy/compose/tikeo.env.example .env
 DOCKER_BUILDKIT=1 docker compose --env-file .env \
-  -f docker-compose.yml \
   -f docker-compose.postgres.yml \
   up -d --build
 curl -fsS http://127.0.0.1:${TIKEO_HTTP_PORT:-9090}/readyz
@@ -503,7 +502,6 @@ curl -fsS http://127.0.0.1:${TIKEO_HTTP_PORT:-9090}/readyz
 ```bash
 cp deploy/compose/tikeo.env.example .env
 DOCKER_BUILDKIT=1 docker compose --env-file .env \
-  -f docker-compose.yml \
   -f docker-compose.mysql.yml \
   up -d --build
 curl -fsS http://127.0.0.1:${TIKEO_HTTP_PORT:-9090}/readyz
@@ -627,7 +625,7 @@ helm upgrade --install tikeo ./deploy/helm/tikeo \
 | Path | Use it when |
 | --- | --- |
 | `docker-compose.yml` | You want the fastest local product evaluation with SQLite. |
-| `docker-compose.postgres.yml` / `docker-compose.mysql.yml` | You want to validate real database portability. |
+| `docker-compose.postgres.yml` / `docker-compose.mysql.yml` | You want a complete server + web + database stack for PostgreSQL or MySQL. |
 | `deploy/systemd/` | You run Tikeo on VMs or bare-metal hosts. |
 | `deploy/helm/tikeo/` | You deploy the control plane into Kubernetes. |
 | `deploy/k8s/operator/` | You want CRD-based GitOps drift review. |
