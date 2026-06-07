@@ -37,7 +37,7 @@ class IacArtifactsTest(unittest.TestCase):
 
     def test_roadmap_and_coverage_mark_iac_closed(self):
         design = read('design/tikeo-architecture-design.md')
-        coverage = read('docs/reports/feature-coverage-competitive-checklist.md')
+        coverage = read('design/reports/feature-coverage-competitive-checklist.md')
         self.assertIn('Terraform Provider 与 K8s CRD controller/operator 已补齐', design)
         self.assertIn('| GitOps/IaC | ✅ 已覆盖 |', coverage)
         self.assertNotIn('Terraform Provider/K8s CRD 控制器仍为 P2 缺口', coverage)

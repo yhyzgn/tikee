@@ -26,7 +26,7 @@
 | SDK3 | Rust SDK | 保持可编译，注册信息同步带默认 election 声明 | 本轮已补齐 | ✅ 已完成 | `sdks/rust/tikeo/src/config.rs` | `cargo check` 通过；后续再补完整 ergonomic API |
 | UI1 | Web Worker 页面 | Worker 列表展示 Master/Follower 与 election domain | 本轮已补齐 | ✅ 已完成 | `web/src/pages/workers/WorkerTable.tsx` | 多 worker 同域时 UI 能区分 master/follower |
 | DOC1 | 文档 | 总设计文档同步 server/worker 双 master election 方案 | 本轮已补齐 | ✅ 已完成 | `design/tikeo-architecture-design.md` | 后续路线图不应再把 worker master 选举视为未设计 |
-| DOC2 | 覆盖报告 | 覆盖报告同步 WorkerClusterElection 与 master-first dispatch 状态 | 本轮已补齐 | ✅ 已完成 | `docs/reports/feature-coverage-competitive-checklist.md` | 功能覆盖复盘能看到该能力已闭环 |
+| DOC2 | 覆盖报告 | 覆盖报告同步 WorkerClusterElection 与 master-first dispatch 状态 | 本轮已补齐 | ✅ 已完成 | `design/reports/feature-coverage-competitive-checklist.md` | 功能覆盖复盘能看到该能力已闭环 |
 
 ## 2. 生产级验收清单
 

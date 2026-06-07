@@ -25,7 +25,7 @@ Out of scope for this plan:
 - Helm/K8s production deployment.
 - External OIDC, TLS/mTLS, and external observability stacks.
 
-Database compatibility is covered by the dedicated storage matrix in `docs/operations/database-compatibility-test-plan.md`; Java demo integration may keep using SQLite unless the test objective is full deployment matrix validation.
+Database compatibility is covered by the dedicated storage matrix in `design/operations/database-compatibility-test-plan.md`; Java demo integration may keep using SQLite unless the test objective is full deployment matrix validation.
 
 ## Test matrix
 
