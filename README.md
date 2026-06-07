@@ -210,7 +210,7 @@ If your scheduler shortlist includes these requirements, Tikeo should move to th
 ## Architecture
 
 <p align="center">
-  <img src="docs/assets/tikeo-architecture.svg" alt="Tikeo architecture diagram" width="100%" />
+  <img src="docs/assets/tikeo-architecture.en.svg" alt="Tikeo architecture diagram" width="100%" />
 </p>
 
 The server owns scheduling, persistence, governance, RBAC, workflows, and dispatch decisions. Workers

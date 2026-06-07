@@ -1,6 +1,6 @@
 <svg width="1560" height="1040" viewBox="0 0 1560 1040" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
-  <title id="title">Tikeo complete cloud-native orchestration architecture</title>
-  <desc id="desc">A complete logical architecture diagram for Tikeo showing user and automation entrypoints, the Rust server cluster with Raft and fencing, scheduling and governance modules, storage engines, observability, outbound gRPC worker tunnel, cross-language worker fleets, sandbox runtimes, and deployment surfaces.</desc>
+  <title id="title">Tikeo 完整云原生编排架构</title>
+  <desc id="desc">Tikeo 完整逻辑架构图，展示用户与自动化入口、带 Raft 和 fencing 的 Rust Server 集群、调度与治理模块、存储引擎、可观测性、出站 gRPC Worker Tunnel、跨语言 Worker 集群、沙箱运行时和部署入口。</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1560" y2="1040" gradientUnits="userSpaceOnUse">
       <stop stop-color="#eef6ff"/>
@@ -60,25 +60,25 @@
   <rect width="1560" height="1040" rx="36" fill="url(#bg)"/>
   <rect x="46" y="42" width="1468" height="956" rx="32" fill="#ffffff" stroke="#93c5fd" stroke-width="2"/>
 
-  <text x="82" y="92" class="title">Tikeo complete architecture</text>
-  <text x="82" y="122" class="subtitle">Cloud-native task orchestration with Raft ownership, outbound Worker Tunnel, typed capabilities, governed sandboxes, multi-DB storage, and evidence-first operations.</text>
+  <text x="82" y="92" class="title">Tikeo 完整架构</text>
+  <text x="82" y="122" class="subtitle">云原生任务编排：Raft 所有权、出站 Worker Tunnel、类型化能力、受治理沙箱、多 DB 存储与证据优先运维。</text>
 
   <!-- Entry points -->
   <g>
     <rect x="82" y="156" width="340" height="178" rx="24" fill="#eaf3ff" stroke="#2563eb" stroke-width="2"/>
-    <text x="112" y="194" class="section">Entrypoints</text>
+    <text x="112" y="194" class="section">入口层</text>
     <rect x="112" y="218" width="276" height="30" rx="15" fill="#eff6ff" stroke="#bfdbfe"/>
-    <text x="130" y="238" class="small">Web Console · workflow canvas · topology</text>
+    <text x="130" y="238" class="small">Web 控制台 · 工作流画布 · 拓扑</text>
     <rect x="112" y="258" width="276" height="30" rx="15" fill="#eff6ff" stroke="#bfdbfe"/>
     <text x="130" y="278" class="small">REST / OpenAPI · API-Key · RBAC</text>
     <rect x="112" y="298" width="276" height="30" rx="15" fill="#eff6ff" stroke="#bfdbfe"/>
-    <text x="130" y="318" class="small">CLI / SDK management clients</text>
+    <text x="130" y="318" class="small">CLI / SDK 管理客户端</text>
   </g>
 
   <g>
     <rect x="82" y="372" width="340" height="198" rx="24" fill="#f2edff" stroke="#7c3aed" stroke-width="2"/>
-    <text x="112" y="410" class="section">Deployment &amp; IaC</text>
-    <text x="112" y="438" class="small">Production surfaces are maintained together.</text>
+    <text x="112" y="410" class="section">部署与 IaC</text>
+    <text x="112" y="438" class="small">生产部署入口统一维护。</text>
     <g>
       <rect x="112" y="460" width="84" height="28" rx="14" fill="#dbeafe"/><text x="132" y="479" class="pillText">Docker</text>
       <rect x="206" y="460" width="92" height="28" rx="14" fill="#dbeafe"/><text x="224" y="479" class="pillText">Compose</text>
@@ -93,57 +93,57 @@
   <!-- Server cluster -->
   <g>
     <rect x="470" y="150" width="660" height="500" rx="32" fill="url(#serverGrad)"/>
-    <text x="506" y="196" class="section white">Tikeo Rust Server Cluster</text>
-    <text x="506" y="222" class="small white2">Single native binary per node · HTTP management API · Worker Tunnel listener · scheduler control plane</text>
+    <text x="506" y="196" class="section white">Tikeo Rust Server 集群</text>
+    <text x="506" y="222" class="small white2">每节点单原生二进制 · HTTP 管理 API · Worker Tunnel 监听器 · 调度控制面</text>
 
     <g>
       <rect x="506" y="248" width="164" height="64" rx="18" fill="#3453a6" stroke="#93c5fd"/>
-      <text x="528" y="273" class="label white">Node A</text>
-      <text x="528" y="295" class="tiny white2">leader candidate</text>
+      <text x="528" y="273" class="label white">节点 A</text>
+      <text x="528" y="295" class="tiny white2">leader 候选</text>
       <rect x="718" y="248" width="164" height="64" rx="18" fill="#3453a6" stroke="#93c5fd"/>
-      <text x="740" y="273" class="label white">Node B</text>
+      <text x="740" y="273" class="label white">节点 B</text>
       <text x="740" y="295" class="tiny white2">follower</text>
       <rect x="930" y="248" width="164" height="64" rx="18" fill="#3453a6" stroke="#93c5fd"/>
-      <text x="952" y="273" class="label white">Node C</text>
+      <text x="952" y="273" class="label white">节点 C</text>
       <text x="952" y="295" class="tiny white2">follower</text>
       <path d="M670 280C690 280 700 280 718 280" class="solidWhite"/>
       <path d="M882 280C902 280 910 280 930 280" class="solidWhite"/>
     </g>
 
     <rect x="506" y="338" width="528" height="58" rx="18" fill="#1e3a8a" stroke="#93c5fd"/>
-    <text x="530" y="362" class="label white">Raft scheduling ownership · fencing token</text>
-    <text x="530" y="382" class="tiny white2">No global DB scheduling lock</text>
+    <text x="530" y="362" class="label white">Raft 调度所有权 · fencing token</text>
+    <text x="530" y="382" class="tiny white2">无全局 DB 调度锁</text>
 
     <g>
       <rect x="506" y="414" width="172" height="82" rx="18" fill="#405bd0" stroke="#a5b4fc"/>
-      <text x="528" y="440" class="label white">Scheduler</text>
+      <text x="528" y="440" class="label white">调度器</text>
       <text x="528" y="461" class="tiny white2">cron · fixed · API</text>
-      <text x="528" y="480" class="tiny white2">retry · misfire · queues</text>
+      <text x="528" y="480" class="tiny white2">重试 · misfire · 队列</text>
 
       <rect x="698" y="414" width="172" height="82" rx="18" fill="#405bd0" stroke="#a5b4fc"/>
-      <text x="720" y="440" class="label white">Workflow Engine</text>
-      <text x="720" y="461" class="tiny white2">DAG · topology</text>
-      <text x="720" y="480" class="tiny white2">impact · replay bundle</text>
+      <text x="720" y="440" class="label white">工作流引擎</text>
+      <text x="720" y="461" class="tiny white2">DAG · 拓扑</text>
+      <text x="720" y="480" class="tiny white2">影响分析 · 回放包</text>
 
       <rect x="890" y="414" width="184" height="82" rx="18" fill="#405bd0" stroke="#a5b4fc"/>
-      <text x="912" y="440" class="label white">Governance</text>
+      <text x="912" y="440" class="label white">治理</text>
       <text x="912" y="461" class="tiny white2">owner · RBAC · API keys</text>
-      <text x="912" y="480" class="tiny white2">tenant scope · audit</text>
+      <text x="912" y="480" class="tiny white2">租户范围 · 审计</text>
 
       <rect x="506" y="520" width="172" height="82" rx="18" fill="#405bd0" stroke="#a5b4fc"/>
-      <text x="528" y="546" class="label white">Worker Registry</text>
-      <text x="528" y="567" class="tiny white2">identity · sessions</text>
-      <text x="528" y="586" class="tiny white2">domain master election</text>
+      <text x="528" y="546" class="label white">Worker 注册中心</text>
+      <text x="528" y="567" class="tiny white2">身份 · 会话</text>
+      <text x="528" y="586" class="tiny white2">domain master 选举</text>
 
       <rect x="698" y="520" width="172" height="82" rx="18" fill="#405bd0" stroke="#a5b4fc"/>
-      <text x="720" y="546" class="label white">Script / Plugin</text>
-      <text x="720" y="567" class="tiny white2">versions · digest</text>
-      <text x="720" y="586" class="tiny white2">policy · grants · routing</text>
+      <text x="720" y="546" class="label white">脚本 / 插件</text>
+      <text x="720" y="567" class="tiny white2">版本 · 摘要</text>
+      <text x="720" y="586" class="tiny white2">策略 · 授权 · 路由</text>
 
       <rect x="890" y="520" width="184" height="82" rx="18" fill="#405bd0" stroke="#a5b4fc"/>
-      <text x="912" y="546" class="label white">Log Stream</text>
-      <text x="912" y="567" class="tiny white2">task logs · attempts</text>
-      <text x="912" y="586" class="tiny white2">broadcast grouping</text>
+      <text x="912" y="546" class="label white">日志流</text>
+      <text x="912" y="567" class="tiny white2">任务日志 · attempts</text>
+      <text x="912" y="586" class="tiny white2">广播分组</text>
     </g>
   </g>
 
@@ -153,24 +153,24 @@
   <!-- Right side integrations -->
   <g>
     <rect x="1186" y="156" width="326" height="198" rx="24" fill="#e6fbff" stroke="#0891b2" stroke-width="2"/>
-    <text x="1216" y="194" class="section">Observability</text>
-    <text x="1216" y="222" class="small">Evidence-first operations.</text>
+    <text x="1216" y="194" class="section">可观测性</text>
+    <text x="1216" y="222" class="small">证据优先运维。</text>
     <rect x="1216" y="246" width="246" height="30" rx="15" fill="#ecfeff" stroke="#67e8f9"/>
     <text x="1234" y="266" class="small">OpenTelemetry traces</text>
     <rect x="1216" y="286" width="246" height="30" rx="15" fill="#ecfeff" stroke="#67e8f9"/>
-    <text x="1234" y="306" class="small">metrics · terminal task logs</text>
+    <text x="1234" y="306" class="small">指标 · 终端风格任务日志</text>
     <rect x="1216" y="326" width="246" height="30" rx="15" fill="#ecfeff" stroke="#67e8f9"/>
-    <text x="1234" y="346" class="small">audit · replay · GitOps diff</text>
+    <text x="1234" y="346" class="small">审计 · 回放 · GitOps diff</text>
   </g>
 
   <g>
     <rect x="1186" y="392" width="326" height="178" rx="24" fill="#f3edff" stroke="#7c3aed" stroke-width="2"/>
-    <text x="1216" y="430" class="section">Management APIs</text>
-    <text x="1216" y="458" class="small">Typed CRUD, RBAC, and automation.</text>
+    <text x="1216" y="430" class="section">管理 API</text>
+    <text x="1216" y="458" class="small">类型化 CRUD、RBAC 与自动化。</text>
     <rect x="1216" y="482" width="248" height="30" rx="15" fill="#f5f3ff" stroke="#c4b5fd"/>
-    <text x="1234" y="502" class="small">Jobs · workflows · scripts · plugins</text>
+    <text x="1234" y="502" class="small">任务 · 工作流 · 脚本 · 插件</text>
     <rect x="1216" y="522" width="248" height="30" rx="15" fill="#f5f3ff" stroke="#c4b5fd"/>
-    <text x="1234" y="542" class="small">Users · roles · tenants · secrets</text>
+    <text x="1234" y="542" class="small">用户 · 角色 · 租户 · Secrets</text>
   </g>
 
   <path d="M1130 290C1160 290 1160 255 1186 255" class="solidCyan"/>
@@ -179,13 +179,13 @@
   <!-- Storage -->
   <g>
     <rect x="470" y="690" width="660" height="114" rx="26" fill="#eef2ff" stroke="#64748b" stroke-width="2"/>
-    <text x="506" y="730" class="section">Durable storage</text>
-    <text x="506" y="757" class="small">Jobs · instances · attempts · task logs · audit · script versions · worker sessions · raft records</text>
+    <text x="506" y="730" class="section">持久化存储</text>
+    <text x="506" y="757" class="small">任务 · 实例 · attempts · 任务日志 · 审计 · 脚本版本 · Worker 会话 · Raft 记录</text>
     <g>
       <rect x="506" y="774" width="116" height="28" rx="14" fill="#e2e8f0"/><text x="538" y="793" class="pillText">SQLite</text>
       <rect x="636" y="774" width="142" height="28" rx="14" fill="#dbeafe"/><text x="658" y="793" class="pillText">PostgreSQL</text>
       <rect x="792" y="774" width="104" height="28" rx="14" fill="#cffafe"/><text x="824" y="793" class="pillText">MySQL</text>
-      <rect x="910" y="774" width="158" height="28" rx="14" fill="#ede9fe"/><text x="932" y="793" class="pillText">migration smoke</text>
+      <rect x="910" y="774" width="158" height="28" rx="14" fill="#ede9fe"/><text x="932" y="793" class="pillText">迁移 smoke</text>
     </g>
   </g>
   <path d="M780 650V690" class="solidBlue"/>
@@ -193,16 +193,16 @@
   <!-- Tunnel -->
   <g>
     <rect x="188" y="622" width="1184" height="56" rx="28" fill="url(#tunnelGrad)"/>
-    <text x="258" y="657" class="label white">Outbound gRPC / HTTP2 Worker Tunnel</text>
-    <text x="610" y="657" class="small white2">workers dial out · no business Worker inbound ports · assignment token · task logs · results · heartbeats</text>
+    <text x="258" y="657" class="label white">出站 gRPC / HTTP2 Worker Tunnel</text>
+    <text x="610" y="657" class="small white2">Worker 主动拨出 · 业务 Worker 无需入站端口 · assignment token · 任务日志 · 结果 · 心跳</text>
   </g>
   <path d="M780 622C780 606 780 606 780 602" class="solidWhite"/>
 
   <!-- Worker fleet -->
   <g>
     <rect x="82" y="832" width="1430" height="138" rx="30" fill="url(#workerGrad)" stroke="#0891b2" stroke-width="2"/>
-    <text x="118" y="872" class="section">Cross-language worker fleets</text>
-    <text x="118" y="898" class="small">A single logical worker cluster can mix languages. Dispatch matches namespace/app/cluster/region, domain master, tags, and typed capabilities.</text>
+    <text x="118" y="872" class="section">跨语言 Worker 集群</text>
+    <text x="118" y="898" class="small">同一个逻辑 Worker 集群可以混合多种语言。派发匹配 namespace/app/cluster/region、domain master、tags 与类型化能力。</text>
 
     <g>
       <rect x="118" y="920" width="120" height="42" rx="16" fill="#fff" stroke="#bfdbfe"/>
@@ -218,7 +218,7 @@
       <rect x="800" y="920" width="168" height="42" rx="16" fill="#fff" stroke="#c4b5fd"/>
       <text x="825" y="946" class="mono">SDK processors</text>
       <rect x="982" y="920" width="162" height="42" rx="16" fill="#fff" stroke="#c4b5fd"/>
-      <text x="1010" y="946" class="mono">Plugins</text>
+      <text x="1010" y="946" class="mono">插件</text>
       <rect x="1158" y="920" width="318" height="42" rx="16" fill="#0f172a"/>
       <text x="1190" y="946" class="mono white">SRT · Deno · Wasmtime · WasmEdge · V8</text>
     </g>
@@ -230,6 +230,6 @@
   <!-- Security invariant -->
   <g>
     <rect x="82" y="986" width="1430" height="1" fill="#93c5fd"/>
-    <text x="82" y="1013" class="small">Invariant: scheduling decisions stay centralized; execution stays near business code; Worker connectivity is outbound; ownership is fenced; logs are task-scoped; capabilities are structured.</text>
+    <text x="82" y="1013" class="small">不变量：调度决策集中；执行靠近业务代码；Worker 出站连接；所有权受 fencing 保护；日志按任务归属；能力结构化声明。</text>
   </g>
 </svg>
