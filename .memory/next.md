@@ -2,20 +2,19 @@
 
 ## Current priority direction
 
-当前优先级：源码行数历史债务已清理并有本地审计脚本；本轮提交后先检查远端 CI/Coverage。如果远端继续全绿，下一步建议在“文档站实现”与“源码行数审计接入 CI”之间二选一；若用户继续运营/宣传方向，优先落地 docs 站点骨架。
+当前优先级：源码行数历史债务已清理，本地审计脚本已接入 main CI `workflow-policy`；按用户要求不等待该新提交的远端 Actions，继续推进运营/宣传方向的独立文档站骨架。
 
 ## Immediate next slice
 
-1. 推送本轮 source-size cleanup 后查看最新 GitHub Actions CI/Coverage；若失败，按 job 日志修复，不要回退源码拆分边界。
-2. 将 `python3 scripts/check-source-size.py` 接入 CI workflow / workflow contract（可作为 workflow policy 或 Server/Web 前的快速门禁），避免再次产生 >1500 行源码。
-3. 文档站搭建方案已输出到 `design/docs-site-build-plan.md`；若用户批准实施，下一步创建独立 `website/` Docusaurus 3 站点，先完成导航骨架、英文 P0 页面、中文 i18n 路径和 docs build 验证，不要在未实现前宣称部署完成。
-4. Kubernetes 后续可继续补真实控制器专项文档：Nginx/Envoy/Traefik/Gateway API controller 的实际生产 values、证书模式和 smoke runbook。
-5. 宣传录屏本地证据已完成：最终推荐版为 `.dev/reports/promo-cinematic-showcase-20260608T050247Z-231970/tikeo-cinematic-promo-hq-sentence-subs.mp4`；同目录保留逐句/短语级 `subtitles.en.srt`、`subtitles.zh-CN.srt`、`subtitles.bilingual.srt` 用于平台单独上传 CC 字幕。
-6. 迁移工具（PowerJob/XXL-JOB）仍维持最低优先级 backlog，核心服务体验稳定后再做。
+1. Source-size cleanup commit `2c3efcb` 的远端 CI/Coverage 已绿；`scripts/check-source-size.py` 已接入 main CI `workflow-policy`，但按用户要求本次不等待该新提交的远端 Actions。
+2. 文档站搭建方案已输出到 `design/docs-site-build-plan.md`；下一步创建独立 `website/` Docusaurus 3 站点，先完成导航骨架、英文 P0 页面、中文 i18n 路径和 docs build 验证，不要在未实现前宣称部署完成。
+3. Kubernetes 后续可继续补真实控制器专项文档：Nginx/Envoy/Traefik/Gateway API controller 的实际生产 values、证书模式和 smoke runbook。
+4. 宣传录屏本地证据已完成：最终推荐版为 `.dev/reports/promo-cinematic-showcase-20260608T050247Z-231970/tikeo-cinematic-promo-hq-sentence-subs.mp4`；同目录保留逐句/短语级 `subtitles.en.srt`、`subtitles.zh-CN.srt`、`subtitles.bilingual.srt` 用于平台单独上传 CC 字幕。
+5. 迁移工具（PowerJob/XXL-JOB）仍维持最低优先级 backlog，核心服务体验稳定后再做。
 
 ## Current verified baseline
 
-- Source-size cleanup：`scripts/check-source-size.py` 已覆盖普通 `.rs` / `.ts` / `.tsx` 源码并排除 `.git`、`.dev`、`target`、`node_modules`、`dist`、`coverage` 等生成/依赖目录；当前全仓库审计通过。
+- Source-size cleanup：`scripts/check-source-size.py` 已覆盖普通 `.rs` / `.ts` / `.tsx` 源码并排除 `.git`、`.dev`、`target`、`node_modules`、`dist`、`coverage` 等生成/依赖目录；当前全仓库审计通过，且已接入 main CI `workflow-policy` 快速门禁。
 - 拆分边界：`dispatcher.rs` -> `dispatcher/processors.rs` + 分片测试；`registry.rs` -> `registry/registry_tests.rs`；`repository.rs` -> `repository/tests.rs` + 分片测试；`workflow.rs` -> `workflow/runtime.rs`；`migration/mod.rs` -> `migration/rbac_role_management.rs`；HTTP `part_03.rs` -> `part_03_a.rs`/`part_03_b.rs`；Web workflow/worker API -> `web/src/api/workflow.ts` 并从 `client.ts` re-export。
 - Local verification for cleanup: source-size audit, git diff check, Rust fmt/clippy/test/build, Web lint/typecheck/test/build, and healthz smoke all passed locally before commit.
 - Main CI 基线：run `27129836559` succeeded for source commit `e98f6fd7395f1c104050ce8037db79ab5447aed6`，覆盖 Server/Web/Java/Rust/Go/Python/Node SDK+demo、deploy tooling、cross-language worker smoke 与 Docker build validation。

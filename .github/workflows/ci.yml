@@ -27,6 +27,8 @@ jobs:
           git remote set-url origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
       - name: Reject deprecated GitHub Actions Node runtimes
         run: python3 scripts/verify-github-actions-node-runtime.py --min-node-major 24
+      - name: Enforce source file size budget
+        run: python3 scripts/check-source-size.py
 
   server:
     name: Server

@@ -2333,3 +2333,24 @@ Verification evidence:
 - `bun run --cwd web test` passed with 117 tests.
 - `bun run --cwd web build` passed with the existing large vendor chunk warning.
 - Smoke: `cargo run --bin tikeo -- serve --config /tmp/tikeo-source-size-smoke.toml` plus `curl -fsS http://127.0.0.1:19090/healthz` returned `{"status":"ok","uptime_seconds":0}`.
+
+## 2026-06-08 — Source-size audit CI gate
+
+Agent:
+- Codex
+
+Work:
+- Added `python3 scripts/check-source-size.py` to the main CI `workflow-policy` job so source-size violations fail before Server/Web/SDK runtime jobs start.
+- Added a GitHub workflow contract test proving the CI policy job enforces the source-size gate.
+
+Verification:
+- RED: `python3 .github/tests/workflow_contract_test.py -k test_ci_enforces_source_size_before_runtime_jobs` failed before the workflow step was added.
+- GREEN: the same targeted test passed after adding the workflow step.
+- `python3 scripts/check-source-size.py` passed.
+- `python3 .github/tests/workflow_contract_test.py` passed with 11 tests.
+- YAML parse for all `.github/workflows/*.yml` passed.
+- `python3 scripts/verify-github-actions-node-runtime.py --min-node-major 24` passed with 16 external actions and no runtime below node24.
+- `git diff --check` passed.
+
+Git:
+- Pending commit/push for this CI gate slice. Per user instruction, do not wait for remote Actions before continuing to the next work item.

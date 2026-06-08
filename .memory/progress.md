@@ -1367,3 +1367,14 @@ Verification evidence:
 - `bun run --cwd web test` passed with 117 tests.
 - `bun run --cwd web build` passed with the existing large vendor chunk warning.
 - Smoke: `cargo run --bin tikeo -- serve --config /tmp/tikeo-source-size-smoke.toml` plus `curl -fsS http://127.0.0.1:19090/healthz` returned `{"status":"ok","uptime_seconds":0}`.
+
+### 2026-06-08 — Source-size audit CI gate
+- Main CI `workflow-policy` now runs `python3 scripts/check-source-size.py`, so files over 1500 lines fail before downstream runtime jobs.
+- Workflow contract coverage now asserts the source-size policy gate exists in CI.
+Verification evidence:
+- RED/green contract: `python3 .github/tests/workflow_contract_test.py -k test_ci_enforces_source_size_before_runtime_jobs` failed before implementation and passed after the CI step was added.
+- `python3 scripts/check-source-size.py` passed.
+- `python3 .github/tests/workflow_contract_test.py` passed with 11 tests.
+- YAML parse for all `.github/workflows/*.yml` passed.
+- `python3 scripts/verify-github-actions-node-runtime.py --min-node-major 24` passed with 16 external actions and no runtime below node24.
+- `git diff --check` passed.

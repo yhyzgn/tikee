@@ -107,6 +107,18 @@ class WorkflowContractTest(unittest.TestCase):
             self.assertIn("needs: workflow-policy", job_block)
 
 
+    def test_ci_enforces_source_size_before_runtime_jobs(self):
+        self.assertTrue((ROOT / "scripts/check-source-size.py").exists())
+        self.assertIn("workflow-policy:", CI)
+        policy_job = CI.split("  workflow-policy:", 1)[1].split("\n  server:", 1)[0]
+        self.assertIn("Enforce source file size budget", policy_job)
+        self.assertIn("python3 scripts/check-source-size.py", policy_job)
+        self.assertLess(
+            policy_job.index("Enforce source file size budget"),
+            CI.index("  server:"),
+        )
+
+
     def test_python_and_node_sdk_demo_jobs_are_real_release_gates(self):
         python_job = workflow_job_block(CI, "python-sdk-demo")
         self.assertIn("python -m pip install -e sdks/python/tikeo[test]", python_job)
