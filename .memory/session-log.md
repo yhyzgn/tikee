@@ -2024,3 +2024,25 @@ Verification:
 
 Git:
 - Generated media remains local under ignored `.dev/`; source commit includes only Worker page English-mode copy hardening and memory evidence.
+
+
+## 2026-06-08 — Sentence-level promotional subtitles
+
+Agent:
+- Codex
+
+Work:
+- Refined the final English-site promotional subtitle files from coarse chapter-level captions into sentence/phrase-level CC-style subtitles.
+- Used Edge TTS subtitle timing boundaries per narration segment, then split overly long narration sentences at natural punctuation to prevent full-screen subtitle blocks.
+- Replaced the standalone SRT files in the final report directory: `subtitles.en.srt`, `subtitles.zh-CN.srt`, and `subtitles.bilingual.srt`.
+- Remuxed the final MP4 without re-encoding video/audio so the embedded English and Chinese soft subtitle tracks use the refined sentence-level timing.
+- Final local artifact with refined captions: `.dev/reports/promo-cinematic-showcase-20260608T050247Z-231970/tikeo-cinematic-promo-hq-sentence-subs.mp4`.
+
+Verification:
+- Subtitle readability summary: English 72 cues, Chinese 57 cues, bilingual 72 cues; max English cue length 118 chars, max Chinese cue length 54 chars; max English cue duration 8.112s and max Chinese cue duration 11.225s.
+- `ffprobe` confirmed remuxed MP4 duration `496.520000` seconds, `1920x1080`, H.264 video, English AAC default audio, Chinese AAC secondary audio, English default soft subtitle track, and Chinese secondary soft subtitle track.
+- Extracted embedded English subtitle stream from the remuxed MP4 and confirmed it contains the refined sentence/phrase-level timing rather than 12 long chapter captions.
+- `git diff --check` passed before commit.
+
+Git:
+- Generated media/subtitle artifacts remain local under ignored `.dev/`; source commit records updated memory evidence only.
