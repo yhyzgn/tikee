@@ -21,7 +21,7 @@ class SpringBootStarterCompatibilityMatrixTest {
 
         assertThat(build)
                 .contains("4.0.6")
-                .contains("net.tikeo:tikeo-spring-boot-starter:0.1.0-SNAPSHOT");
+                .contains("net.tikeo:tikeo-spring-boot-starter:0.2.0");
         assertThat(readme)
                 .contains("Spring Boot 4.x")
                 .contains("tikeo-spring-boot-starter");

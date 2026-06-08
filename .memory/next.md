@@ -22,6 +22,11 @@
 - Coverage 基线：run `27129836631` succeeded for source commit `e98f6fd7395f1c104050ce8037db79ab5447aed6`；Rust/Web/Java/Go/Python/Node coverage jobs 均通过并上传。
 - Helm production + ops baseline：`deploy/helm/tikeo` 已支持外部数据库 Secret、SQLite PVC 条件化、TLS/mTLS Secret mounts、PDB、NetworkPolicy、ServiceMonitor、Gateway API `GRPCRoute`、`values.schema.json`、worker identity 文档和 rollback runbook。
 - Browser promo artifact：最终推荐本地 MP4 位于 `.dev/reports/promo-cinematic-showcase-20260608T050247Z-231970/tikeo-cinematic-promo-hq-sentence-subs.mp4`，`ffprobe` 验证 496.520s、1920x1080、英文默认音轨、中文第二音轨、英/中文字幕逐句软字幕轨、无烧录字幕、CRF 16 高画质封装。
+## 0.2.0 release follow-up
+
+- After the `v0.2.0` tag is pushed, monitor GitHub Actions release/publish workflows for Docker server/web images, GitHub assets, and language registry publishes.
+- If any registry publish fails because credentials/secrets are missing, record the failing workflow and rerun after secret repair; do not retag unless the release commit changes.
+- Next product/docs slice remains: CI docs verification placement, final docs hosting configuration, docs search/SEO/OG readiness, and deeper source-backed API/protobuf references.
 
 ## Standing constraints
 

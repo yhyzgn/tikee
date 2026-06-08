@@ -2432,3 +2432,43 @@ Verification evidence:
 - `cd website && bun install --frozen-lockfile && bun run docs:typecheck && bun run docs:build` passed.
 - Generated HTML grep confirmed root homepage has English headline and no Chinese headline; zh-CN homepage has Chinese headline and no English headline; English docs sidebar remains English; zh-CN docs sidebar/footer are localized; English release remains English; zh-CN release is Chinese.
 - Serve smoke on port `13039` confirmed `/`, `/zh-CN/`, `/zh-CN/docs/deployment/docker-compose`, and `/zh-CN/releases/docs-site-scaffold` render with expected locale isolation.
+
+## 2026-06-08 — 0.2.0 正式版发布准备
+
+Agent:
+- Codex
+
+Work:
+- 将 Rust workspace、独立 Rust SDK/demo、Java SDK/demo、Python SDK/demo、Node SDK/demo、Web、Docs 站点和 Helm chart 版本统一提升到 `0.2.0`。
+- 更新 README / README.zh-CN / Helm README 中 SDK、镜像、Helm 安装示例到 `0.2.0`。
+- 在 `CHANGELOG.md` 新增 `0.2.0` 正式版条目，概括 docs 站点、SDK 文档、Helm/Compose、README 宣传资产、CI/coverage/source-size 等发布内容。
+- 对 Node/Python worker demo 的常驻 dry-run 启动改用 `timeout` 烟测模型记录：进程可启动并注册本地 sandbox runner，超时退出为预期。
+
+Verification:
+- `python3 .github/tests/docs_site_contract_test.py` ✅
+- `python3 scripts/check-source-size.py` ✅
+- `python3 .github/tests/workflow_contract_test.py` ✅
+- `.github/workflows/*.yml` YAML parse ✅
+- `cargo fmt --all -- --check` ✅
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings` ✅
+- `cargo test --workspace --all-features` ✅
+- `cargo build --workspace --all-features` ✅
+- `bun run --cwd web lint` / `typecheck` / `test` / `build` ✅
+- `cd website && bun install --frozen-lockfile && bun run docs:typecheck && bun run docs:build` ✅
+- `cd sdks/java && ./gradlew test jar sourcesJar --no-daemon` ✅
+- `cd sdks/rust/tikeo && cargo check --all-features && cargo test --all-features` ✅
+- `cd sdks/go/tikeo && go test ./... -count=1` ✅
+- `cd sdks/nodejs/tikeo && bun install --frozen-lockfile && bun test && bun run build` ✅
+- `cd sdks/python/tikeo && uv run --extra test python -m pytest` ✅
+- `cd examples/rust/worker-demo && cargo check && cargo test` ✅
+- `cd examples/go/worker-demo && go test ./... -count=1` ✅
+- `cd examples/nodejs/worker-demo && timeout 8s env TIKEO_WORKER_DRY_RUN=1 bun start && bun test` with timeout `124` accepted for long-running worker ✅
+- `cd examples/python/worker-demo && timeout 8s uv run --with '../../../sdks/python/tikeo[test]' --extra test python -m tikeo_python_worker_demo && uv run --with '../../../sdks/python/tikeo[test]' --extra test python -m pytest` with timeout `124` accepted for long-running worker ✅
+- Java Spring Boot 2/3/4 worker demos `./gradlew test --no-daemon` ✅
+
+Notes:
+- Python system interpreter lacks `pip`; Python verification used `uv` isolated environments instead.
+- Java demo verification performed real sandbox runtime installation/download paths and completed successfully after network waits.
+
+Git:
+- Pending commit, push, annotated tag `v0.2.0`, and GitHub Release creation.

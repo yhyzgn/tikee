@@ -19,8 +19,8 @@ helm upgrade --install tikeo ./deploy/helm/tikeo \
   --namespace tikeo --create-namespace \
   --set server.image.repository=yhyzgn/tikeo-server \
   --set web.image.repository=yhyzgn/tikeo-web \
-  --set server.image.tag=v0.1.0 \
-  --set web.image.tag=v0.1.0
+  --set server.image.tag=v0.2.0 \
+  --set web.image.tag=v0.2.0
 ```
 
 ## Production database

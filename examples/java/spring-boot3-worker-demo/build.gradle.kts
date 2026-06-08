@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "net.tikeo.examples"
-version = "0.1.0-SNAPSHOT"
+version = "0.2.0"
 
 dependencies {
     val lombokVersion = "1.18.46"
@@ -15,7 +15,7 @@ dependencies {
     testCompileOnly("org.projectlombok:lombok:$lombokVersion")
     testAnnotationProcessor("org.projectlombok:lombok:$lombokVersion")
     implementation("org.springframework.boot:spring-boot-starter-web")
-    implementation("net.tikeo:tikeo-spring-boot3-starter:0.1.0-SNAPSHOT")
+    implementation("net.tikeo:tikeo-spring-boot3-starter:0.2.0")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }

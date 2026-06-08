@@ -1411,3 +1411,10 @@ Verification evidence:
 - Docusaurus zh-CN translation resources now cover navbar, footer, docs sidebar, blog options, blog author/tag metadata, and release post content.
 - Homepage is locale-aware: `/` remains English by default, `/zh-CN/` is Chinese.
 - Locale isolation is now covered by docs contract tests and build/serve smoke.
+
+## 2026-06-08 0.2.0 release preparation
+
+- [x] Release metadata synchronized to `0.2.0` across Cargo workspace, Rust SDK/demo, Java SDK/demo, Python SDK/demo, Node SDK/demo, Web, Website, and Helm chart.
+- [x] README / README.zh-CN / Helm README install examples updated from `0.1.0` to `0.2.0`.
+- [x] `CHANGELOG.md` contains the `0.2.0` formal release section dated 2026-06-08.
+- [x] Release validation passed across core Rust, Web, docs site, Java/Rust/Go/Node/Python SDKs, and Rust/Go/Node/Python/Java demos.

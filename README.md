@@ -374,11 +374,11 @@ sandbox auto behavior.
 
 | Language | Central registry | Package name | Runtime requirement | Current install target |
 | --- | --- | --- | --- | --- |
-| Java | Maven Central | `net.tikeo:*` | Java 17+ | `0.1.0` release artifacts; local development may use `0.1.0-SNAPSHOT`. |
-| Rust | crates.io | `tikeo` | Rust 1.95+ | `0.1.0` |
-| Go | Go module proxy | `github.com/yhyzgn/tikeo/sdks/go/tikeo` | Go 1.26+ | tag-based, for example `v0.1.0` |
-| Python | PyPI | `tikeo` | Python 3.11+ | `0.1.0` |
-| Node.js | npm | `@yhyzgn/tikeo` | Node.js 24+ | `0.1.0` |
+| Java | Maven Central | `net.tikeo:*` | Java 17+ | `0.2.0` release artifacts; local development should use the matching `0.2.0` composite build. |
+| Rust | crates.io | `tikeo` | Rust 1.95+ | `0.2.0` |
+| Go | Go module proxy | `github.com/yhyzgn/tikeo/sdks/go/tikeo` | Go 1.26+ | tag-based, for example `v0.2.0` |
+| Python | PyPI | `tikeo` | Python 3.11+ | `0.2.0` |
+| Node.js | npm | `@yhyzgn/tikeo` | Node.js 24+ | `0.2.0` |
 
 ### Java / Maven Central
 
@@ -404,12 +404,12 @@ repositories {
 
 dependencies {
     // Plain Java worker / management client.
-    implementation("net.tikeo:tikeo:0.1.0")
+    implementation("net.tikeo:tikeo:0.2.0")
 
     // Pick ONE starter when using Spring Boot.
-    implementation("net.tikeo:tikeo-spring-boot-starter:0.1.0")  // Spring Boot 4
-    // implementation("net.tikeo:tikeo-spring-boot3-starter:0.1.0") // Spring Boot 3
-    // implementation("net.tikeo:tikeo-spring-boot2-starter:0.1.0") // Spring Boot 2
+    implementation("net.tikeo:tikeo-spring-boot-starter:0.2.0")  // Spring Boot 4
+    // implementation("net.tikeo:tikeo-spring-boot3-starter:0.2.0") // Spring Boot 3
+    // implementation("net.tikeo:tikeo-spring-boot2-starter:0.2.0") // Spring Boot 2
 }
 ```
 
@@ -420,12 +420,12 @@ Maven:
   <dependency>
     <groupId>net.tikeo</groupId>
     <artifactId>tikeo</artifactId>
-    <version>0.1.0</version>
+    <version>0.2.0</version>
   </dependency>
   <dependency>
     <groupId>net.tikeo</groupId>
     <artifactId>tikeo-spring-boot-starter</artifactId>
-    <version>0.1.0</version>
+    <version>0.2.0</version>
   </dependency>
 </dependencies>
 ```
@@ -446,18 +446,18 @@ tikeo:
 ### Rust / crates.io
 
 ```bash
-cargo add tikeo@0.1.0
+cargo add tikeo@0.2.0
 ```
 
 ```toml
 [dependencies]
-tikeo = "0.1.0"
+tikeo = "0.2.0"
 ```
 
 ### Go / Go module proxy
 
 ```bash
-go get github.com/yhyzgn/tikeo/sdks/go/tikeo@v0.1.0
+go get github.com/yhyzgn/tikeo/sdks/go/tikeo@v0.2.0
 ```
 
 ```go
@@ -467,7 +467,7 @@ import "github.com/yhyzgn/tikeo/sdks/go/tikeo"
 ### Python / PyPI
 
 ```bash
-python -m pip install "tikeo==0.1.0"
+python -m pip install "tikeo==0.2.0"
 ```
 
 ```python
@@ -479,14 +479,14 @@ from tikeo import Client, local_config
 Bun is the default package runner in this repository:
 
 ```bash
-bun add @yhyzgn/tikeo@0.1.0
+bun add @yhyzgn/tikeo@0.2.0
 ```
 
 npm and pnpm users can install the same package from the public npm registry:
 
 ```bash
-npm install @yhyzgn/tikeo@0.1.0
-pnpm add @yhyzgn/tikeo@0.1.0
+npm install @yhyzgn/tikeo@0.2.0
+pnpm add @yhyzgn/tikeo@0.2.0
 ```
 
 ```ts
@@ -543,11 +543,11 @@ docker run -d --name tikeo-server --network tikeo \
   -p 9090:9090 -p 9998:9998 \
   -v tikeo-data:/data \
   -e TIKEO__STORAGE__DATABASE_URL='sqlite:///data/tikeo.db?mode=rwc' \
-  yhyzgn/tikeo-server:0.1.0 serve --config /app/config/container.toml
+  yhyzgn/tikeo-server:0.2.0 serve --config /app/config/container.toml
 
 docker run -d --name tikeo-web --network tikeo \
   -p 8080:80 \
-  yhyzgn/tikeo-web:0.1.0
+  yhyzgn/tikeo-web:0.2.0
 
 curl -fsS http://127.0.0.1:9090/readyz
 ```
@@ -632,7 +632,7 @@ Install a pinned release image set:
 ```bash
 helm upgrade --install tikeo ./deploy/helm/tikeo \
   --namespace tikeo \
-  --create-namespace   --set server.image.repository=yhyzgn/tikeo-server   --set server.image.tag=0.1.0   --set web.image.repository=yhyzgn/tikeo-web   --set web.image.tag=0.1.0
+  --create-namespace   --set server.image.repository=yhyzgn/tikeo-server   --set server.image.tag=0.2.0   --set web.image.repository=yhyzgn/tikeo-web   --set web.image.tag=0.2.0
 ```
 
 Production clusters should override database settings, ingress/TLS, secret references, resource
