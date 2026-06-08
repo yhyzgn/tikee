@@ -17,7 +17,7 @@ Traditional job schedulers often assume that the central server can call executo
 
 1. Install the local toolchain.
 2. Start the Server and Web console.
-3. Run a Rust, Go, or Java Worker demo.
+3. Run a Rust, Go, Java, Python, or Node.js Worker demo.
 4. Create one job or workflow.
 5. Inspect instances, logs, workers, audit evidence, and metrics.
 
@@ -39,3 +39,19 @@ curl -fsS http://0.0.0.0:9090/healthz
 - [Installation](./getting-started/installation)
 - [Quickstart](./getting-started/quickstart)
 - [Worker Tunnel](./concepts/worker-tunnel)
+
+## Product strengths to evaluate
+
+Tikeo is strongest when the environment is more complex than a single trusted executor process. Evaluate it for cross-network workers, audited execution history, governed scripts, multi-language worker teams, workflow topology, and deployment paths that need Kubernetes or VM/systemd parity.
+
+## Comparison framing
+
+The right comparison is not only feature count. Ask whether the scheduler can operate when workers cannot receive inbound traffic, whether stale workers are fenced, whether script execution is governed outside the Server process, whether Web and API evidence agree, and whether deployment assets are production-shaped rather than screenshots.
+
+## Documentation scope
+
+This first docs site focuses on accurate evaluation. It does not claim public hosted deployment, search indexing, full API generation, or complete translated content beyond the pages present in the repository. Later phases should generate API and configuration references from source artifacts.
+
+## Maintainer promise
+
+If a page gives a command, the repository should contain the corresponding code, test, demo, or verification path. If a feature is planned, the page should call it planned instead of presenting it as complete.

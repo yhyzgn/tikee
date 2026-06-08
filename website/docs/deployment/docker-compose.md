@@ -31,3 +31,23 @@ The repository also includes PostgreSQL and MySQL Compose profiles. Use these wh
 ```bash
 docker compose down --remove-orphans
 ```
+
+## When to choose Compose
+
+Docker Compose is best for local product evaluation, smoke testing packaged images, and validating database overlays without a Kubernetes cluster. It is not a substitute for production scheduling or cluster policy, but it gives a fast path for demonstrating Server, Web, storage, and Worker connectivity.
+
+## Database choices
+
+SQLite is suitable for a quick local evaluation. PostgreSQL and MySQL overlays are better when validating operational behavior closer to production. Always let Tikeo run its migration path; do not manually patch tables to make a demo pass.
+
+## Worker connectivity
+
+Workers still dial out to the Server Worker Tunnel. Compose should expose the Server tunnel endpoint to workers but should not invert the architecture by making business workers receive arbitrary inbound execution calls.
+
+## Verification checklist
+
+- `docker compose config` renders cleanly.
+- Server readiness returns success.
+- Web container can reach the configured Server endpoint.
+- Worker demo can connect to the tunnel.
+- `docker compose down --remove-orphans` leaves no stale local services.

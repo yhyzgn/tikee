@@ -43,3 +43,38 @@ bun run --cwd web test
 ```
 
 For a faster path, continue to [Quickstart](./quickstart).
+
+## Evaluation depth notes
+
+A reliable Tikeo evaluation should verify each runtime surface separately before combining them. Start with Rust because the Server, storage migrations, scheduler, Worker Tunnel, and most integration tests live in the Rust workspace. Then verify Web because the console is the primary operator experience. Finally verify at least one Worker SDK so the evaluation covers the outbound-only Worker Tunnel rather than only the Server API.
+
+## Recommended local baseline
+
+Run these checks before demoing the system to another engineer:
+
+```bash
+cargo fmt --all -- --check
+cargo test --workspace --all-features
+bun run --cwd web typecheck
+bun run --cwd web test
+```
+
+For docs-site work, verify the separate docs app:
+
+```bash
+cd website
+bun install --frozen-lockfile
+bun run docs:typecheck
+bun run docs:build
+```
+
+## Common setup mistakes
+
+- Running a Worker before the Server tunnel listener is available on `9998`.
+- Using a stale database shape instead of running the normal migration path.
+- Assuming Web development assets are embedded in the Server binary during local frontend development.
+- Treating Python or Node.js examples as placeholders; they are present in CI and should be documented only from verified commands.
+
+## Next decision
+
+Choose the evaluation path: local binary for fastest feedback, Docker Compose for runtime packaging, or Helm/Kubernetes for production deployment planning.

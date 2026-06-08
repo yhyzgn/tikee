@@ -28,3 +28,19 @@ Worker sessions and capability snapshots are persisted, so restarts can preserve
 ## Security boundary
 
 The Server schedules and governs. User code, dynamic scripts, sandbox runners, HTTP calls, SQL processors, and plugin processors execute on Workers or controlled runtimes, not inside the Server process.
+
+## Evaluation checklist
+
+To validate the tunnel, do not stop at a TCP connection. Confirm registration returns an authoritative worker id, heartbeat updates are accepted, dispatch reaches the worker, logs/results include the expected assignment token, and graceful unregister records a visible session event.
+
+## Why not server-to-executor callbacks
+
+Server-to-executor callbacks require routable worker addresses and inbound firewall openings. Tikeo's outbound tunnel model fits private pods, mesh gateways, NAT, cross-cluster deployments, and VM/systemd workers that should not expose business execution endpoints.
+
+## Scheduling implication
+
+The Server schedules from capability snapshots and current session state. If a worker is replaced by a newer generation, stale results from the older generation should be rejected instead of silently corrupting instance state.
+
+## Operational implication
+
+Operators should monitor worker online status, lost reasons, lease expiration, transport errors, and session history separately. A worker can be unreachable without being classified as crashed.

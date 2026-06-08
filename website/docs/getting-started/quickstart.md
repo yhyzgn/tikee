@@ -64,3 +64,19 @@ Use the Web console or HTTP API to inspect workers, jobs, instances, logs, and a
 
 - [Seed demo data](./seed-demo-data)
 - [Worker Tunnel concept](../concepts/worker-tunnel)
+
+## What this quickstart should prove
+
+The quickstart should prove the core architecture in a small loop: the Server is healthy, the Web console can be built or served for operators, and at least one Worker can connect outbound to the Worker Tunnel. If any of those are missing, the evaluation is incomplete.
+
+## Expected observations
+
+After the Worker connects, the operator should be able to see an online worker or persisted session evidence in the Web console. After a job is triggered, the operator should see an instance, attempts, logs, and final status. If no worker matches the requested capability, the pending or governance evidence should be visible instead of silent.
+
+## Clean shutdown
+
+Stop demo processes with normal termination. Workers that support graceful unregister should report a visible stopped session rather than looking like an unexplained crash.
+
+## Next production question
+
+After local success, choose whether the next proof should be Docker Compose packaging, Helm rendering, TLS/mTLS transport security, or a multi-language worker pool.

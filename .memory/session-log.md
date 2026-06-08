@@ -2378,3 +2378,18 @@ Verification:
 
 Git:
 - Pending final verification, commit, and push for docs scaffold. Remote Actions should not be awaited unless the user asks.
+
+### 2026-06-08 — Docs P0 content depth, full zh-CN route mirror, and complete SDK list
+- Expanded the standalone docs site P0 pages beyond scaffold-level summaries: overview, installation, quickstart, seed demo data, Worker Tunnel, workflows, Rust/Go/Java SDKs, Docker Compose, Kubernetes/Helm, integrations, configuration, and troubleshooting now contain evaluation-oriented guidance tied to repository behavior.
+- Added missing Python and Node.js SDK pages to `website/docs/sdks/` and the docs sidebar, so the docs list all current SDK families: Rust, Go, Java Spring Boot, Python, and Node.js.
+- Filled zh-CN counterparts for every current P0 docs route, including all SDK pages, fixing the Chinese 404 gap caused by partial localization.
+- Strengthened `.github/tests/docs_site_contract_test.py` so every P0 English route must have enough evaluation depth, every P0 route must have a zh-CN file, and zh-CN files must contain real localized depth instead of placeholder summaries.
+- Updated `design/docs-site-build-plan.md` to mark Phase B P0 content and Phase C current-route localization as implemented; deployment target remains undecided.
+Verification evidence:
+- `python3 .github/tests/docs_site_contract_test.py` passed.
+- `python3 scripts/check-source-size.py` passed.
+- `cd website && bun install --frozen-lockfile && bun run docs:typecheck && bun run docs:build` passed.
+- Docs serve smoke on port `13031` passed for `/zh-CN/docs/`, `/zh-CN/docs/getting-started/installation`, `/zh-CN/docs/sdks/rust`, `/zh-CN/docs/sdks/python`, `/zh-CN/docs/sdks/nodejs`, `/zh-CN/docs/deployment/kubernetes`, and `/zh-CN/docs/reference/troubleshooting`.
+- `python3 .github/tests/workflow_contract_test.py` passed; workflow YAML parse passed; `git diff --check` passed.
+Verification gap:
+- `python3 scripts/verify-github-actions-node-runtime.py --min-node-major 24` timed out locally after 20s with no output during this docs-only slice; prior baseline had this policy green, and no workflow files were changed.

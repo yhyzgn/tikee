@@ -1,10 +1,29 @@
 from pathlib import Path
+import re
 import json
 import unittest
 
 
 ROOT = Path(__file__).resolve().parents[2]
 WEBSITE = ROOT / "website"
+P0_DOCS = [
+    "index.md",
+    "getting-started/installation.md",
+    "getting-started/quickstart.md",
+    "getting-started/seed-demo-data.md",
+    "concepts/worker-tunnel.md",
+    "concepts/workflows.md",
+    "sdks/rust.md",
+    "sdks/go.md",
+    "sdks/java-spring-boot.md",
+    "sdks/python.md",
+    "sdks/nodejs.md",
+    "deployment/docker-compose.md",
+    "deployment/kubernetes.md",
+    "integrations/overview.md",
+    "reference/configuration.md",
+    "reference/troubleshooting.md",
+]
 
 
 class DocsSiteContractTest(unittest.TestCase):
@@ -27,24 +46,9 @@ class DocsSiteContractTest(unittest.TestCase):
             self.assertIn(f"label: '{label}'", config)
 
     def test_docs_information_architecture_contains_p0_pages(self):
-        expected_pages = [
-            "docs/index.md",
-            "docs/getting-started/installation.md",
-            "docs/getting-started/quickstart.md",
-            "docs/getting-started/seed-demo-data.md",
-            "docs/concepts/worker-tunnel.md",
-            "docs/concepts/workflows.md",
-            "docs/sdks/rust.md",
-            "docs/sdks/go.md",
-            "docs/sdks/java-spring-boot.md",
-            "docs/deployment/docker-compose.md",
-            "docs/deployment/kubernetes.md",
-            "docs/reference/configuration.md",
-            "docs/reference/troubleshooting.md",
-        ]
-        for relative_path in expected_pages:
-            path = WEBSITE / relative_path
-            self.assertTrue(path.exists(), f"missing docs page: {relative_path}")
+        for relative_path in P0_DOCS:
+            path = WEBSITE / "docs" / relative_path
+            self.assertTrue(path.exists(), f"missing docs page: docs/{relative_path}")
 
         sidebars = (WEBSITE / "sidebars.ts").read_text()
         for section in [
@@ -59,10 +63,27 @@ class DocsSiteContractTest(unittest.TestCase):
 
     def test_chinese_locale_and_llm_entrypoints_exist(self):
         zh_root = WEBSITE / "i18n/zh-CN/docusaurus-plugin-content-docs/current"
-        self.assertTrue((zh_root / "index.md").exists())
-        self.assertTrue((zh_root / "getting-started/quickstart.md").exists())
+        for relative_path in P0_DOCS:
+            self.assertTrue((zh_root / relative_path).exists(), f"missing zh-CN doc: {relative_path}")
         self.assertTrue((WEBSITE / "static/llms.txt").exists())
         self.assertTrue((WEBSITE / "static/llms-full.txt").exists())
+
+    def test_p0_docs_have_enough_evaluation_depth(self):
+        for relative_path in P0_DOCS:
+            text = (WEBSITE / "docs" / relative_path).read_text()
+            words = [word for word in text.replace("\n", " ").split(" ") if word.strip()]
+            headings = [line for line in text.splitlines() if line.startswith("## ")]
+            self.assertGreaterEqual(len(words), 260, f"doc too thin: {relative_path}")
+            self.assertGreaterEqual(len(headings), 4, f"doc lacks sections: {relative_path}")
+
+    def test_zh_p0_docs_have_enough_localized_depth(self):
+        zh_root = WEBSITE / "i18n/zh-CN/docusaurus-plugin-content-docs/current"
+        for relative_path in P0_DOCS:
+            text = (zh_root / relative_path).read_text()
+            cjk_chars = re.findall(r"[\u4e00-\u9fff]", text)
+            headings = [line for line in text.splitlines() if line.startswith("## ")]
+            self.assertGreaterEqual(len(cjk_chars), 300, f"zh-CN doc too thin: {relative_path}")
+            self.assertGreaterEqual(len(headings), 4, f"zh-CN doc lacks sections: {relative_path}")
 
 
 if __name__ == "__main__":

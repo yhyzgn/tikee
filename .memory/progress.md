@@ -1390,3 +1390,9 @@ Verification evidence:
 - `bun run docs:typecheck` passed in `website/`.
 - `bun run docs:build` passed in `website/` and generated English plus `zh-CN` output.
 - Docs serve smoke passed for `/`, `/docs/`, `/zh-CN/docs/`, `/docs/getting-started/quickstart`, and `/llms.txt` on port `13030`.
+
+### 2026-06-08 — Docs P0 depth and zh-CN route mirror completed
+- Current docs P0 set now has evaluation-depth guards and all routes have zh-CN counterparts, preventing the previous Chinese 404 state.
+- SDK docs now cover Rust, Go, Java Spring Boot, Python, and Node.js in both English and zh-CN sidebars/content.
+- `design/docs-site-build-plan.md` now records Phase B P0 content and Phase C current-route localization as implemented.
+- Verified locally with docs contract, source-size audit, Docusaurus typecheck/build, zh-CN route smoke, workflow contract, YAML parse, and git diff check.

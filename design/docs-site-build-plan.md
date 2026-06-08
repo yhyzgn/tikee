@@ -1,9 +1,9 @@
 # Tikeo Docs Site Build Plan
 
-Status: Phase A scaffold implemented
+Status: Phase B P0 docs depth + full zh-CN route mirror implemented
 Last refreshed: 2026-06-08
 Owner: Tikeo maintainers
-Scope: Standalone documentation site design plus current `website/` scaffold. Deployment target selection remains separate.
+Scope: Standalone documentation site design plus current `website/` scaffold, enriched P0 docs, full P0 zh-CN route mirror, and SDK coverage for Rust/Go/Java/Python/Node.js. Deployment target selection remains separate.
 
 ## 1. Goal
 
@@ -49,6 +49,8 @@ Alternative candidates:
 - **Fumadocs**: modern and attractive, but introduces Next.js hosting assumptions and more app-level decisions than needed for a docs-only first release.
 
 Decision for first release: Docusaurus 3, TypeScript config, MDX docs, bilingual content, static build output.
+
+2026-06-08 update: Phase B now guards P0 documentation quality through `.github/tests/docs_site_contract_test.py`. The contract requires every P0 English page to have evaluation depth, every P0 route to have a zh-CN counterpart, zh-CN pages to contain real localized depth, and SDK docs to cover Rust, Go, Java Spring Boot, Python, and Node.js.
 
 ## 4. Information architecture
 
@@ -280,7 +282,7 @@ Below the fold:
 - Every SDK page must show a minimal worker, registration behavior, execution handler, and verification command.
 - Every deployment page must state supported database, required ports, environment variables, and health checks.
 - Every security page must distinguish current implemented behavior from roadmap items.
-- Do not advertise Python/Node runnable demos until they are actually implemented and verified.
+- Document Python/Node runnable demos only from verified SDK/demo commands and keep capability claims tied to CI or local evidence.
 - Keep English as the default site language for international promotion; provide Chinese pages as complete translations, not partial summaries.
 - Prefer diagrams, tables, and short command blocks over long prose.
 - Add “last verified against commit” frontmatter or footer for operational pages once the docs build pipeline exists.
@@ -401,27 +403,33 @@ Acceptance evidence:
 - `bun run docs:serve -- --port 13030` plus curl smoke passed for `/`, `/docs/`, `/zh-CN/docs/`, `/docs/getting-started/quickstart`, and `/llms.txt`.
 - Navbar/sidebar/footer match the planned first scaffold; final deployment domain remains undecided.
 
-### Phase B — First complete English docs set
+### Phase B — First complete P0 docs set
 
-- Fill Overview, Getting Started, Concepts, User Guide, SDK overview, Deployment overview, and Reference essentials.
-- Split `design/tikeo-architecture-design.md` into readable conceptual pages.
-- Add code tabs for Rust/Go/Java where verified.
-- Keep Python/Node SDK pages marked as planned until runnable.
+Status: **Implemented on 2026-06-08** for the current P0 sidebar set.
 
-Acceptance:
+- [x] Enrich Overview, Getting Started, Concepts, SDK, Deployment, Integrations, and Reference P0 pages from verified repository behavior.
+- [x] Add SDK pages for Rust, Go, Java Spring Boot, Python, and Node.js.
+- [x] Guard English P0 pages with minimum evaluation-depth and section-count checks.
+- [x] Keep SDK/runtime claims tied to committed SDK/demo paths and runtime requirements.
 
-- A new evaluator can complete Server + Web + Rust or Go worker quickstart from docs alone.
-- No page claims unsupported runtime behavior.
+Acceptance evidence:
+
+- `python3 .github/tests/docs_site_contract_test.py` passed.
+- `cd website && bun run docs:typecheck` passed.
+- `cd website && bun run docs:build` passed.
+- zh-CN serve smoke passed for P0 routes including installation, Rust, Python, Node.js, Kubernetes, and troubleshooting.
 
 ### Phase C — Chinese localization
 
-- Translate high-traffic pages first: Overview, Quickstart, Architecture, SDK overview, Deployment overview, Troubleshooting.
-- Then translate all sidebar pages.
-- Align terms with `web/src/i18n/messages.ts` and `README.zh-CN.md`.
+Status: **Implemented on 2026-06-08** for every current P0 route.
+
+- [x] Provide zh-CN counterparts for all P0 docs routes.
+- [x] Add a docs contract requiring real zh-CN localized depth instead of placeholder summaries.
+- [x] Keep technical terms consistent with README/Web UI naming where applicable.
 
 Acceptance:
 
-- Language switcher works for every first-release page.
+- Language switcher works for every current P0 page.
 - No mixed Chinese/English labels except official technology names.
 
 ### Phase D — Search, LLM export, and publish readiness
@@ -449,10 +457,13 @@ P0 for first public docs launch:
 7. `/docs/sdks/rust`
 8. `/docs/sdks/go`
 9. `/docs/sdks/java-spring-boot`
-10. `/docs/deployment/docker-compose`
-11. `/docs/deployment/kubernetes`
-12. `/docs/reference/configuration`
-13. `/docs/reference/troubleshooting`
+10. `/docs/sdks/python`
+11. `/docs/sdks/nodejs`
+12. `/docs/deployment/docker-compose`
+13. `/docs/deployment/kubernetes`
+14. `/docs/integrations/overview`
+15. `/docs/reference/configuration`
+16. `/docs/reference/troubleshooting`
 
 P1 after first launch:
 
@@ -462,12 +473,11 @@ P1 after first launch:
 - Migration from XXL-Job.
 - Migration from PowerJob.
 - OpenAPI and gRPC reference automation.
-- Full Chinese localization.
+- Deeper user-guide pages for Dashboard, Jobs, Instances, Workers, Workflows, Scripts, Audit, and Settings.
 
 P2 after ecosystem expansion:
 
-- Python SDK page.
-- Node.js SDK page.
+- SDK overview and cross-language parity guide.
 - Terraform Provider guide.
 - Kubernetes Operator guide.
 - Advanced workflow patterns.
@@ -492,4 +502,4 @@ P2 after ecosystem expansion:
 
 ## 16. Immediate next action
 
-Phase A is implemented in `website/`. Next implementation step: fill the first complete English docs set from verified repository behavior, then expand Chinese localization. Keep deployment provider configuration separate until the final hosting target is chosen.
+Phase A scaffold and Phase B P0 content/localization are implemented in `website/`. Next implementation step: add docs CI or a docs-specific workflow, then expand user-guide/API reference depth from generated OpenAPI/protobuf/source artifacts. Keep deployment provider configuration separate until the final hosting target is chosen.

@@ -1,0 +1,49 @@
+---
+title: Python Worker SDK
+description: Python SDK 与 Worker demo 的验证入口。
+---
+
+# Python Worker SDK
+
+Python SDK 位于 `sdks/python/tikeo`，可运行 Worker demo 位于 `examples/python/worker-demo`。它适合自动化、数据处理 Worker，以及已经标准化 Python runtime 的团队。
+
+## 运行时要求
+
+package 声明 `requires-python = ">=3.11"`，CI 使用 Python 3.12 验证。调整基线时，必须同步 `pyproject.toml`、CI matrix、README 徽章和文档站。
+
+## 验证 SDK
+
+```bash
+cd sdks/python/tikeo
+python -m pip install -e .[test]
+python -m pytest
+```
+
+SDK 使用 `grpcio`、`grpcio-tools`、`protobuf` 和 `requests` 支撑 Worker Tunnel 与 management helper surface。
+
+## 验证 demo
+
+```bash
+cd examples/python/worker-demo
+python -m pip install -e ../../../sdks/python/tikeo
+python -m pip install -e .
+TIKEO_WORKER_DRY_RUN=1 python -m tikeo_python_worker_demo
+```
+
+dry-run mode 可在没有 Server 的情况下验证本地包连接和 capability 声明。
+
+## Live mode 预期
+
+live mode 默认连接 `http://127.0.0.1:9998`，使用 demo 的开发 scope，广告结构化 SDK/plugin/script capability，并对支持的 runner 做 sandbox auto-resolution。运行 live mode 前应先启动 Server，并在 Web 控制台确认 Worker 可见。
+
+## 能力广告纪律
+
+Python Worker 很容易调用本地命令，因此更需要治理边界。只有 runner 已安装并处于受控边界内，才应广告 script capability。任务日志应通过 task context API 输出，SDK diagnostics 应与任务执行证据分离。
+
+## 生产建议
+
+使用 virtualenv 或固定容器镜像保证可重复运行。密钥不要写入代码，只传递 secret reference 或受 scope 限制的环境配置。
+
+## 适合场景
+
+Python Worker 适合数据加工、自动化脚本、内部运维任务和已有 Python 生态的集成。评估时要特别关注依赖隔离、runner 安装来源、超时、输出大小限制和网络访问策略，避免把灵活性变成不可审计的宿主机执行风险。

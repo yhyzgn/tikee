@@ -1,8 +1,13 @@
-# 153 — Docs site content follow-up
+# 153 — Docs site P0 content follow-up (completed)
 
 ## Current context
 
-`website/` now exists as a Docusaurus 3.10.1 TypeScript + Bun standalone docs site. Phase A scaffold is implemented: homepage, navbar/footer, sidebar IA, P0 English starter pages, starter `zh-CN` translations, release-note blog entry, static `llms.txt` / `llms-full.txt`, and build/typecheck scripts.
+`website/` exists as a Docusaurus 3.10.1 TypeScript + Bun standalone docs site. Phase A scaffold is implemented. The 2026-06-08 follow-up completed the current P0 docs depth pass and zh-CN route mirror:
+
+- English P0 pages now cover Overview, Installation, Quickstart, Seed demo data, Worker Tunnel, Workflows, Rust/Go/Java/Python/Node.js SDKs, Docker Compose, Kubernetes/Helm, Integrations, Configuration, and Troubleshooting.
+- zh-CN counterparts exist for every current P0 route, fixing the previous Chinese 404 gap.
+- The sidebar SDK section lists all current SDK families: Rust, Go, Java Spring Boot, Python, and Node.js.
+- `.github/tests/docs_site_contract_test.py` now guards English evaluation depth, zh-CN file coverage, and zh-CN localized depth.
 
 ## Verification baseline
 
@@ -13,18 +18,20 @@ Local verification passed:
 - `cd website && bun install --frozen-lockfile`
 - `cd website && bun run docs:typecheck`
 - `cd website && bun run docs:build`
-- `cd website && bun run docs:serve -- --port 13030` plus curl smoke for `/`, `/docs/`, `/zh-CN/docs/`, `/docs/getting-started/quickstart`, and `/llms.txt`
+- `cd website && bun run docs:serve -- --port 13031` plus curl smoke for `/zh-CN/docs/`, `/zh-CN/docs/getting-started/installation`, `/zh-CN/docs/sdks/rust`, `/zh-CN/docs/sdks/python`, `/zh-CN/docs/sdks/nodejs`, `/zh-CN/docs/deployment/kubernetes`, and `/zh-CN/docs/reference/troubleshooting`
+- `python3 .github/tests/workflow_contract_test.py`
+- workflow YAML parse
+- `git diff --check`
 
-## Next recommended slice
+Verification gap: `python3 scripts/verify-github-actions-node-runtime.py --min-node-major 24` timed out locally after 20s with no output during this docs-only slice; no workflow files were changed.
 
-1. Fill Phase B English docs content for the P0 pages from verified repository behavior: Overview, Installation, Quickstart, Worker Tunnel, Workflows, Rust/Go/Java SDK pages, Docker Compose, Kubernetes/Helm, Configuration, Troubleshooting.
-2. Add docs-site CI only after deciding whether docs build should run in main CI or a docs-specific workflow.
-3. Expand Chinese localization after English P0 content is stable; avoid partial machine-summary translations.
-4. Keep deployment provider configuration separate until the final docs hosting target is chosen.
+## Completed scope
 
-## Guardrails
+1. Filled current P0 docs content from verified repository behavior.
+2. Added Python and Node.js SDK docs instead of leaving the SDK list incomplete.
+3. Expanded full current-route Chinese localization instead of starter summaries.
+4. Updated `design/docs-site-build-plan.md`, `.memory/session-log.md`, `.memory/progress.md`, and `.memory/next.md`.
 
-- Do not advertise unverified behavior or fake SDK quickstarts.
-- Keep Python and Node.js content tied to actual implemented SDK/demo evidence.
-- Do not manually copy the entire architecture design document into one large page.
-- Keep `website/build`, `.docusaurus`, and `node_modules` ignored.
+## Next prompt
+
+Continue with `.prompt/154-docs-ci-and-reference-depth-followup.md`.

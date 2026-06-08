@@ -27,6 +27,8 @@ const sidebars: SidebarsConfig = {
         'sdks/rust',
         'sdks/go',
         'sdks/java-spring-boot',
+        'sdks/python',
+        'sdks/nodejs',
       ],
     },
     {
