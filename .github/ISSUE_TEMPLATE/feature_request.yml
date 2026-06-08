@@ -1,0 +1,40 @@
+name: Feature request
+description: Suggest a focused Tikeo improvement
+title: "feat: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What platform or operator problem should this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the smallest useful version of the feature.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What workaround or existing tool did you try?
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Impacted surfaces
+      options:
+        - label: Server / API
+        - label: Worker Tunnel
+        - label: Web UI
+        - label: SDKs
+        - label: Deployment / IaC
+        - label: Documentation
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification idea
+      description: How could maintainers test that this works?

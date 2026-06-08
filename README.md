@@ -25,6 +25,22 @@
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.github.com%2Frepos%2Fyhyzgn%2Ftikeo%2Flicense&query=%24.license.spdx_id&style=flat-square&label=license&logo=opensourceinitiative&logoColor=white&color=3DA639" /></a>
 </p>
 
+
+<p align="center">
+  <strong>No exposed worker ports.</strong> Multi-language workers. Workflow canvas. Governed scripts. Audit-ready execution evidence.
+</p>
+
+<p align="center">
+  <img src="docs/assets/tikeo-console-tour.gif" alt="Tikeo console tour: dashboard, workers, jobs, and governance" width="960" />
+</p>
+
+<p align="center">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#tikeo-vs-xxl-job-vs-powerjob">Compare with XXL-Job / PowerJob</a> ·
+  <a href="examples/README.md">Run worker demos</a> ·
+  <a href="docs/assets/tikeo-architecture.en.svg">Architecture diagram</a>
+</p>
+
 <p align="center">
   <a href="https://central.sonatype.com/artifact/net.tikeo/tikeo"><img alt="Java core SDK" src="https://img.shields.io/maven-central/v/net.tikeo/tikeo?style=flat-square&label=Java%20core&logo=openjdk&logoColor=white&color=E76F00" /></a>
   <a href="https://central.sonatype.com/artifact/net.tikeo/tikeo-spring"><img alt="Java Spring 7 SDK" src="https://img.shields.io/maven-central/v/net.tikeo/tikeo-spring?style=flat-square&label=Java%20Spring%207&logo=spring&logoColor=white&color=6DB33F" /></a>
@@ -227,7 +243,7 @@ executed only by workers that expose compatible sandbox runners.
 | **Execution evidence** | Workers emit task-scoped logs and result payloads; broadcast mode stores per-worker attempts and outcomes. |
 | **Governance** | RBAC, API keys, tenant scopes, script approvals, audit logs, and GitOps diff keep changes reviewable. |
 
-## Quick start that proves the product
+## Quick start
 
 ### 1. Start the control plane
 
@@ -665,6 +681,14 @@ cargo test --workspace
 (cd sdks/python/tikeo && python -m pytest)
 (cd sdks/nodejs/tikeo && bun test && bun run build)
 ```
+
+## Support Tikeo
+
+If Tikeo saves you evaluation time or gives your team a clearer orchestration path, please consider giving the repository a ⭐. It helps more platform engineers discover the project.
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=yhyzgn/tikeo&type=Date)](https://www.star-history.com/#yhyzgn/tikeo&Date)
 
 ## License
 

@@ -2046,3 +2046,24 @@ Verification:
 
 Git:
 - Generated media/subtitle artifacts remain local under ignored `.dev/`; source commit records updated memory evidence only.
+
+## 2026-06-08 — Open-source discovery and GitHub first-fold polish
+
+Agent:
+- Codex
+
+Work:
+- Added a compact README console tour GIF derived from the final English promotional walkthrough: `docs/assets/tikeo-console-tour.gif`.
+- Updated English and Chinese README first-fold messaging with a sharper value hook, demo GIF, quick evaluation links, support note, and Star History chart.
+- Added open-source project hygiene files: `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, `CHANGELOG.md`, and `ROADMAP.md`.
+- Added GitHub pull request and issue templates for bug reports and feature requests.
+- Updated GitHub repository description and topics via `gh repo edit`: concise Rust-native orchestration description; topics now include `job-scheduler` and `workflow-engine` while retaining Tikeo-specific discovery terms.
+
+Verification:
+- Demo GIF size check passed: 1.58 MB, under the 5 MB README target.
+- README anchor/text checks passed for demo asset, support/star-history sections, quick-start anchors, and comparison anchors in both English and Chinese README files.
+- GitHub issue template YAML parsed successfully.
+- `git diff --check` passed.
+
+Git:
+- Generated temporary video-processing files remain local under ignored `.dev/`; committed asset is the optimized README GIF only.

@@ -10,8 +10,9 @@
 2. 先处理源码行数历史债务或给 CI 加明确豁免边界：当前审计发现 `dispatcher.rs`、`repository.rs`、`workflow.rs`、`web/src/i18n/messages.ts`、`web/src/api/client.ts` 等历史文件超过 1500 行，不能继续宣称全仓库已满足该规则。
 3. 继续部署生产化专项：Helm values、外部 PostgreSQL/MySQL/CockroachDB 连接、TLS/mTLS secret、readiness/liveness、worker identity env 和回滚文档。
 4. 宣传录屏本地证据已完成：最终推荐版为 `.dev/reports/promo-cinematic-showcase-20260608T050247Z-231970/tikeo-cinematic-promo-hq-sentence-subs.mp4`；同目录保留逐句/短语级 `subtitles.en.srt`、`subtitles.zh-CN.srt`、`subtitles.bilingual.srt` 用于 YouTube/X/Reddit/Bilibili 等平台单独上传 CC 字幕。若要公开分发，下一步可做剪辑压缩、封面海报、上传/CDN 或 CI artifact 化。
-5. 保留 Python/Node SDK demo 为明确未来项；实现前不得在 examples README 中宣称 runnable。
-6. 迁移工具（PowerJob/XXL-JOB）仍维持最低优先级 backlog，核心服务体验稳定后再做。
+5. 开源传播首屏优化已完成：README/中文 README 已加入 1.58MB 控制台 tour GIF、首屏卖点、Star History、支持提示；已补齐 CONTRIBUTING/SECURITY/CODE_OF_CONDUCT/CHANGELOG/ROADMAP 与 GitHub issue/PR templates；GitHub description/topics 已同步。
+6. 保留 Python/Node SDK demo 为明确未来项；实现前不得在 examples README 中宣称 runnable。
+7. 迁移工具（PowerJob/XXL-JOB）仍维持最低优先级 backlog，核心服务体验稳定后再做。
 
 ## Current verified baseline
 
@@ -21,6 +22,7 @@
 - Rust SDK/demo：默认 live；支持 success message；`rust demo echo processed` 实例日志已由 harness 验证。
 - Worker visibility：`worker_sessions` 持久化 capabilities/structuredCapabilities/labels/master snapshot；server restart snapshot smoke 已通过。
 - Web Worker：按 namespace/app 与 cluster/region 分组；dispatch queue 在 `/workers/dispatch-queue`；route smoke 已通过。
+- GitHub discovery polish：README 首屏动图、短卖点、Star History、开源治理文件、issue/PR templates 和 GitHub topics/description 已完成。
 - Browser promo artifact：最终推荐本地 MP4 位于 `.dev/reports/promo-cinematic-showcase-20260608T050247Z-231970/tikeo-cinematic-promo-hq-sentence-subs.mp4`，`ffprobe` 验证 496.520s、1920x1080、英文默认音轨、中文第二音轨、英/中文字幕逐句软字幕轨、无烧录字幕、CRF 16 高画质封装；字幕从 12 条章节级长字幕优化为英文 72 条、中文 57 条；抽帧确认 Worker 页面硬编码中文漏点已改为英文。
 - Storage migration：SQLite legacy schema compatibility 已迁入显式 SeaORM migration `sqlite_compat`，由 `seaql_migrations` 持久记录；本轮验证命令见 progress/session-log。
 

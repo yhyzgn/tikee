@@ -1,0 +1,58 @@
+name: Bug report
+description: Report a reproducible Tikeo problem
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please include enough detail for maintainers to reproduce it safely.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Provide the smallest reliable reproduction.
+      placeholder: |
+        1. Start Tikeo with ...
+        2. Register worker ...
+        3. Trigger job ...
+        4. Observe ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: "v0.x.y or commit SHA"
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Deployment mode
+      options:
+        - Local binary
+        - Docker Compose
+        - Kubernetes / Helm
+        - SDK demo
+        - Other
+  - type: dropdown
+    id: database
+    attributes:
+      label: Database
+      options:
+        - SQLite
+        - PostgreSQL
+        - MySQL
+        - Other / not applicable
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and screenshots
+      description: Redact secrets, tokens, private URLs, and customer data.
+      render: shell
