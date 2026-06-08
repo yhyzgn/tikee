@@ -1926,3 +1926,26 @@ Commit/push:
 - 先补 workflow contract RED，确认旧 workflow 仍拆成 `java-sdk/java-demos/rust-sdk/rust-demo/go-deploy-tools/cross-language-smoke/docker-build-*` 不符合目标分组。
 - 改造 `.github/workflows/ci.yml`：合并语言 SDK+demo job，新增 Python/Node.js deferred fail-closed gate，其他类 job 统一 `Other / ...` 命名。
 - 本地验证：contract test、YAML parse、Node runtime policy、diff check 通过。用户明确要求下班前先跳过远端 CI 结果调试，因此本轮提交后不继续等待 GitHub Actions 完成。
+
+## 2026-06-08 — Promotional browser recording evidence
+
+Agent:
+- Codex
+
+Work:
+- Started a real local Tikeo demo stack for promotional browser recording.
+- Initialized bootstrap admin with user-provided credentials `admin / admin@qq.com / qqqqqq` in an isolated throwaway SQLite DB under `.dev/reports/`.
+- Started Server, Web, and demo workers: Java Boot2, Java Boot3, Java Boot4, Go, Rust, Python, and Node.js.
+- Recorded a Playwright browser walkthrough covering dashboard, workers, dispatch queue, jobs, topology, workflows, scripts, roles, API-Key, audit, and alert delivery pages.
+- Exported WebM and MP4 promotional video artifacts under `.dev/reports/promo-showcase-20260608T030355Z-111791/`.
+
+Verification:
+- `ffprobe` confirmed the WebM is 1440x960, 25 fps, duration 65.280 seconds.
+- `ffmpeg` converted the WebM to `tikeo-promo-showcase.mp4` successfully.
+- Browser login state confirmed URL `http://127.0.0.1:15174/dashboard`, token present, and visible console text for admin.
+- Worker API evidence confirmed all seven demo workers online: `java-boot2-orders-blue`, `java-boot3-orders-blue`, `java-boot4-billing-green`, `go-worker-demo-local`, `rust-worker-demo-local`, `python-worker-demo-local`, `nodejs-worker-demo-local`.
+- Visual thumbnail inspection confirmed the recording reached the authenticated console and final alert delivery page.
+- Critical log scan found no proxy/auth/module-resolution/Playwright timeout errors in the final run.
+
+Git:
+- This commit records session evidence only; generated video artifacts remain local under ignored `.dev/`.
