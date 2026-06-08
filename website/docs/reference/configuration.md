@@ -1,48 +1,135 @@
 ---
 title: Configuration reference
-description: Where Tikeo configuration lives and which settings matter for first evaluation.
+description: Tikeo configuration files, environment overrides, ports, storage URLs, TLS/mTLS, observability, alert retry, and script governance parameters.
 ---
 
 # Configuration reference
 
-The default development configuration lives under `config/`. Public docs should keep examples small and link to committed config files instead of copying large TOML blocks.
+Tikeo reads a TOML config passed to `tikeo serve --config <path>`. Deployment layers may override nested keys with environment variables such as `TIKEO__STORAGE__DATABASE_URL`. Keep committed config examples small and move production secrets into platform Secret stores.
 
-## First local config
+## Copy-paste local config command
 
 ```bash
 cargo run --bin tikeo -- serve --config config/dev.toml
+curl -fsS http://127.0.0.1:9090/healthz
+curl -fsS http://127.0.0.1:9090/readyz
 ```
 
-## Important areas
+## Committed config files
 
-- HTTP listener address and port.
-- Worker Tunnel listener address and port.
-- Storage database URL.
-- Transport security: HTTP TLS and Worker Tunnel TLS/mTLS.
-- Script governance and release signature secret reference.
-- Alert retry worker settings.
-- Observability and tracing exporters.
+| File | Purpose | Storage |
+|---|---|---|
+| `config/dev.toml` | Local source evaluation | SQLite file `tikeo-dev.db` |
+| `config/container.toml` | Container default | SQLite `/data/tikeo.db` |
+| `config/postgres.toml` | PostgreSQL/CockroachDB example | `postgres://...` |
+| `config/mysql.toml` | MySQL example | `mysql://...` |
+| `config/raft.toml` | Cluster/raft planning example | see file |
 
-## Safety rule
+## Server ports
+
+| Config key | Default examples | Meaning |
+|---|---|---|
+| `server.listen_addr` | `0.0.0.0:9090` | HTTP API, health, readiness, metrics, and embedded/API gateway surface. |
+| `server.worker_tunnel_addr` | `0.0.0.0:9998` | Worker Tunnel gRPC/HTTP2 listener. Workers connect outbound to this endpoint. |
+
+In Docker Compose these map to `TIKEO_HTTP_PORT` and `TIKEO_WORKER_TUNNEL_PORT`. In Helm they map to `server.httpPort` and `server.workerTunnelPort`.
+
+## Storage URLs
+
+| Backend | Example |
+|---|---|
+| SQLite dev | `sqlite://tikeo-dev.db?mode=rwc` |
+| SQLite container | `sqlite:///data/tikeo.db?mode=rwc` |
+| PostgreSQL | `postgres://tikeo:change-me@postgres.example:5432/tikeo?sslmode=require` |
+| CockroachDB | `postgres://root@cockroach:26257/tikeo?sslmode=disable` |
+| MySQL | `mysql://tikeo:change-me@mysql.example:3306/tikeo` |
+
+Environment override:
+
+```bash
+TIKEO__STORAGE__DATABASE_URL='postgres://tikeo:change-me@postgres:5432/tikeo?sslmode=require' \
+  ./target/release/tikeo serve --config config/container.toml
+```
 
 Schema changes must go through explicit SeaORM migrations. Do not document manual database mutation as a supported configuration path.
 
-## Configuration evaluation workflow
+## Authentication and API tokens
 
-Treat configuration as part of the runtime contract. Start with `config/dev.toml`, then introduce one change at a time: database URL, HTTP listener, Worker Tunnel listener, TLS/mTLS, OIDC, alert retry, or tracing exporter.
+```toml
+[auth]
+local_login_enabled = true
 
-## Environment variables
+[auth.api_tokens]
+default_ttl_seconds = 43200
+min_ttl_seconds = 300
+max_ttl_seconds = 2592000
+```
 
-Containerized deployment paths may map environment variables into Tikeo config. Document the mapping in deployment-specific pages and keep secrets in Secret references or external secret stores. Do not put plaintext credentials into public docs examples.
+Use local login for development. For shared environments, configure OIDC and keep API-key/service-account credentials scoped to the app boundary.
 
-## Migration boundary
+## Transport security
 
-Storage schema changes must be represented as explicit SeaORM migrations. Compatibility helpers should not silently mutate schema outside migration version tracking.
+```toml
+[transport_security.http]
+tls_enabled = false
+mtls_required = false
 
-## Troubleshooting config
+[transport_security.worker_tunnel]
+tls_enabled = false
+mtls_required = false
+```
 
-If the Server starts but `readyz` fails, inspect storage and migration readiness first. If Worker registration fails, inspect tunnel listener configuration, TLS/mTLS settings, and worker identity scope.
+Enable HTTP TLS when exposing the API directly. Enable Worker Tunnel TLS/mTLS when workers cross hosts, clusters, VPCs, or trust boundaries. In Helm, certificate files are mounted from Secrets and referenced by generated transport-security config.
 
-## Next reference work
+## Observability
 
-A future docs phase should generate an environment-variable matrix and configuration table directly from committed config structures or examples.
+```toml
+[observability.logging]
+level = "info"
+# log_dir = "./logs"
+
+[observability.tracing]
+enabled = false
+headers = []
+# otlp_endpoint = "http://otel-collector:4318/v1/traces"
+```
+
+Keep `info` as the default log level for operations. Set `log_dir` for VM/systemd deployments. Use OTLP only when a collector is reachable and approved for the environment.
+
+## Alert retry and alert secrets
+
+```toml
+[alert_retry]
+enabled = true
+interval_seconds = 60
+batch_size = 50
+max_attempts = 3
+backoff_seconds = 300
+
+[alert_secrets]
+allow_env_refs = true
+env_prefix = "TIKEO_ALERT_SECRET_"
+```
+
+Alert channel JSON may reference secrets through `env:NAME` indirection. Do not commit SMTP, webhook, or API credentials.
+
+## Script governance
+
+```toml
+[script_governance]
+# release_signature_secret_ref = "env:TIKEO_SCRIPT_RELEASE_SECRET"
+```
+
+If script release signing is enabled, store the secret in the deployment platform and pass only a reference into config.
+
+## Environment override rule
+
+Nested config keys use double underscores:
+
+| Environment variable | Config key |
+|---|---|
+| `TIKEO__STORAGE__DATABASE_URL` | `storage.database_url` |
+| `TIKEO__ALERT_SECRETS__ALLOW_ENV_REFS` | `alert_secrets.allow_env_refs` |
+| `TIKEO__ALERT_SECRETS__ENV_PREFIX` | `alert_secrets.env_prefix` |
+
+Prefer committed TOML for non-secret defaults and environment/Secret injection for credentials and deployment-specific endpoints.

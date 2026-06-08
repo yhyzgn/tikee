@@ -1,9 +1,9 @@
 # Tikeo Docs Site Build Plan
 
-Status: Phase B P0 docs depth + full zh-CN route mirror implemented
+Status: Phase B/C P0 docs, zh-CN route mirror, and copy-paste deployment docs implemented
 Last refreshed: 2026-06-08
 Owner: Tikeo maintainers
-Scope: Standalone documentation site design plus current `website/` scaffold, enriched P0 docs, full P0 zh-CN route mirror, and SDK coverage for Rust/Go/Java/Python/Node.js. Deployment target selection remains separate.
+Scope: Standalone documentation site design plus current `website/` scaffold, enriched P0 docs, full P0 zh-CN route mirror, SDK coverage for Rust/Go/Java/Python/Node.js, subpath-safe language switching, and copy-paste deployment docs for binary/systemd, Compose, and Helm. Deployment target selection remains separate.
 
 ## 1. Goal
 
@@ -51,6 +51,8 @@ Alternative candidates:
 Decision for first release: Docusaurus 3, TypeScript config, MDX docs, bilingual content, static build output.
 
 2026-06-08 update: Phase B now guards P0 documentation quality through `.github/tests/docs_site_contract_test.py`. The contract requires every P0 English page to have evaluation depth, every P0 route to have a zh-CN counterpart, zh-CN pages to contain real localized depth, and SDK docs to cover Rust, Go, Java Spring Boot, Python, and Node.js.
+
+2026-06-08 deployment update: docs builds are now safe for GitHub Pages project hosting by default (`/tikeo/`) while allowing custom-root deployment through `TIKEO_DOCS_URL` and `TIKEO_DOCS_BASE_URL`. Deployment P0 docs include copy-paste runbooks and parameter references for single binary/systemd, Docker Compose SQLite/PostgreSQL/MySQL, Helm dev/prod/TLS/ops overlays, and runtime configuration.
 
 ## 4. Information architecture
 
@@ -280,7 +282,7 @@ Below the fold:
 
 - Every getting-started page must include exact commands, expected output, and next link.
 - Every SDK page must show a minimal worker, registration behavior, execution handler, and verification command.
-- Every deployment page must state supported database, required ports, environment variables, and health checks.
+- Every deployment page must state supported database, required ports, environment variables, health checks, copy-paste commands, cleanup/rollback notes, and production replacement points.
 - Every security page must distinguish current implemented behavior from roadmap items.
 - Document Python/Node runnable demos only from verified SDK/demo commands and keep capability claims tied to CI or local evidence.
 - Keep English as the default site language for international promotion; provide Chinese pages as complete translations, not partial summaries.
@@ -414,10 +416,11 @@ Status: **Implemented on 2026-06-08** for the current P0 sidebar set.
 
 Acceptance evidence:
 
-- `python3 .github/tests/docs_site_contract_test.py` passed.
+- `python3 .github/tests/docs_site_contract_test.py` passed, including deployment runbook snippets and baseUrl guard.
 - `cd website && bun run docs:typecheck` passed.
 - `cd website && bun run docs:build` passed.
 - zh-CN serve smoke passed for P0 routes including installation, Rust, Python, Node.js, Kubernetes, and troubleshooting.
+- Default `/tikeo/` and custom root `/` builds were both smoke-tested for zh-CN route switching.
 
 ### Phase C — Chinese localization
 

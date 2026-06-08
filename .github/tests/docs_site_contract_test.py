@@ -18,6 +18,7 @@ P0_DOCS = [
     "sdks/java-spring-boot.md",
     "sdks/python.md",
     "sdks/nodejs.md",
+    "deployment/single-binary.md",
     "deployment/docker-compose.md",
     "deployment/kubernetes.md",
     "integrations/overview.md",
@@ -44,6 +45,13 @@ class DocsSiteContractTest(unittest.TestCase):
         self.assertIn("'zh-CN'", config)
         for label in ["Docs", "SDKs", "Integrations", "GitHub"]:
             self.assertIn(f"label: '{label}'", config)
+
+    def test_docs_config_supports_project_pages_base_url(self):
+        config = (WEBSITE / "docusaurus.config.ts").read_text()
+        homepage = (WEBSITE / "src/pages/index.tsx").read_text()
+        self.assertIn("TIKEO_DOCS_BASE_URL", config)
+        self.assertIn("'/tikeo/'", config)
+        self.assertIn("useBaseUrl", homepage)
 
     def test_docs_information_architecture_contains_p0_pages(self):
         for relative_path in P0_DOCS:
@@ -75,6 +83,29 @@ class DocsSiteContractTest(unittest.TestCase):
             headings = [line for line in text.splitlines() if line.startswith("## ")]
             self.assertGreaterEqual(len(words), 260, f"doc too thin: {relative_path}")
             self.assertGreaterEqual(len(headings), 4, f"doc lacks sections: {relative_path}")
+
+    def test_deployment_docs_include_copy_paste_runbooks(self):
+        deployment_text = "\n".join(
+            (WEBSITE / "docs" / relative_path).read_text()
+            for relative_path in [
+                "deployment/single-binary.md",
+                "deployment/docker-compose.md",
+                "deployment/kubernetes.md",
+                "reference/configuration.md",
+            ]
+        )
+        for snippet in [
+            "systemctl enable --now tikeo",
+            "docker compose --env-file .env up -d --build",
+            "docker-compose.postgres.yml",
+            "docker-compose.mysql.yml",
+            "helm upgrade --install tikeo",
+            "kubectl -n tikeo create secret generic tikeo-database",
+            "server.tls.workerTunnel.mtlsRequired",
+            "TIKEO__STORAGE__DATABASE_URL",
+            "server.worker_tunnel_addr",
+        ]:
+            self.assertIn(snippet, deployment_text)
 
     def test_zh_p0_docs_have_enough_localized_depth(self):
         zh_root = WEBSITE / "i18n/zh-CN/docusaurus-plugin-content-docs/current"

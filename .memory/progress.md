@@ -1396,3 +1396,8 @@ Verification evidence:
 - SDK docs now cover Rust, Go, Java Spring Boot, Python, and Node.js in both English and zh-CN sidebars/content.
 - `design/docs-site-build-plan.md` now records Phase B P0 content and Phase C current-route localization as implemented.
 - Verified locally with docs contract, source-size audit, Docusaurus typecheck/build, zh-CN route smoke, workflow contract, YAML parse, and git diff check.
+
+### 2026-06-08 — Docs deployment docs made copy-pasteable and zh-CN switching made subpath-safe
+- Docusaurus docs now default to GitHub Pages project base `/tikeo/` and support custom root domains through `TIKEO_DOCS_URL` / `TIKEO_DOCS_BASE_URL`; this fixes the language-switch 404 class caused by root-relative `/zh-CN/...` links on subpath hosting.
+- Deployment docs now cover copy-paste paths for single binary/systemd, Docker Compose SQLite/PostgreSQL/MySQL, Helm/Kubernetes dev/prod/TLS/ops, and runtime configuration parameters.
+- Added contract coverage for deployment runbook snippets and baseUrl-safe homepage assets.

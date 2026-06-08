@@ -2,6 +2,18 @@ import {themes as prismThemes} from 'prism-react-renderer';
 import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 
+declare const process: {
+  env: Record<string, string | undefined>;
+};
+
+const normalizeBaseUrl = (value: string): string => {
+  const withLeadingSlash = value.startsWith('/') ? value : `/${value}`;
+  return withLeadingSlash.endsWith('/') ? withLeadingSlash : `${withLeadingSlash}/`;
+};
+
+const siteUrl = process.env.TIKEO_DOCS_URL ?? 'https://yhyzgn.github.io';
+const baseUrl = normalizeBaseUrl(process.env.TIKEO_DOCS_BASE_URL ?? '/tikeo/');
+
 const config: Config = {
   title: 'Tikeo',
   tagline: 'Rust-native orchestration for jobs, workflows, workers, and governed scripts.',
@@ -11,9 +23,10 @@ const config: Config = {
     v4: true,
   },
 
-  // Replace this with the final public docs domain when deployment is chosen.
-  url: 'https://tikeo.dev',
-  baseUrl: '/',
+  // Override TIKEO_DOCS_URL/TIKEO_DOCS_BASE_URL for a custom docs domain.
+  // The default is GitHub Pages project hosting: https://yhyzgn.github.io/tikeo/.
+  url: siteUrl,
+  baseUrl,
 
   organizationName: 'yhyzgn',
   projectName: 'tikeo',

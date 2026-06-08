@@ -1,51 +1,94 @@
 ---
 title: Docker Compose
-description: Tikeo 本地评估与接近生产形态 smoke test 的 Docker Compose 入口。
+description: SQLite、PostgreSQL、MySQL、Web、Worker Tunnel 与 Prometheus 的复制即用 Compose 部署命令。
 ---
 
 # Docker Compose
 
-Tikeo 可以通过 Docker Compose 进行本地评估、镜像打包验证和数据库 overlay smoke test。Compose 不是生产调度集群的替代品，但能快速证明 Server、Web、存储和 Worker Tunnel 的基础连接。
+Docker Compose 适合本地或 VM 上做可重复 smoke 环境，包含打包后的 Server 与 Web 容器。仓库提供三套独立 stack：`docker-compose.yml`（SQLite）、`docker-compose.postgres.yml`（PostgreSQL）、`docker-compose.mysql.yml`（MySQL）。
 
-## SQLite 开发路径
+## 1. 准备 `.env`
+
+```bash
+cp deploy/compose/tikeo.env.example .env
+```
+
+默认暴露 HTTP `9090`、Worker Tunnel `9998`、Web `8080`、可选 Prometheus `9091`。
+
+## 2. SQLite 一键启动
 
 ```bash
 DOCKER_BUILDKIT=1 docker compose --env-file .env up -d --build
 curl -fsS http://127.0.0.1:${TIKEO_HTTP_PORT:-9090}/readyz
+curl -fsS http://127.0.0.1:${TIKEO_WEB_PORT:-8080}/ >/dev/null
 ```
 
-## 外部数据库 overlay
+打开 `http://127.0.0.1:${TIKEO_WEB_PORT:-8080}` 查看 Web 控制台。
 
-仓库包含 PostgreSQL 和 MySQL Compose profile。需要验证更接近生产的 schema 行为时，应使用这些 overlay，而不是手动修改 SQLite 表结构。
+## 3. PostgreSQL stack
 
-## 端口
+```bash
+DOCKER_BUILDKIT=1 docker compose --env-file .env -f docker-compose.postgres.yml up -d --build
+curl -fsS http://127.0.0.1:${TIKEO_HTTP_PORT:-9090}/readyz
+docker compose --env-file .env -f docker-compose.postgres.yml ps
+```
 
-| 端口 | 用途 |
-|---|---|
-| `9090` | HTTP API 与 Server/Web proxy target |
-| `9998` | Worker Tunnel gRPC/HTTP2 listener |
-| `80` | Web console 容器内部端口 |
+可覆盖参数：`TIKEO_POSTGRES_PORT`、`TIKEO_POSTGRES_DB`、`TIKEO_POSTGRES_USER`、`TIKEO_POSTGRES_PASSWORD`、`TIKEO_POSTGRES_DATA_VOLUME`。
+
+## 4. MySQL stack
+
+```bash
+DOCKER_BUILDKIT=1 docker compose --env-file .env -f docker-compose.mysql.yml up -d --build
+curl -fsS http://127.0.0.1:${TIKEO_HTTP_PORT:-9090}/readyz
+docker compose --env-file .env -f docker-compose.mysql.yml ps
+```
+
+可覆盖参数：`TIKEO_MYSQL_PORT`、`TIKEO_MYSQL_DATABASE`、`TIKEO_MYSQL_USER`、`TIKEO_MYSQL_PASSWORD`、`TIKEO_MYSQL_ROOT_PASSWORD`、`TIKEO_MYSQL_DATA_VOLUME`。MySQL stack 已设置 `utf8mb4`。
+
+## 5. 可选 Prometheus
+
+```bash
+docker compose --env-file .env --profile observability up -d prometheus
+curl -fsS http://127.0.0.1:${TIKEO_PROMETHEUS_PORT:-9091}/-/ready
+```
+
+## Compose 参数表
+
+| 变量 | 默认值 | 含义 |
+|---|---:|---|
+| `TIKEO_IMAGE` | `yhyzgn/tikeo-server:dev` | Server 镜像。 |
+| `TIKEO_WEB_IMAGE` | `yhyzgn/tikeo-web:dev` | Web 镜像。 |
+| `TIKEO_HTTP_PORT` | `9090` | HTTP API / health host 端口。 |
+| `TIKEO_WORKER_TUNNEL_PORT` | `9998` | Worker Tunnel host 端口。 |
+| `TIKEO_WEB_PORT` | `8080` | Web UI host 端口。 |
+| `TIKEO_PROMETHEUS_PORT` | `9091` | Prometheus host 端口。 |
+| `TIKEO_WORKER_TUNNEL_PUBLIC_ENDPOINT` | `http://127.0.0.1:9998` | 外部 demo Worker 主动连接地址。 |
+| `TIKEO__STORAGE__DATABASE_URL` | 未设置 | 覆盖 Server 数据库 URL。 |
+
+## Worker 连接规则
+
+Worker 仍然主动连接 Server Worker Tunnel。本地 Rust demo 示例：
+
+```bash
+TIKEO_WORKER_TUNNEL_ENDPOINT=${TIKEO_WORKER_TUNNEL_PUBLIC_ENDPOINT:-http://127.0.0.1:9998}   cargo run --manifest-path examples/rust/worker-demo/Cargo.toml
+```
+
+不要为业务 Worker 暴露任意入站端口。
 
 ## 清理
 
 ```bash
-docker compose down --remove-orphans
+docker compose --env-file .env down --remove-orphans
+# 删除 SQLite 数据卷：
+docker compose --env-file .env down --remove-orphans -v
 ```
 
-## 何时选择 Compose
+PostgreSQL/MySQL 清理时要带上启动时使用的 `-f` 文件。
 
-Compose 适合本地产品评估、镜像 smoke test、数据库 overlay 验证和演示准备。它可以帮助验证镜像入口、环境变量、readyz、Web 到 Server 的连接、Worker 到 tunnel 的连接。
+## 适用边界
 
-## Worker 连接规则
+Compose 的目标是让评估者复制命令后快速得到可用环境，而不是替代生产编排。共享环境应改用外部数据库、平台 Secret 和更严格的网络边界。每次演示前建议运行 readiness、Web 首页、Worker Tunnel demo 三个检查，避免只证明容器启动而没有证明调度链路可用。
 
-Worker 仍然主动连接 Server Worker Tunnel。Compose 应让 Worker 能访问 Server tunnel endpoint，但不应反转架构，让业务 Worker 暴露任意入站执行调用。
+## 参数替换建议
 
-## 验证清单
-
-确认 `docker compose config` 渲染正常，Server readiness 成功，Web 容器能访问 Server endpoint，Worker demo 能连接 tunnel，并且 `docker compose down --remove-orphans` 不留下陈旧服务。
-
-## 演示建议
-
-做公开演示时，可以先用 Compose 展示一键启动和 readiness，再切换到 Web 控制台展示 Worker、Jobs、Instances 与 Audit。若需要展示数据库能力，使用 PostgreSQL 或 MySQL overlay，比手工准备 SQLite 行更可信。
-
-这条路径也适合给贡献者复现问题：提交 issue 时附上 compose profile、端口、数据库后端和健康检查输出。
+首次运行可以只复制 `.env.example`。多人共享或对外演示时，至少替换数据库密码、宿主机端口、镜像 tag 和数据卷名称。如果 Worker 不在同一台机器上，务必把 `TIKEO_WORKER_TUNNEL_PUBLIC_ENDPOINT` 改成 Worker 主机可访问的地址，而不是保留 `127.0.0.1`。

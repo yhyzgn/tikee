@@ -35,6 +35,7 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'Deployment',
       items: [
+        'deployment/single-binary',
         'deployment/docker-compose',
         'deployment/kubernetes',
       ],

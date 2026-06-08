@@ -1,52 +1,108 @@
 ---
 title: Kubernetes 与 Helm
-description: Tikeo Kubernetes、Helm、TLS、mTLS 与 Worker identity 部署边界。
+description: Helm dev/prod/TLS/ops overlay、values 参数、Worker 规则与回滚命令。
 ---
 
 # Kubernetes 与 Helm
 
-Tikeo 提供 Kubernetes 与 Helm 资产，用于生产部署规划和运维硬化验证。当前 chart 聚焦部署 Tikeo Server/Web 基础设施，不负责部署任意业务 Worker。
+Helm 适合需要 rollout history、Secrets、Services、Ingress、TLS/mTLS、probes、resources、NetworkPolicy 和 Prometheus Operator 的环境。chart 安装 Tikeo Server、Worker Tunnel endpoint 与 Web 控制台；不会部署业务 Worker，也不会创建业务 Worker 入站 Service。
 
-## Helm chart 基线
+## 前置检查
 
-`deploy/helm/tikeo` 支持：
+```bash
+kubectl version --client
+helm version
+kubectl create namespace tikeo --dry-run=client -o yaml | kubectl apply -f -
+```
 
-- 外部数据库 Secret 注入；
-- 开发态 SQLite PVC 条件创建；
-- HTTP listener TLS Secret mount；
-- Worker Tunnel TLS/mTLS Secret mount；
-- Ingress；
-- probes、resources、security contexts；
-- 可选 PodDisruptionBudget、NetworkPolicy、ServiceMonitor、Gateway API GRPCRoute；
-- `values.schema.json` 校验。
+## 1. SQLite PVC 开发安装
+
+```bash
+helm upgrade --install tikeo ./deploy/helm/tikeo   --namespace tikeo --create-namespace   -f deploy/helm/tikeo/examples/values-sqlite-dev.yaml
+kubectl -n tikeo rollout status deploy/tikeo-server
+kubectl -n tikeo rollout status deploy/tikeo-web
+kubectl -n tikeo port-forward svc/tikeo-server 9090:9090 >/tmp/tikeo-api.port-forward.log 2>&1 &
+curl -fsS http://127.0.0.1:9090/readyz
+```
+
+Web：
+
+```bash
+kubectl -n tikeo port-forward svc/tikeo-web 8080:80 >/tmp/tikeo-web.port-forward.log 2>&1 &
+```
+
+## 2. 外部数据库生产形态
+
+```bash
+kubectl -n tikeo create secret generic tikeo-database   --from-literal=database-url='postgres://tikeo:change-me@postgres.example:5432/tikeo?sslmode=require'
+
+helm upgrade --install tikeo ./deploy/helm/tikeo   --namespace tikeo --create-namespace   -f deploy/helm/tikeo/examples/values-external-postgres.yaml   --set server.image.repository=yhyzgn/tikeo-server   --set web.image.repository=yhyzgn/tikeo-web   --set server.image.tag=dev   --set web.image.tag=dev
+```
+
+chart 会把 Secret 注入为 `TIKEO__STORAGE__DATABASE_URL`。
+
+## 3. TLS/mTLS
+
+```bash
+kubectl -n tikeo create secret tls tikeo-http-tls --cert=./certs/http.crt --key=./certs/http.key
+kubectl -n tikeo create secret tls tikeo-worker-tunnel-tls --cert=./certs/worker-tunnel.crt --key=./certs/worker-tunnel.key
+kubectl -n tikeo create secret generic tikeo-worker-client-ca --from-file=ca.crt=./certs/worker-client-ca.crt
+
+helm upgrade --install tikeo ./deploy/helm/tikeo   --namespace tikeo --create-namespace   -f deploy/helm/tikeo/examples/values-external-postgres.yaml   -f deploy/helm/tikeo/examples/values-ingress-tls.yaml
+```
+
+Ingress TLS 与 Tikeo listener TLS 是两个边界；Worker Tunnel mTLS 用于 Worker 客户端证书校验。
+
+## 4. 运维增强
+
+```bash
+helm upgrade --install tikeo ./deploy/helm/tikeo   --namespace tikeo --create-namespace   -f deploy/helm/tikeo/examples/values-external-postgres.yaml   -f deploy/helm/tikeo/examples/values-ops-hardening.yaml
+```
+
+Gateway API 先渲染确认：
+
+```bash
+helm template tikeo ./deploy/helm/tikeo   --namespace tikeo   -f deploy/helm/tikeo/examples/values-gateway-api-worker-tunnel.yaml
+```
+
+## Helm values 参数表
+
+| Value | 默认 | 说明 |
+|---|---:|---|
+| `server.replicas` | `1` | Server 副本数。共享环境先用外部 DB。 |
+| `server.httpPort` | `9090` | API/health 容器端口。 |
+| `server.workerTunnelPort` | `9998` | Worker Tunnel 容器端口。 |
+| `server.storage.mode` | `sqlite` | `sqlite` 使用 PVC；`external` 从 Secret 读 DB URL。 |
+| `server.storage.existingSecret` | 空 | 外部 DB Secret 名。 |
+| `server.storage.databaseUrlSecretKey` | `database-url` | Secret key。 |
+| `server.tls.http.enabled` | `false` | 启用 Tikeo HTTP listener TLS。 |
+| `server.tls.workerTunnel.enabled` | `false` | 启用 Worker Tunnel TLS。 |
+| `server.tls.workerTunnel.mtlsRequired` | `false` | 要求 Worker 客户端证书。 |
+| `networkPolicy.enabled` | `false` | 渲染 NetworkPolicy，但不改变 Worker 主动出站模型。 |
+| `serviceMonitor.enabled` | `false` | 渲染 Prometheus Operator ServiceMonitor。 |
+| `gatewayApi.enabled` | `false` | 渲染 Gateway API Worker Tunnel 资源。 |
 
 ## Worker 规则
 
-chart 不应部署业务 Worker，也不应创建业务 Worker 入站 Service。Worker 必须主动出站连接 Worker Tunnel。这条规则是 Tikeo 区别于传统 server-to-executor callback 的核心部署边界。
+业务 Worker 不属于此 chart。它们应作为独立 Deployment、DaemonSet、sidecar、VM/systemd 服务或 SDK 进程主动连接 Worker Tunnel。不要创建业务 Worker 入站 Service。
 
-## 本地验证
+## 验证与回滚
 
 ```bash
 helm lint deploy/helm/tikeo
 helm template tikeo deploy/helm/tikeo --namespace tikeo
+kubectl -n tikeo get pods,svc,ingress
+kubectl -n tikeo logs deploy/tikeo-server --tail=120
+helm history tikeo --namespace tikeo
+helm rollback tikeo <REVISION> --namespace tikeo
 ```
 
-## 何时选择 Kubernetes
+Helm rollback 只回滚 Kubernetes manifest/image/config；数据库 migration 需要数据库快照配合。
 
-当评估目标包含 identity、NetworkPolicy、TLS/mTLS、Ingress、观测性、外部数据库 Secret 注入、Gateway API 或 Prometheus Operator 集成时，应使用 Kubernetes/Helm 路径。
+## 适用边界
 
-## 安全边界
+Helm 路径适合生产形态验证，但仍需要集群自身提供 Ingress controller、证书管理、Secret 管理、NetworkPolicy 实现和可选 Prometheus Operator。文档中的命令可以直接复制执行；生产环境应把镜像 tag、数据库 Secret、证书 Secret 与资源配额替换为自己的值。
 
-HTTP TLS 与 Worker Tunnel TLS/mTLS 是不同关注点。Worker identity 应结合 namespace、app、worker pool、逻辑 worker identity、session generation、fencing token 与 capability snapshot。NetworkPolicy 应保护 Server endpoint，而不是要求 Worker 暴露业务执行 Service。
+## 参数替换建议
 
-## 运维 overlay
-
-Helm examples 可用于验证外部数据库、Ingress TLS、ops hardening 与 Gateway API。ServiceMonitor 是可选能力，依赖 Prometheus Operator CRD 已安装。
-
-## 验证清单
-
-确认 `helm lint` 通过，`helm template` 渲染出预期 Secret、mount、Service 和可选资源；外部数据库 values 不再渲染 SQLite PVC；TLS/mTLS values 能写入生成的 transport security config；Gateway API 只在集群具备对应 CRD/controller 时启用。
-
-## 生产评估建议
-
-生产评估应把 chart 渲染结果与运行时行为一起看：Secret 是否只通过引用传递，证书路径是否进入 transport security config，NetworkPolicy 是否保护 Server endpoint，ServiceMonitor 是否只在 CRD 存在时启用，Worker 是否仍保持主动出站连接模型。
+开发安装可以直接使用 SQLite PVC overlay；生产安装应使用外部数据库 Secret，并固定镜像 tag。启用 mTLS 时，Worker 端必须持有受 `tikeo-worker-client-ca` 信任的客户端证书，否则注册会失败。这是预期的安全边界，不应该通过关闭校验来绕过。
