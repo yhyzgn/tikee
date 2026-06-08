@@ -2108,3 +2108,20 @@ Verification:
 
 Git:
 - Pending commit/push at the time of this memory update.
+
+
+## 2026-06-08 — Static CI and SDK runtime badges
+
+Agent:
+- Codex
+
+Work:
+- Replaced the native GitHub workflow SVG with a static Shields `CI / GitHub Actions` badge linked to the CI workflow, avoiding dynamic status endpoints that can render broken.
+- Added runtime requirement Shields badges for Java 17+, Rust 1.95+, Go 1.26+, Python 3.11+, and Node.js 24+ to `README.md`, `README.zh-CN.md`, and `sdks/README.md`.
+
+Verification:
+- Static badge URL HTTP checks to be run before commit.
+- README badge/text checks and `git diff --check` to be run before commit.
+
+Git:
+- Pending commit/push at the time of this memory update.

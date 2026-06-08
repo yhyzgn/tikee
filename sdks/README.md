@@ -13,6 +13,14 @@ language may change; the behavior must not.
 | Python | `tikeo` | Python 3.11+; CI verifies with Python 3.12. | Release-ready | Worker Tunnel, task logs, sandbox runners, management helpers. |
 | Node.js | `@yhyzgn/tikeo` | Node.js 24+; Bun for repository scripts. | Release-ready | Worker Tunnel, JS/TS-friendly tasks, sandbox runners, management helpers. |
 
+<p align="center">
+  <a href="java/README.md"><img alt="Java 17+" src="https://img.shields.io/badge/Java-17%2B-E76F00?style=flat-square&logo=openjdk&logoColor=white" /></a>
+  <a href="rust/tikeo/README.md"><img alt="Rust 1.95+" src="https://img.shields.io/badge/Rust-1.95%2B-B7410E?style=flat-square&logo=rust&logoColor=white" /></a>
+  <a href="go/tikeo/README.md"><img alt="Go 1.26+" src="https://img.shields.io/badge/Go-1.26%2B-00ADD8?style=flat-square&logo=go&logoColor=white" /></a>
+  <a href="python/tikeo/README.md"><img alt="Python 3.11+" src="https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white" /></a>
+  <a href="nodejs/tikeo/README.md"><img alt="Node.js 24+" src="https://img.shields.io/badge/Node.js-24%2B-339933?style=flat-square&logo=nodedotjs&logoColor=white" /></a>
+</p>
+
 ## Runtime requirements
 
 - Java SDKs: Java 17+; CI verifies with Temurin 21.
