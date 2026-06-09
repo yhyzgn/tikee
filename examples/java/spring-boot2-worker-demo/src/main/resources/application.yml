@@ -14,8 +14,8 @@ tikeo:
     endpoint: ${TIKEO_WORKER_ENDPOINT:http://127.0.0.1:9998}
     client-instance-id: ${TIKEO_WORKER_CLIENT_INSTANCE_ID:spring-boot2-worker-demo-${HOSTNAME:local}}
     state-dir: ${TIKEO_WORKER_STATE_DIR:}
-    namespace: ${TIKEO_WORKER_NAMESPACE:dev-alpha}
-    app: ${TIKEO_WORKER_APP:orders}
+    namespace: ${TIKEO_WORKER_NAMESPACE:default}
+    app: ${TIKEO_WORKER_APP:default}
     cluster: ${TIKEO_WORKER_CLUSTER:local}
     region: ${TIKEO_WORKER_REGION:local}
     capabilities:

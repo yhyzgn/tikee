@@ -135,7 +135,6 @@ start_worker() {
     TIKEO_WORKER_CLIENT_INSTANCE_ID="$name" \
     TIKEO_DEMO_SERVER_PORT="$port" \
     TIKEO_WORKER_STATE_DIR="$state_dir" \
-    TIKEO_WORKER_ELECTION_DOMAIN="$namespace/$app/$pool/local" \
     TIKEO_WORKER_ELECTION_PRIORITY="$priority" \
     TIKEO_MANAGEMENT_NAMESPACE="$namespace" \
     TIKEO_MANAGEMENT_APP="$app" \

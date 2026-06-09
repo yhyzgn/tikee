@@ -80,8 +80,14 @@ public final class SandboxToolInstaller {
             System.getProperty("user.home"),
             ".tikeo",
             "sandbox-tools",
-            tool.name().toLowerCase(Locale.ROOT)
+            installDirectoryKey(tool)
         );
+    }
+
+    private static String installDirectoryKey(Tool tool) {
+        return tool == Tool.POWERSHELL
+            ? "pwsh"
+            : tool.name().toLowerCase(Locale.ROOT);
     }
 
     public static Path binaryPath(Tool tool, Path installDir) {
@@ -292,36 +298,124 @@ public final class SandboxToolInstaller {
             "TIKEO_POWERSHELL_DOWNLOAD_URL",
             "https://github.com/PowerShell/PowerShell/releases/download/v" + version + "/" + archiveName
         );
-        Path archive = options.installDir().resolve(archiveName);
-        Path extractDir = options.installDir().resolve("powershell-" + version);
-        Path binDir = options.installDir().resolve("bin");
+        Path installDir = options.installDir();
+        Path link = binaryPath(options.tool(), installDir);
         try {
-            Files.createDirectories(binDir);
-            Files.createDirectories(extractDir);
-            runCommand(
-                new ProcessBuilder("curl", "-fsSL", url, "-o", archive.toString()),
-                options.installTimeoutMillis(),
-                "PowerShell download"
-            );
-            runCommand(
-                new ProcessBuilder("tar", "-xzf", archive.toString(), "-C", extractDir.toString()),
-                options.installTimeoutMillis(),
-                "PowerShell extract"
-            );
-            Path pwsh = extractDir.resolve("pwsh");
-            pwsh.toFile().setExecutable(true, false);
-            Path link = binaryPath(options.tool(), options.installDir());
-            Files.deleteIfExists(link);
-            try {
-                Files.createSymbolicLink(link, pwsh);
-            } catch (Exception error) {
-                Files.copy(pwsh, link, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                link.toFile().setExecutable(true, false);
+            Files.createDirectories(installDir);
+            try (InstallLock ignored = acquireInstallLock(installDir)) {
+                if (Files.isRegularFile(link) && link.toFile().canExecute()) {
+                    return link;
+                }
+                Path binDir = installDir.resolve("bin");
+                Path tmpRoot = Files.createTempDirectory(installDir, ".pwsh-install-");
+                Path archive = installDir.resolve(archiveName);
+                Path partialArchive = installDir.resolve(archiveName + ".part");
+                Path tmpArchive = tmpRoot.resolve(archiveName);
+                Path tmpExtractDir = tmpRoot.resolve("extract");
+                Path finalExtractDir = installDir.resolve("powershell-" + version);
+                try {
+                    Files.createDirectories(binDir);
+                    Files.createDirectories(tmpExtractDir);
+                    if (Files.isRegularFile(archive)) {
+                        Files.copy(archive, tmpArchive, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    } else {
+                        runCommand(
+                            new ProcessBuilder("curl", "-fL", "-C", "-", url, "-o", partialArchive.toString()),
+                            powerShellInstallTimeoutMillis(options),
+                            "PowerShell download"
+                        );
+                        Files.copy(partialArchive, tmpArchive, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    }
+                    runCommand(
+                        new ProcessBuilder("tar", "-xzf", tmpArchive.toString(), "-C", tmpExtractDir.toString()),
+                        powerShellInstallTimeoutMillis(options),
+                        "PowerShell extract"
+                    );
+                    Path pwsh = tmpExtractDir.resolve("pwsh");
+                    if (!Files.isRegularFile(pwsh)) {
+                        throw new IllegalStateException("PowerShell archive did not contain pwsh");
+                    }
+                    pwsh.toFile().setExecutable(true, false);
+                    deleteRecursively(finalExtractDir);
+                    Files.move(tmpExtractDir, finalExtractDir, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    Path installedPwsh = finalExtractDir.resolve("pwsh");
+                    Files.deleteIfExists(link);
+                    Files.deleteIfExists(partialArchive);
+                    try {
+                        Files.createSymbolicLink(link, installedPwsh);
+                    } catch (Exception error) {
+                        Files.copy(installedPwsh, link, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                        link.toFile().setExecutable(true, false);
+                    }
+                    return link;
+                } finally {
+                    deleteRecursively(tmpRoot);
+                }
             }
-            Files.deleteIfExists(archive);
-            return link;
         } catch (Exception error) {
             throw new IllegalStateException("failed to install PowerShell for " + runtimePlatform(), error);
+        }
+    }
+
+    private static InstallLock acquireInstallLock(Path installDir) throws java.io.IOException, InterruptedException {
+        Path lockDir = installDir.resolve(".install.lock");
+        long deadline = System.nanoTime() + java.time.Duration.ofMinutes(2).toNanos();
+        while (true) {
+            try {
+                Files.createDirectory(lockDir);
+                return new InstallLock(lockDir);
+            } catch (java.nio.file.FileAlreadyExistsException exists) {
+                if (Files.isRegularFile(lockDir)) {
+                    Files.deleteIfExists(lockDir);
+                    continue;
+                }
+                if (System.nanoTime() >= deadline) {
+                    throw new java.io.IOException("timed out waiting for sandbox tool install lock: " + lockDir);
+                }
+                Thread.sleep(100);
+            }
+        }
+    }
+
+    private record InstallLock(Path lockDir) implements AutoCloseable {
+        @Override
+        public void close() {
+            try {
+                Files.deleteIfExists(lockDir);
+            } catch (Exception ignored) {
+                // Best-effort lock cleanup.
+            }
+        }
+    }
+
+    private static long powerShellInstallTimeoutMillis(Options options) {
+        String configured = System.getenv("TIKEO_POWERSHELL_INSTALL_TIMEOUT_MILLIS");
+        if (configured != null && !configured.isBlank()) {
+            try {
+                return Math.max(1_000L, Long.parseLong(configured));
+            } catch (NumberFormatException ignored) {
+                // Fall back to the SDK default below.
+            }
+        }
+        return Math.max(options.installTimeoutMillis(), 1_800_000L);
+    }
+
+    private static void deleteRecursively(Path path) {
+        if (path == null || !Files.exists(path)) {
+            return;
+        }
+        try (java.util.stream.Stream<Path> paths = Files.walk(path)) {
+            paths
+                .sorted(java.util.Comparator.reverseOrder())
+                .forEach(candidate -> {
+                    try {
+                        Files.deleteIfExists(candidate);
+                    } catch (Exception ignored) {
+                        // Best-effort cleanup; caller handles install success/failure.
+                    }
+                });
+        } catch (Exception ignored) {
+            // Best-effort cleanup; caller handles install success/failure.
         }
     }
 

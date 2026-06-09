@@ -182,14 +182,26 @@ public final class SandboxToolResolver {
         if (explicit.isPresent()) {
             return explicit.get();
         }
-        if (options.stateDir() != null && !options.stateDir().isBlank()) {
-            return Path.of(
-                options.stateDir(),
-                "sandbox-tools",
-                installDirectoryKey(tool)
-            );
+        Optional<Path> legacyStateDir = legacyStateScopedInstallDir(tool);
+        if (legacyStateDir.isPresent()) {
+            return legacyStateDir.get();
         }
         return SandboxToolInstaller.defaultInstallDir(tool);
+    }
+
+    private Optional<Path> legacyStateScopedInstallDir(SandboxToolInstaller.Tool tool) {
+        if (options.stateDir() == null || options.stateDir().isBlank()) {
+            return Optional.empty();
+        }
+        Path installDir = Path.of(
+            options.stateDir(),
+            "sandbox-tools",
+            installDirectoryKey(tool)
+        );
+        Path binary = SandboxToolInstaller.binaryPath(tool, installDir);
+        return java.nio.file.Files.isRegularFile(binary)
+            ? Optional.of(installDir)
+            : Optional.empty();
     }
 
     private static String installDirectoryKey(SandboxToolInstaller.Tool tool) {

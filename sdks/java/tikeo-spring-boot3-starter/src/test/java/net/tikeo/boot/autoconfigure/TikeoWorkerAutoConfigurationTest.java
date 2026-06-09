@@ -31,7 +31,8 @@ class TikeoWorkerAutoConfigurationTest {
                     "tikeo.worker.dry-run=true",
                     "tikeo.worker.app=billing",
                     "tikeo.worker.wasm.auto-install=false",
-                    "tikeo.worker.scripts.auto-install-tools=false");
+                    "tikeo.worker.scripts.auto-install-tools=false",
+                    "tikeo.worker.scripts.deno-install-dir=/tmp/tikeo-test-missing-deno");
 
     private static java.util.List<String> scriptLanguages(NoopTikeoWorkerClient noop) {
         return noop.registration().structuredCapabilities().scriptRunners().stream()

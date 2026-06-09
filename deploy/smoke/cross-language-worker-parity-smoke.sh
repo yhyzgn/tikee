@@ -316,7 +316,6 @@ start_java_worker() {
     TIKEO_DEMO_SERVER_PORT="$port" \
     TIKEO_WORKER_CLIENT_INSTANCE_ID="$client" \
     TIKEO_WORKER_STATE_DIR="$REPORT_DIR/$client-state" \
-    TIKEO_WORKER_ELECTION_DOMAIN="$namespace/$app/$pool/local" \
     TIKEO_WORKER_ELECTION_PRIORITY="$priority" \
     TIKEO_WORKER_SCRIPT_RUNTIME_CHECK=false \
     TIKEO_WORKER_SCRIPT_AUTO_INSTALL_TOOLS=false \

@@ -116,7 +116,7 @@ public class TikeoWorkerProperties {
  */
         private String installVersion = "latest";
         /**
- * Optional local install directory. Blank uses state-dir/wasmtime or ~/.tikeo/wasmtime.
+ * Optional local install directory. Blank uses host-level ~/.tikeo/sandbox-tools/wasmtime.
  */
         private String installDir;
         /**
@@ -164,7 +164,7 @@ public class TikeoWorkerProperties {
  */
         private String srtInstallVersion = "latest";
         /**
- * Optional Anthropic Sandbox Runtime install directory. Blank uses state-dir/sandbox-tools/srt.
+ * Optional Anthropic Sandbox Runtime install directory. Blank uses host-level ~/.tikeo/sandbox-tools/srt.
  */
         private String srtInstallDir = "";
         /**
@@ -172,7 +172,7 @@ public class TikeoWorkerProperties {
  */
         private String ripgrepInstallVersion = "latest";
         /**
- * Optional ripgrep install directory. Blank uses state-dir/sandbox-tools/ripgrep.
+ * Optional ripgrep install directory. Blank uses host-level ~/.tikeo/sandbox-tools/ripgrep.
  */
         private String ripgrepInstallDir = "";
         /**
@@ -180,7 +180,7 @@ public class TikeoWorkerProperties {
  */
         private String denoInstallVersion = "latest";
         /**
- * Optional Deno install directory. Blank uses state-dir/script-tools/deno or ~/.tikeo/script-tools/deno.
+ * Optional Deno install directory. Blank uses host-level ~/.tikeo/sandbox-tools/deno.
  */
         private String denoInstallDir = "";
         /**
@@ -192,7 +192,7 @@ public class TikeoWorkerProperties {
  */
         private String rhaiInstallVersion = "";
         /**
- * Optional Rhai install directory. Blank uses state-dir/script-tools/rhai or ~/.tikeo/script-tools/rhai.
+ * Optional Rhai install directory. Blank uses host-level ~/.tikeo/sandbox-tools/rhai.
  */
         private String rhaiInstallDir = "";
         /**
@@ -200,7 +200,7 @@ public class TikeoWorkerProperties {
  */
         private String powerShellInstallVersion = "7.5.4";
         /**
- * Optional PowerShell Core install directory. Blank uses state-dir/sandbox-tools/pwsh.
+ * Optional PowerShell Core install directory. Blank uses host-level ~/.tikeo/sandbox-tools/pwsh.
  */
         private String powerShellInstallDir = "";
         /**
@@ -212,7 +212,7 @@ public class TikeoWorkerProperties {
  */
         private String wasmedgeInstallVersion = "latest";
         /**
- * Optional WasmEdge install directory. Blank uses state-dir/sandbox-tools/wasmedge.
+ * Optional WasmEdge install directory. Blank uses host-level ~/.tikeo/sandbox-tools/wasmedge.
  */
         private String wasmedgeInstallDir = "";
         /**
@@ -224,7 +224,7 @@ public class TikeoWorkerProperties {
  */
         private String v8InstallVersion = "latest";
         /**
- * Optional V8 runtime install directory. Blank uses state-dir/sandbox-tools/v8.
+ * Optional V8 runtime install directory. Blank uses host-level ~/.tikeo/sandbox-tools/v8.
  */
         private String v8InstallDir = "";
         /**

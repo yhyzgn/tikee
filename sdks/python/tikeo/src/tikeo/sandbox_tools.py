@@ -7,7 +7,9 @@ import platform
 import shutil
 import subprocess
 import tempfile
+import time
 from dataclasses import dataclass
+from contextlib import contextmanager
 from pathlib import Path
 
 
@@ -59,6 +61,11 @@ class SandboxToolResolver:
         path = shutil.which(binary)
         if path and self._tool_works(binary, path):
             return path, True
+        legacy_directory = self._legacy_install_dir(key)
+        if legacy_directory is not None:
+            legacy_local = self._managed_bin(legacy_directory) / self._executable_name(binary)
+            if self._tool_works(binary, str(legacy_local)):
+                return str(legacy_local), True
         directory = self._install_dir(key)
         local = self._managed_bin(directory) / self._executable_name(binary)
         if self._tool_works(binary, str(local)):
@@ -72,8 +79,11 @@ class SandboxToolResolver:
         return str(local), self._tool_works(binary, str(local))
 
     def _install_dir(self, key: str) -> Path:
-        base = Path(self.state_dir.strip()) if self.state_dir.strip() else Path.home() / ".tikeo"
-        return base / "sandbox-tools" / key
+        return _host_sandbox_tools_root() / key
+
+    def _legacy_install_dir(self, key: str) -> Path | None:
+        state = self.state_dir.strip()
+        return Path(state) / "sandbox-tools" / key if state else None
 
     @staticmethod
     def _managed_bin(directory: Path) -> Path:
@@ -84,10 +94,13 @@ class SandboxToolResolver:
         return f"{binary}.exe" if os.name == "nt" else binary
 
     def _run_installer(self, managed_bin: Path, *command: str) -> None:
+        self._run_installer_with_timeout(self.install_timeout, managed_bin, *command)
+
+    def _run_installer_with_timeout(self, timeout: float, managed_bin: Path, *command: str) -> None:
         managed_bin.mkdir(parents=True, exist_ok=True)
         env = os.environ.copy()
         env["PATH"] = os.pathsep.join(_dedupe([str(managed_bin), *env.get("PATH", "").split(os.pathsep)]))
-        subprocess.run(command, check=True, timeout=self.install_timeout, env=env)
+        subprocess.run(command, check=True, timeout=timeout, env=env)
 
     def _install_powershell(self, directory: Path) -> None:
         if os.name == "nt":
@@ -108,22 +121,62 @@ class SandboxToolResolver:
         archive_name = f"powershell-{version}-{platform_key}.tar.gz"
         url = _env_or("TIKEO_POWERSHELL_DOWNLOAD_URL", f"https://github.com/PowerShell/PowerShell/releases/download/v{version}/{archive_name}")
         bin_dir = self._managed_bin(directory)
-        extract_dir = directory / f"powershell-{version}"
-        bin_dir.mkdir(parents=True, exist_ok=True)
-        extract_dir.mkdir(parents=True, exist_ok=True)
-        archive = directory / archive_name
-        self._run_installer(bin_dir, "curl", "-fsSL", url, "-o", str(archive))
-        self._run_installer(bin_dir, "tar", "-xzf", str(archive), "-C", str(extract_dir))
-        pwsh = extract_dir / "pwsh"
-        pwsh.chmod(0o755)
-        link = bin_dir / "pwsh"
-        if link.exists() or link.is_symlink():
-            link.unlink()
-        try:
-            link.symlink_to(pwsh)
-        except OSError:
-            shutil.copy2(pwsh, link)
-            link.chmod(0o755)
+        directory.mkdir(parents=True, exist_ok=True)
+        with _install_lock(directory):
+            link = bin_dir / "pwsh"
+            if self._tool_works("pwsh", str(link)):
+                return
+            tmp_root = Path(tempfile.mkdtemp(prefix=".pwsh-install-", dir=directory))
+            try:
+                archive = directory / archive_name
+                tmp_archive = tmp_root / archive_name
+                partial_archive = directory / f"{archive_name}.part"
+                tmp_extract_dir = tmp_root / "extract"
+                final_extract_dir = directory / f"powershell-{version}"
+                bin_dir.mkdir(parents=True, exist_ok=True)
+                tmp_extract_dir.mkdir(parents=True, exist_ok=True)
+                if archive.is_file():
+                    shutil.copy2(archive, tmp_archive)
+                else:
+                    self._run_installer_with_timeout(
+                        _powershell_install_timeout(self.install_timeout),
+                        bin_dir,
+                        "curl",
+                        "-fL",
+                        "-C",
+                        "-",
+                        url,
+                        "-o",
+                        str(partial_archive),
+                    )
+                    shutil.copy2(partial_archive, tmp_archive)
+                self._run_installer_with_timeout(
+                    _powershell_install_timeout(self.install_timeout),
+                    bin_dir,
+                    "tar",
+                    "-xzf",
+                    str(tmp_archive),
+                    "-C",
+                    str(tmp_extract_dir),
+                )
+                pwsh = tmp_extract_dir / "pwsh"
+                if not pwsh.is_file():
+                    raise RuntimeError("PowerShell archive did not contain pwsh")
+                pwsh.chmod(0o755)
+                if final_extract_dir.exists():
+                    shutil.rmtree(final_extract_dir)
+                tmp_extract_dir.rename(final_extract_dir)
+                installed_pwsh = final_extract_dir / "pwsh"
+                if link.exists() or link.is_symlink():
+                    link.unlink()
+                partial_archive.unlink(missing_ok=True)
+                try:
+                    link.symlink_to(installed_pwsh)
+                except OSError:
+                    shutil.copy2(installed_pwsh, link)
+                    link.chmod(0o755)
+            finally:
+                shutil.rmtree(tmp_root, ignore_errors=True)
 
     def _command_works(self, command: str, *args: str) -> bool:
         if os.sep in command and not Path(command).exists():
@@ -164,3 +217,39 @@ def _dedupe(values: list[str]) -> list[str]:
         if value and value not in out:
             out.append(value)
     return out
+
+
+@contextmanager
+def _install_lock(directory: Path):
+    lock_dir = directory / ".install.lock"
+    deadline = time.monotonic() + 120.0
+    while True:
+        try:
+            lock_dir.mkdir()
+            break
+        except FileExistsError:
+            if lock_dir.is_file():
+                lock_dir.unlink(missing_ok=True)
+                continue
+            if time.monotonic() >= deadline:
+                raise TimeoutError(f"timed out waiting for sandbox tool install lock: {lock_dir}")
+            time.sleep(0.1)
+    try:
+        yield
+    finally:
+        shutil.rmtree(lock_dir, ignore_errors=True)
+
+
+def _powershell_install_timeout(timeout: float) -> float:
+    configured = os.environ.get("TIKEO_POWERSHELL_INSTALL_TIMEOUT_MILLIS", "").strip()
+    if configured:
+        try:
+            return max(1.0, int(configured) / 1000.0)
+        except ValueError:
+            pass
+    return max(timeout, 1800.0)
+
+
+def _host_sandbox_tools_root() -> Path:
+    configured = os.environ.get("TIKEO_SANDBOX_TOOLS_DIR", "").strip()
+    return Path(configured) if configured else Path.home() / ".tikeo" / "sandbox-tools"

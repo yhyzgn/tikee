@@ -38,6 +38,18 @@ language may change; the behavior must not.
 - Script execution must run inside a declared sandbox boundary.
 - Management clients use app-scoped API keys via `x-tikeo-api-key`.
 
+## Sandbox tool cache
+
+Java, Go, Python, and Node.js workers resolve script sandbox tools in this order:
+
+1. a working command already on the host `PATH`;
+2. a legacy worker `state-dir/sandbox-tools/<tool>` install if it already exists;
+3. the host-level managed cache at `~/.tikeo/sandbox-tools/<tool>`.
+
+Auto-install only runs when the tool is missing from those locations. Go, Python, and Node.js can
+move the host-level managed cache with `TIKEO_SANDBOX_TOOLS_DIR=/opt/tikeo/sandbox-tools`; Java
+keeps per-tool explicit `tikeo.worker.*.install-dir` properties for custom locations.
+
 ## Verification
 
 ```bash

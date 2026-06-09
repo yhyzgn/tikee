@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test;
 
 class SandboxToolResolverTest {
     @Test
-    void resolvesStateScopedInstallDirectories() {
+    void resolvesHostScopedInstallDirectoriesWhenWorkerStateIsEmpty() {
         SandboxToolResolver resolver = new SandboxToolResolver(new SandboxToolResolver.Options(
                 "/tmp/tikeo-state",
                 false,
@@ -36,16 +36,46 @@ class SandboxToolResolverTest {
                 "",
                 1000));
 
-        assertEquals(Path.of("/tmp/tikeo-state", "sandbox-tools", "srt"),
-                resolver.installDir(SandboxToolInstaller.Tool.SRT));
-        assertEquals(Path.of("/tmp/tikeo-state", "sandbox-tools", "ripgrep"),
-                resolver.installDir(SandboxToolInstaller.Tool.RIPGREP));
-        assertEquals(Path.of("/tmp/tikeo-state", "sandbox-tools", "deno"),
-                resolver.installDir(SandboxToolInstaller.Tool.DENO));
-        assertEquals(Path.of("/tmp/tikeo-state", "sandbox-tools", "wasmedge"),
-                resolver.installDir(SandboxToolInstaller.Tool.WASMEDGE));
-        assertEquals(Path.of("/tmp/tikeo-state", "sandbox-tools", "pwsh"),
-                resolver.installDir(SandboxToolInstaller.Tool.POWERSHELL));
+        Path hostCache = Path.of(System.getProperty("user.home"), ".tikeo", "sandbox-tools");
+        assertEquals(hostCache.resolve("srt"), resolver.installDir(SandboxToolInstaller.Tool.SRT));
+        assertEquals(hostCache.resolve("ripgrep"), resolver.installDir(SandboxToolInstaller.Tool.RIPGREP));
+        assertEquals(hostCache.resolve("deno"), resolver.installDir(SandboxToolInstaller.Tool.DENO));
+        assertEquals(hostCache.resolve("wasmedge"), resolver.installDir(SandboxToolInstaller.Tool.WASMEDGE));
+        assertEquals(hostCache.resolve("pwsh"), resolver.installDir(SandboxToolInstaller.Tool.POWERSHELL));
+    }
+
+    @Test
+    void reusesLegacyStateScopedInstallWhenBinaryAlreadyExists() throws Exception {
+        Path stateDir = java.nio.file.Files.createTempDirectory("tikeo-legacy-sandbox-tools-");
+        installFake(stateDir, SandboxToolInstaller.Tool.SRT);
+        SandboxToolResolver resolver = new SandboxToolResolver(new SandboxToolResolver.Options(
+                stateDir.toString(),
+                false,
+                "latest",
+                "",
+                "https://wasmtime.dev/install.sh",
+                false,
+                "latest",
+                "",
+                "https://wasmedge.example/install.sh",
+                false,
+                "latest",
+                "",
+                "latest",
+                "",
+                "latest",
+                "",
+                "https://deno.land/install.sh",
+                "latest",
+                "",
+                "",
+                "",
+                "7.5.4",
+                "",
+                1000));
+
+        assertEquals(stateDir.resolve("sandbox-tools/srt"), resolver.installDir(SandboxToolInstaller.Tool.SRT));
+        assertEquals(stateDir.resolve("sandbox-tools/srt/bin/srt").toString(), resolver.resolveSrtCommand().orElseThrow());
     }
 
     @Test

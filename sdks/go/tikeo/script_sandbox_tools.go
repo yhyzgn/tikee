@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -80,29 +81,46 @@ func (r SandboxToolResolver) resolveToolWithLocalBinary(toolKey, binary string, 
 	if path, err := exec.LookPath(binary); err == nil && toolWorks(binary, path) {
 		return path, true
 	}
-	local := filepath.Join(r.installDir(toolKey), "bin", executableName(binary))
+	if legacy := r.legacyInstallDir(toolKey); legacy != "" {
+		legacyLocal := filepath.Join(legacy, "bin", executableName(binary))
+		if toolWorks(binary, legacyLocal) {
+			return legacyLocal, true
+		}
+	}
+	installDir := r.installDir(toolKey)
+	local := filepath.Join(installDir, "bin", executableName(binary))
 	if toolWorks(binary, local) {
 		return local, true
 	}
 	if !r.AutoInstall {
 		return local, false
 	}
-	if err := installer(r.installDir(toolKey)); err != nil {
+	if err := installer(installDir); err != nil {
 		return local, false
 	}
 	return local, toolWorks(binary, local)
 }
 
 func (r SandboxToolResolver) installDir(binary string) string {
+	return filepath.Join(hostSandboxToolsRoot(), binary)
+}
+
+func (r SandboxToolResolver) legacyInstallDir(binary string) string {
 	base := strings.TrimSpace(r.StateDir)
 	if base == "" {
-		if home, err := os.UserHomeDir(); err == nil {
-			base = filepath.Join(home, ".tikeo")
-		} else {
-			base = ".tikeo"
-		}
+		return ""
 	}
 	return filepath.Join(base, "sandbox-tools", binary)
+}
+
+func hostSandboxToolsRoot() string {
+	if configured := strings.TrimSpace(os.Getenv("TIKEO_SANDBOX_TOOLS_DIR")); configured != "" {
+		return configured
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(home, ".tikeo", "sandbox-tools")
+	}
+	return filepath.Join(".tikeo", "sandbox-tools")
 }
 
 func commandWorks(command string, args ...string) bool {
@@ -181,30 +199,101 @@ func installPowerShell(timeout time.Duration, installDir string) error {
 	archiveName := fmt.Sprintf("powershell-%s-%s.tar.gz", version, platform)
 	url := envOrDefault("TIKEO_POWERSHELL_DOWNLOAD_URL", fmt.Sprintf("https://github.com/PowerShell/PowerShell/releases/download/v%s/%s", version, archiveName))
 	archive := filepath.Join(installDir, archiveName)
-	extractDir := filepath.Join(installDir, "powershell-"+version)
+	partialArchive := filepath.Join(installDir, archiveName+".part")
+	if err := os.MkdirAll(installDir, 0o755); err != nil {
+		return err
+	}
+	releaseLock, err := acquireInstallLock(installDir)
+	if err != nil {
+		return err
+	}
+	defer releaseLock()
+	link := filepath.Join(binDir, executableName("pwsh"))
+	if toolWorks("pwsh", link) {
+		return nil
+	}
+	tmpDir, err := os.MkdirTemp(installDir, ".pwsh-install-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmpDir)
+	tmpArchive := filepath.Join(tmpDir, archiveName)
+	tmpExtractDir := filepath.Join(tmpDir, "extract")
+	finalExtractDir := filepath.Join(installDir, "powershell-"+version)
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(extractDir, 0o755); err != nil {
+	if err := os.MkdirAll(tmpExtractDir, 0o755); err != nil {
 		return err
 	}
-	if err := runInstaller(timeout, binDir, "curl", "-fsSL", url, "-o", archive); err != nil {
+	if _, err := os.Stat(archive); err == nil {
+		if err := copyFile(archive, tmpArchive); err != nil {
+			return err
+		}
+	} else {
+		if err := runInstaller(powerShellInstallTimeout(timeout), binDir, "curl", "-fL", "-C", "-", url, "-o", partialArchive); err != nil {
+			return err
+		}
+		if err := copyFile(partialArchive, tmpArchive); err != nil {
+			return err
+		}
+	}
+	if err := runInstaller(powerShellInstallTimeout(timeout), binDir, "tar", "-xzf", tmpArchive, "-C", tmpExtractDir); err != nil {
 		return err
 	}
-	defer os.Remove(archive)
-	if err := runInstaller(timeout, binDir, "tar", "-xzf", archive, "-C", extractDir); err != nil {
+	pwsh := filepath.Join(tmpExtractDir, "pwsh")
+	if _, err := os.Stat(pwsh); err != nil {
 		return err
 	}
-	pwsh := filepath.Join(extractDir, "pwsh")
 	_ = os.Chmod(pwsh, 0o755)
-	link := filepath.Join(binDir, executableName("pwsh"))
+	_ = os.RemoveAll(finalExtractDir)
+	if err := os.Rename(tmpExtractDir, finalExtractDir); err != nil {
+		return err
+	}
+	installedPwsh := filepath.Join(finalExtractDir, "pwsh")
 	_ = os.Remove(link)
-	if err := os.Symlink(pwsh, link); err != nil {
-		if copyErr := copyFile(pwsh, link); copyErr != nil {
+	_ = os.Remove(partialArchive)
+	if err := os.Symlink(installedPwsh, link); err != nil {
+		if copyErr := copyFile(installedPwsh, link); copyErr != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func acquireInstallLock(installDir string) (func(), error) {
+	lockDir := filepath.Join(installDir, ".install.lock")
+	deadline := time.Now().Add(2 * time.Minute)
+	for {
+		err := os.Mkdir(lockDir, 0o755)
+		if err == nil {
+			return func() { _ = os.Remove(lockDir) }, nil
+		}
+		if !os.IsExist(err) {
+			return nil, err
+		}
+		if info, statErr := os.Stat(lockDir); statErr == nil && !info.IsDir() {
+			_ = os.Remove(lockDir)
+			continue
+		}
+		if time.Now().After(deadline) {
+			return nil, fmt.Errorf("timed out waiting for sandbox tool install lock: %s", lockDir)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+func powerShellInstallTimeout(timeout time.Duration) time.Duration {
+	if configured := strings.TrimSpace(os.Getenv("TIKEO_POWERSHELL_INSTALL_TIMEOUT_MILLIS")); configured != "" {
+		if millis, err := strconv.ParseInt(configured, 10, 64); err == nil && millis > 0 {
+			return time.Duration(millis) * time.Millisecond
+		}
+	}
+	floor := 30 * time.Minute
+	if timeout < floor {
+		return floor
+	}
+	return timeout
 }
 
 func powershellArchivePlatform() string {

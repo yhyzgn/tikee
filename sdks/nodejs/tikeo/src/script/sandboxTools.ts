@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, rmSync, chmodSync, symlinkSync, copyFileSync, writeFileSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, chmodSync, symlinkSync, copyFileSync, writeFileSync, mkdtempSync, renameSync } from "node:fs";
 import { homedir, platform, arch, tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -29,6 +29,11 @@ export class SandboxToolResolver {
   private resolveTool(key: string, binary: string, installer: (dir: string) => void): [string, boolean] {
     const found = findOnPath(binary);
     if (found && this.toolWorks(binary, found)) return [found, true];
+    const legacyDir = this.legacyInstallDir(key);
+    if (legacyDir) {
+      const legacyLocal = join(this.managedBin(legacyDir), executableName(binary));
+      if (this.toolWorks(binary, legacyLocal)) return [legacyLocal, true];
+    }
     const dir = this.installDir(key);
     const local = join(this.managedBin(dir), executableName(binary));
     if (this.toolWorks(binary, local)) return [local, true];
@@ -37,13 +42,18 @@ export class SandboxToolResolver {
     return [local, this.toolWorks(binary, local)];
   }
 
-  private installDir(key: string): string { return join(this.stateDir.trim() || join(homedir(), ".tikeo"), "sandbox-tools", key); }
+  private installDir(key: string): string { return join(hostSandboxToolsRoot(), key); }
+  private legacyInstallDir(key: string): string { return this.stateDir.trim() ? join(this.stateDir.trim(), "sandbox-tools", key) : ""; }
   private managedBin(dir: string): string { return join(dir, "bin"); }
 
   private runInstaller(managedBin: string, command: string, args: string[]): void {
+    this.runInstallerWithTimeout(this.installTimeoutMs, managedBin, command, args);
+  }
+
+  private runInstallerWithTimeout(timeoutMs: number, managedBin: string, command: string, args: string[]): void {
     mkdirSync(managedBin, { recursive: true });
     const env = { ...process.env, PATH: dedupe([managedBin, ...(process.env.PATH ?? "").split(process.platform === "win32" ? ";" : ":")]).join(process.platform === "win32" ? ";" : ":") };
-    const result = spawnSync(command, args, { stdio: "inherit", env, timeout: this.installTimeoutMs });
+    const result = spawnSync(command, args, { stdio: "inherit", env, timeout: timeoutMs });
     if (result.status !== 0) throw new Error(`installer failed: ${command}`);
   }
 
@@ -55,15 +65,41 @@ export class SandboxToolResolver {
     const name = `powershell-${version}-${key}.tar.gz`;
     const url = process.env.TIKEO_POWERSHELL_DOWNLOAD_URL || `https://github.com/PowerShell/PowerShell/releases/download/v${version}/${name}`;
     const bin = this.managedBin(dir);
-    const archivePath = join(dir, name);
-    const extract = join(dir, `powershell-${version}`);
-    mkdirSync(bin, { recursive: true }); mkdirSync(extract, { recursive: true });
-    this.runInstaller(bin, "curl", ["-fsSL", url, "-o", archivePath]);
-    this.runInstaller(bin, "tar", ["-xzf", archivePath, "-C", extract]);
-    rmSync(archivePath, { force: true });
-    const pwsh = join(extract, "pwsh"); chmodSync(pwsh, 0o755);
-    const link = join(bin, "pwsh"); rmSync(link, { force: true });
-    try { symlinkSync(pwsh, link); } catch { copyFileSync(pwsh, link); chmodSync(link, 0o755); }
+    mkdirSync(dir, { recursive: true });
+    const releaseLock = acquireInstallLock(dir);
+    try {
+      const link = join(bin, "pwsh");
+      if (this.toolWorks("pwsh", link)) return;
+      const tmp = mkdtempSync(join(dir, ".pwsh-install-"));
+      try {
+        const archive = join(dir, name);
+        const partialArchive = join(dir, `${name}.part`);
+        const tmpArchive = join(tmp, name);
+        const tmpExtract = join(tmp, "extract");
+        const finalExtract = join(dir, `powershell-${version}`);
+        mkdirSync(bin, { recursive: true }); mkdirSync(tmpExtract, { recursive: true });
+        if (existsSync(archive)) {
+          copyFileSync(archive, tmpArchive);
+        } else {
+          this.runInstallerWithTimeout(powerShellInstallTimeout(this.installTimeoutMs), bin, "curl", ["-fL", "-C", "-", url, "-o", partialArchive]);
+          copyFileSync(partialArchive, tmpArchive);
+        }
+        this.runInstallerWithTimeout(powerShellInstallTimeout(this.installTimeoutMs), bin, "tar", ["-xzf", tmpArchive, "-C", tmpExtract]);
+        const pwsh = join(tmpExtract, "pwsh");
+        if (!existsSync(pwsh)) throw new Error("PowerShell archive did not contain pwsh");
+        chmodSync(pwsh, 0o755);
+        rmSync(finalExtract, { force: true, recursive: true });
+        renameSync(tmpExtract, finalExtract);
+        const installedPwsh = join(finalExtract, "pwsh");
+        rmSync(link, { force: true });
+        rmSync(partialArchive, { force: true });
+        try { symlinkSync(installedPwsh, link); } catch { copyFileSync(installedPwsh, link); chmodSync(link, 0o755); }
+      } finally {
+        rmSync(tmp, { force: true, recursive: true });
+      }
+    } finally {
+      releaseLock();
+    }
   }
 
   private commandWorks(command: string, args: string[]): boolean {
@@ -89,6 +125,32 @@ export class SandboxToolResolver {
       rmSync(dir, { recursive: true, force: true });
     }
   }
+}
+
+function hostSandboxToolsRoot(): string {
+  return (process.env.TIKEO_SANDBOX_TOOLS_DIR || "").trim() || join(homedir(), ".tikeo", "sandbox-tools");
+}
+function acquireInstallLock(dir: string): () => void {
+  const lockDir = join(dir, ".install.lock");
+  const deadline = Date.now() + 120_000;
+  while (true) {
+    try {
+      mkdirSync(lockDir);
+      return () => rmSync(lockDir, { force: true, recursive: true });
+    } catch {
+      if (Date.now() >= deadline) throw new Error(`timed out waiting for sandbox tool install lock: ${lockDir}`);
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+    }
+  }
+}
+
+function powerShellInstallTimeout(timeoutMs: number): number {
+  const configured = (process.env.TIKEO_POWERSHELL_INSTALL_TIMEOUT_MILLIS || "").trim();
+  if (configured) {
+    const parsed = Number.parseInt(configured, 10);
+    if (Number.isFinite(parsed) && parsed > 0) return Math.max(1_000, parsed);
+  }
+  return Math.max(timeoutMs, 1_800_000);
 }
 
 function executableName(binary: string): string { return process.platform === "win32" ? `${binary}.exe` : binary; }

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, writeFileSync, chmodSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
@@ -124,9 +124,26 @@ describe("node sdk parity", () => {
   });
 
   test("sandbox resolver does not advertise missing tools when auto install disabled", () => {
+    const oldPath = process.env.PATH;
+    const oldToolsDir = process.env.TIKEO_SANDBOX_TOOLS_DIR;
+    try {
+      process.env.PATH = "";
+      process.env.TIKEO_SANDBOX_TOOLS_DIR = mkdtempSync(join(tmpdir(), "tikeo-node-host-tools-"));
+      const resolver = new SandboxToolResolver(mkdtempSync(join(tmpdir(), "tikeo-node-tools-")), false);
+      const [_path, ok] = resolver.resolveSrt();
+      expect(ok).toBe(false);
+    } finally {
+      if (oldPath === undefined) delete process.env.PATH;
+      else process.env.PATH = oldPath;
+      if (oldToolsDir === undefined) delete process.env.TIKEO_SANDBOX_TOOLS_DIR;
+      else process.env.TIKEO_SANDBOX_TOOLS_DIR = oldToolsDir;
+    }
+  });
+
+  test("sandbox resolver uses host cache when worker state is empty", () => {
     const resolver = new SandboxToolResolver(mkdtempSync(join(tmpdir(), "tikeo-node-tools-")), false);
-    const [_path, ok] = resolver.resolveSrt();
-    expect(ok).toBe(false);
+    const installDir = (resolver as unknown as { installDir(key: string): string }).installDir("srt");
+    expect(installDir).toBe(join(homedir(), ".tikeo", "sandbox-tools", "srt"));
   });
 
 

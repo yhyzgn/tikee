@@ -168,10 +168,17 @@ def test_unavailable_script_runner_is_fail_closed_but_not_advertised():
     assert "unavailable" in outcome.message
 
 
-def test_sandbox_tool_resolver_does_not_advertise_missing_tools_when_auto_install_disabled(tmp_path):
+def test_sandbox_tool_resolver_does_not_advertise_missing_tools_when_auto_install_disabled(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATH", "")
+    monkeypatch.setenv("TIKEO_SANDBOX_TOOLS_DIR", str(tmp_path / "host-tools"))
     resolver = tikeo.SandboxToolResolver(state_dir=str(tmp_path), auto_install=False)
     _path, ok = resolver.resolve_srt()
     assert not ok
+
+
+def test_sandbox_tool_resolver_uses_host_cache_when_worker_state_is_empty(tmp_path):
+    resolver = tikeo.SandboxToolResolver(state_dir=str(tmp_path), auto_install=False)
+    assert resolver._install_dir("srt") == Path.home() / ".tikeo" / "sandbox-tools" / "srt"
 
 
 def test_script_registry_adds_structured_capabilities():

@@ -142,6 +142,12 @@ impl SandboxToolResolver {
         if let Some(command) = find_command(binary).filter(|command| command_available(command)) {
             return Some(command);
         }
+        if let Some(legacy_dir) = self.legacy_install_dir(tool_key) {
+            let legacy_local = legacy_dir.join("bin").join(binary);
+            if command_available(&legacy_local) {
+                return Some(legacy_local);
+            }
+        }
         let install_dir = self.install_dir(tool_key);
         let bin_dir = install_dir.join("bin");
         let local = bin_dir.join(binary);
@@ -155,13 +161,26 @@ impl SandboxToolResolver {
     }
 
     fn install_dir(&self, binary: &str) -> PathBuf {
-        let base = self.state_dir.clone().unwrap_or_else(|| {
+        host_sandbox_tools_root().join(binary)
+    }
+
+    fn legacy_install_dir(&self, binary: &str) -> Option<PathBuf> {
+        self.state_dir
+            .as_ref()
+            .map(|base| base.join("sandbox-tools").join(binary))
+    }
+}
+
+fn host_sandbox_tools_root() -> PathBuf {
+    std::env::var_os("TIKEO_SANDBOX_TOOLS_DIR")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
             std::env::var_os("HOME")
                 .map_or_else(|| PathBuf::from("."), PathBuf::from)
                 .join(".tikeo")
-        });
-        base.join("sandbox-tools").join(binary)
-    }
+                .join("sandbox-tools")
+        })
 }
 
 fn install_powershell(timeout: Duration, install_dir: &Path, bin_dir: &Path) -> bool {
@@ -184,58 +203,102 @@ fn install_powershell(timeout: Duration, install_dir: &Path, bin_dir: &Path) -> 
             "https://github.com/PowerShell/PowerShell/releases/download/v{version}/{archive_name}"
         )
     });
-    let archive = install_dir.join(&archive_name);
-    let extract_dir = install_dir.join(format!("powershell-{version}"));
-    if std::fs::create_dir_all(bin_dir).is_err() || std::fs::create_dir_all(&extract_dir).is_err() {
+    if std::fs::create_dir_all(install_dir).is_err() || std::fs::create_dir_all(bin_dir).is_err() {
         return false;
-    }
-    if !download_file(timeout, &url, &archive) {
-        return false;
-    }
-    if !run_installer(
-        timeout,
-        "tar",
-        &[
-            "-xzf",
-            &archive.to_string_lossy(),
-            "-C",
-            &extract_dir.to_string_lossy(),
-        ],
-        &[bin_dir.to_path_buf()],
-    ) {
-        let _ = std::fs::remove_file(&archive);
-        return false;
-    }
-    let pwsh = extract_dir.join("pwsh");
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        if let Ok(metadata) = std::fs::metadata(&pwsh) {
-            let mut permissions = metadata.permissions();
-            permissions.set_mode(0o755);
-            let _ = std::fs::set_permissions(&pwsh, permissions);
-        }
     }
     let link = bin_dir.join("pwsh");
-    let _ = std::fs::remove_file(&link);
-    #[cfg(unix)]
-    {
-        if std::os::unix::fs::symlink(&pwsh, &link).is_err() && std::fs::copy(&pwsh, &link).is_err()
+    if command_available(&link) {
+        return true;
+    }
+    let archive = install_dir.join(&archive_name);
+    let partial_archive = install_dir.join(format!("{archive_name}.part"));
+    let Ok(tmp_root) = std::fs::create_dir_all(install_dir).and_then(|_| {
+        std::process::Command::new("mktemp")
+            .arg("-d")
+            .arg(install_dir.join(".pwsh-install-XXXXXX"))
+            .output()
+            .map_err(std::io::Error::other)
+            .and_then(|output| {
+                if output.status.success() {
+                    Ok(PathBuf::from(String::from_utf8_lossy(&output.stdout).trim().to_owned()))
+                } else {
+                    Err(std::io::Error::other("mktemp failed"))
+                }
+            })
+    }) else {
+        return false;
+    };
+    let tmp_archive = tmp_root.join(&archive_name);
+    let tmp_extract_dir = tmp_root.join("extract");
+    let final_extract_dir = install_dir.join(format!("powershell-{version}"));
+    let result = (|| {
+        std::fs::create_dir_all(&tmp_extract_dir).ok()?;
+        if archive.is_file() {
+            std::fs::copy(&archive, &tmp_archive).ok()?;
+        } else {
+            download_file(power_shell_install_timeout(timeout), &url, &partial_archive).then_some(())?;
+            std::fs::copy(&partial_archive, &tmp_archive).ok()?;
+        }
+        run_installer(
+            power_shell_install_timeout(timeout),
+            "tar",
+            &[
+                "-xzf",
+                &tmp_archive.to_string_lossy(),
+                "-C",
+                &tmp_extract_dir.to_string_lossy(),
+            ],
+            &[bin_dir.to_path_buf()],
+        )
+        .then_some(())?;
+        let pwsh = tmp_extract_dir.join("pwsh");
+        if !pwsh.is_file() {
+            return None;
+        }
+        #[cfg(unix)]
         {
-            let _ = std::fs::remove_file(&archive);
-            return false;
+            use std::os::unix::fs::PermissionsExt;
+            if let Ok(metadata) = std::fs::metadata(&pwsh) {
+                let mut permissions = metadata.permissions();
+                permissions.set_mode(0o755);
+                let _ = std::fs::set_permissions(&pwsh, permissions);
+            }
         }
-    }
-    #[cfg(not(unix))]
-    {
-        if std::fs::copy(&pwsh, &link).is_err() {
-            let _ = std::fs::remove_file(&archive);
-            return false;
+        let _ = std::fs::remove_dir_all(&final_extract_dir);
+        std::fs::rename(&tmp_extract_dir, &final_extract_dir).ok()?;
+        let installed_pwsh = final_extract_dir.join("pwsh");
+        let _ = std::fs::remove_file(&link);
+        let _ = std::fs::remove_file(&partial_archive);
+        #[cfg(unix)]
+        {
+            if std::os::unix::fs::symlink(&installed_pwsh, &link).is_err()
+                && std::fs::copy(&installed_pwsh, &link).is_err()
+            {
+                return None;
+            }
         }
-    }
-    let _ = std::fs::remove_file(archive);
-    true
+        #[cfg(not(unix))]
+        {
+            if std::fs::copy(&installed_pwsh, &link).is_err() {
+                return None;
+            }
+        }
+        Some(())
+    })()
+    .is_some();
+    let _ = std::fs::remove_dir_all(tmp_root);
+    result
 }
+
+fn power_shell_install_timeout(timeout: Duration) -> Duration {
+    if let Ok(configured) = std::env::var("TIKEO_POWERSHELL_INSTALL_TIMEOUT_MILLIS") {
+        if let Ok(millis) = configured.trim().parse::<u64>() {
+            return Duration::from_millis(millis.max(1_000));
+        }
+    }
+    timeout.max(Duration::from_secs(30 * 60))
+}
+
 
 fn powershell_archive_platform() -> Option<&'static str> {
     match (std::env::consts::OS, std::env::consts::ARCH) {
@@ -255,7 +318,7 @@ fn download_file(timeout: Duration, url: &str, output: &Path) -> bool {
         return false;
     }
     let output_arg = output.to_string_lossy();
-    run_installer(timeout, "curl", &["-fsSL", url, "-o", &output_arg], &[])
+    run_installer(timeout, "curl", &["-fL", "-C", "-", url, "-o", &output_arg], &[])
         || run_installer(timeout, "wget", &["-q", url, "-O", &output_arg], &[])
 }
 
@@ -396,6 +459,22 @@ fn shell_quote(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn install_dir_prefers_host_cache_when_worker_state_has_no_existing_binary() {
+        let temp = std::env::temp_dir().join(format!(
+            "tikeo-rust-state-no-tool-{}",
+            std::process::id()
+        ));
+        let resolver = SandboxToolResolver {
+            state_dir: Some(temp.clone()),
+            auto_install: false,
+            install_timeout: Duration::from_secs(1),
+        };
+
+        assert_eq!(resolver.install_dir("pwsh"), host_sandbox_tools_root().join("pwsh"));
+        let _ = std::fs::remove_dir_all(temp);
+    }
 
     #[test]
     fn installer_path_prepends_managed_bin_directory_once() {

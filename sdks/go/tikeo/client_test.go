@@ -423,9 +423,23 @@ func TestUnavailableScriptRunnerIsFailClosedButNotAdvertised(t *testing.T) {
 }
 
 func TestSandboxToolResolverDoesNotAdvertiseMissingToolsWhenAutoInstallDisabled(t *testing.T) {
+	t.Setenv("PATH", "")
+	t.Setenv("TIKEO_SANDBOX_TOOLS_DIR", t.TempDir())
 	resolver := SandboxToolResolver{StateDir: t.TempDir(), AutoInstall: false}
 	if _, ok := resolver.ResolveSrt(); ok {
 		t.Fatal("missing SRT tool must not resolve when auto install is disabled")
+	}
+}
+
+func TestSandboxToolResolverUsesHostCacheWhenWorkerStateIsEmpty(t *testing.T) {
+	resolver := SandboxToolResolver{StateDir: t.TempDir(), AutoInstall: false}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(home, ".tikeo", "sandbox-tools", "srt")
+	if got := resolver.installDir("srt"); got != want {
+		t.Fatalf("installDir=%q, want host cache %q", got, want)
 	}
 }
 
