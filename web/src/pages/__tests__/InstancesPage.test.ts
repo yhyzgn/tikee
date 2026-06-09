@@ -134,6 +134,8 @@ describe('instance list worker visibility and grouped logs', () => {
 describe('instance execution result view', () => {
   test('shows concrete execution result and refreshes instance details with logs', () => {
     expect(source).toContain('getInstance(instance.id)');
+    expect(source).toContain('new EventSource(instanceLogStreamUrl(selectedInstance.id))');
+    expect(source).toContain("source.addEventListener('instance.log'");
     expect(source).toContain('执行结果');
     expect(source).toContain('buildExecutionResultNodes(instance, attempts, logs)');
     expect(source).toContain('节点执行结果');

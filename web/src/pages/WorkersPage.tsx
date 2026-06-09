@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Button, Col, Row, message } from 'antd';
 
-import { getWorkerLifecycleHistory, listWorkers, type WorkerLifecycleHistoryResponse, type WorkerListResponse } from '../api/client';
+import { getWorkerLifecycleHistory, listWorkers, workerStreamUrl, type WorkerLifecycleHistoryResponse, type WorkerListResponse } from '../api/client';
 import { WorkerClusterOverview } from './workers/WorkerClusterOverview';
 import { WorkerTable } from './workers/WorkerTable';
 import { WorkerLifecycleHistory } from './workers/WorkerLifecycleHistory';
@@ -9,8 +9,6 @@ import { ROUTE_META } from '../routes';
 import { useRouteActive } from '../hooks/useRouteActivation';
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../i18n/I18nContext';
-
-const WORKER_REFRESH_INTERVAL_MS = 3_000;
 
 export function WorkersPage() {
   const [workers, setWorkers] = useState<WorkerListResponse>({ online: 0, items: [] });
@@ -44,11 +42,21 @@ export function WorkersPage() {
   useEffect(() => { if (active) void refresh(); }, [active, refresh]);
   useEffect(() => {
     if (!active) return undefined;
-    const interval = window.setInterval(() => {
-      void refresh({ silent: true });
-    }, WORKER_REFRESH_INTERVAL_MS);
-    return () => window.clearInterval(interval);
-  }, [active, refresh]);
+    const source = new EventSource(workerStreamUrl());
+    source.addEventListener('workers.snapshot', (event) => {
+      try {
+        const snapshot = JSON.parse((event as MessageEvent).data) as {
+          workers: WorkerListResponse;
+          history: WorkerLifecycleHistoryResponse;
+        };
+        setWorkers(snapshot.workers);
+        setHistory(snapshot.history);
+      } catch {
+        // Ignore malformed stream frames; users can still refresh manually.
+      }
+    });
+    return () => source.close();
+  }, [active]);
 
   return (
     <div className="page-stack worker-cluster-page">

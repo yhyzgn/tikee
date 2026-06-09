@@ -1,14 +1,21 @@
 #![allow(missing_docs, clippy::missing_errors_doc)]
 
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, convert::Infallible, sync::Arc, time::Duration};
 
-use axum::{Json, extract::State, http::HeaderMap};
-use serde::Deserialize;
+use axum::{
+    Json,
+    extract::{Query, State},
+    http::HeaderMap,
+    response::sse::{Event, Sse},
+};
+use serde::{Deserialize, Serialize};
+use tokio::{sync::mpsc, time};
+use tokio_stream::{Stream, wrappers::ReceiverStream};
 
 use crate::http::{
     AppState, auth,
     dto::{
-        ApiResponse, DispatchQueueApiResponse, DispatchQueueClaimApiResponse,
+        ApiResponse, DispatchQueueApiResponse, DispatchQueueClaimApiResponse, MeResponse,
         WorkerCapabilitiesSummary, WorkerLifecycleHistoryApiResponse,
         WorkerLifecycleHistoryResponse, WorkerListApiResponse, WorkerListResponse,
         WorkerMasterSummary, WorkerPluginProcessorSummary, WorkerScriptRunnerSummary,
@@ -17,7 +24,7 @@ use crate::http::{
     error::ApiError,
 };
 
-use super::common::audit;
+use super::common::{StreamAuthQuery, apply_stream_token, audit};
 
 #[derive(Debug, Clone, Deserialize, utoipa::ToSchema)]
 pub struct ClaimDispatchQueueRequest {
@@ -26,12 +33,28 @@ pub struct ClaimDispatchQueueRequest {
     pub fencing_token: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkerStreamSnapshot {
+    pub workers: WorkerListResponse,
+    pub history: WorkerLifecycleHistoryResponse,
+}
+
 #[utoipa::path(get, path = "/api/v1/workers", tag = "workers")]
 pub async fn list_workers(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<WorkerListApiResponse>, ApiError> {
     let principal = auth::require_permission(&headers, &state, "workers", "read").await?;
+    Ok(Json(ApiResponse::success(
+        worker_list_response(&state, &principal).await?,
+    )))
+}
+
+async fn worker_list_response(
+    state: &AppState,
+    principal: &MeResponse,
+) -> Result<WorkerListResponse, ApiError> {
     let registry_workers = state.registry.workers().await;
     let mut registry_by_worker_id = registry_workers
         .into_iter()
@@ -71,10 +94,10 @@ pub async fn list_workers(
         .into_iter()
         .map(|(worker, _worker_pool)| worker)
         .collect::<Vec<_>>();
-    Ok(Json(ApiResponse::success(WorkerListResponse {
+    Ok(WorkerListResponse {
         online: items.len(),
         items,
-    })))
+    })
 }
 
 #[utoipa::path(get, path = "/api/v1/workers/history", tag = "workers")]
@@ -83,6 +106,14 @@ pub async fn worker_lifecycle_history(
     headers: HeaderMap,
 ) -> Result<Json<WorkerLifecycleHistoryApiResponse>, ApiError> {
     auth::require_permission(&headers, &state, "workers", "read").await?;
+    Ok(Json(ApiResponse::success(
+        worker_lifecycle_history_response(&state).await?,
+    )))
+}
+
+async fn worker_lifecycle_history_response(
+    state: &AppState,
+) -> Result<WorkerLifecycleHistoryResponse, ApiError> {
     let sessions = state
         .worker_lifecycle
         .list_sessions(200)
@@ -118,10 +149,55 @@ pub async fn worker_lifecycle_history(
             created_at: event.created_at,
         })
         .collect();
-    Ok(Json(ApiResponse::success(WorkerLifecycleHistoryResponse {
-        sessions,
-        events,
-    })))
+    Ok(WorkerLifecycleHistoryResponse { sessions, events })
+}
+
+pub async fn stream_workers(
+    State(state): State<Arc<AppState>>,
+    mut headers: HeaderMap,
+    Query(query): Query<StreamAuthQuery>,
+) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
+    apply_stream_token(&mut headers, &query)?;
+    let principal = auth::require_permission(&headers, &state, "workers", "read").await?;
+    let (tx, rx) = mpsc::channel(16);
+
+    tokio::spawn(async move {
+        let mut last_snapshot_json: Option<String> = None;
+        let mut interval = time::interval(Duration::from_secs(1));
+        loop {
+            if let Ok(snapshot) = worker_stream_snapshot(&state, &principal).await
+                && let Ok(snapshot_json) = serde_json::to_string(&snapshot)
+                && last_snapshot_json.as_deref() != Some(snapshot_json.as_str())
+            {
+                last_snapshot_json = Some(snapshot_json.clone());
+                if tx
+                    .send(Ok::<_, Infallible>(
+                        Event::default()
+                            .event("workers.snapshot")
+                            .data(snapshot_json),
+                    ))
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
+            }
+            interval.tick().await;
+        }
+    });
+
+    Ok(Sse::new(ReceiverStream::new(rx))
+        .keep_alive(axum::response::sse::KeepAlive::new().interval(Duration::from_secs(15))))
+}
+
+async fn worker_stream_snapshot(
+    state: &AppState,
+    principal: &MeResponse,
+) -> Result<WorkerStreamSnapshot, ApiError> {
+    Ok(WorkerStreamSnapshot {
+        workers: worker_list_response(state, principal).await?,
+        history: worker_lifecycle_history_response(state).await?,
+    })
 }
 
 fn registry_worker_summary(worker: crate::tunnel::RegisteredWorker) -> WorkerSummary {
@@ -241,12 +317,58 @@ pub async fn dispatch_queue(
     headers: HeaderMap,
 ) -> Result<Json<DispatchQueueApiResponse>, ApiError> {
     auth::require_permission(&headers, &state, "workers", "read").await?;
+    Ok(Json(ApiResponse::success(
+        dispatch_queue_response(&state).await?,
+    )))
+}
+
+async fn dispatch_queue_response(
+    state: &AppState,
+) -> Result<tikeo_storage::QueueOverview, ApiError> {
     let queue = state
         .workflows
         .queue_overview(100)
         .await
         .map_err(|error| ApiError::storage(&error))?;
-    Ok(Json(ApiResponse::success(queue)))
+    Ok(queue)
+}
+
+pub async fn stream_dispatch_queue(
+    State(state): State<Arc<AppState>>,
+    mut headers: HeaderMap,
+    Query(query): Query<StreamAuthQuery>,
+) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
+    apply_stream_token(&mut headers, &query)?;
+    auth::require_permission(&headers, &state, "workers", "read").await?;
+    let (tx, rx) = mpsc::channel(16);
+
+    tokio::spawn(async move {
+        let mut last_snapshot_json: Option<String> = None;
+        let mut interval = time::interval(Duration::from_secs(1));
+        loop {
+            if let Ok(queue) = dispatch_queue_response(&state).await
+                && let Ok(snapshot_json) = serde_json::to_string(&queue)
+                && last_snapshot_json.as_deref() != Some(snapshot_json.as_str())
+            {
+                last_snapshot_json = Some(snapshot_json.clone());
+                if tx
+                    .send(Ok::<_, Infallible>(
+                        Event::default()
+                            .event("dispatchQueue.snapshot")
+                            .data(snapshot_json),
+                    ))
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
+            }
+            interval.tick().await;
+        }
+    });
+
+    Ok(Sse::new(ReceiverStream::new(rx))
+        .keep_alive(axum::response::sse::KeepAlive::new().interval(Duration::from_secs(15))))
 }
 
 #[utoipa::path(post, path = "/api/v1/dispatch-queue:claim", tag = "workers", request_body = ClaimDispatchQueueRequest)]

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   cancelInstance,
   getInstance,
+  instanceLogStreamUrl,
   listInstanceAttempts,
   listInstanceLogs,
   listJobInstances,
@@ -280,11 +281,34 @@ export function InstancesPage() {
     if (!active || !logDrawerOpen || !selectedInstance) {
       return undefined;
     }
-    const timer = window.setInterval(() => {
-      void loadLogs(selectedInstance, false);
-    }, 2_000);
-    return () => window.clearInterval(timer);
-  }, [active, loadLogs, logDrawerOpen, selectedInstance]);
+    const source = new EventSource(instanceLogStreamUrl(selectedInstance.id));
+    source.addEventListener('instance.snapshot', (event) => {
+      try {
+        const snapshot = JSON.parse((event as MessageEvent).data) as {
+          instance: JobInstanceSummary;
+          attempts: JobInstanceAttemptSummary[];
+        };
+        setSelectedInstance(snapshot.instance);
+        setAttempts(snapshot.attempts);
+        setInstances((current) => current.map((item) => item.id === snapshot.instance.id ? snapshot.instance : item));
+        setAttemptsByInstance((previous) => new Map(previous).set(snapshot.instance.id, snapshot.attempts));
+      } catch {
+        // Ignore malformed stream frames; the manual refresh button remains available.
+      }
+    });
+    source.addEventListener('instance.log', (event) => {
+      try {
+        const log = JSON.parse((event as MessageEvent).data) as JobInstanceLogSummary;
+        setLogs((current) => {
+          if (current.some((item) => item.id === log.id)) return current;
+          return [...current, log].sort((left, right) => left.sequence - right.sequence);
+        });
+      } catch {
+        // Ignore malformed stream frames; the manual refresh button remains available.
+      }
+    });
+    return () => source.close();
+  }, [active, logDrawerOpen, selectedInstance?.id]);
 
   const cancelRunningInstance = async (instance: JobInstanceSummary) => {
     try {

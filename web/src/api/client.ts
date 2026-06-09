@@ -706,6 +706,24 @@ export function getAuthToken(): string | null {
   return authToken;
 }
 
+function streamUrl(path: string): string {
+  const token = getAuthToken();
+  const separator = path.includes('?') ? '&' : '?';
+  return token === null ? `${API_BASE}${path}` : `${API_BASE}${path}${separator}token=${encodeURIComponent(token)}`;
+}
+
+export function instanceLogStreamUrl(instanceId: string): string {
+  return streamUrl(`/api/v1/instances/${encodeURIComponent(instanceId)}/logs/stream`);
+}
+
+export function workerStreamUrl(): string {
+  return streamUrl('/api/v1/workers/stream');
+}
+
+export function dispatchQueueStreamUrl(): string {
+  return streamUrl('/api/v1/dispatch-queue/stream');
+}
+
 export function setAuthToken(token: string | null): void {
   authToken = token;
   if (typeof localStorage === 'undefined') {

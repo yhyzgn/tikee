@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
 use axum::http::HeaderMap;
+use serde::Deserialize;
 use tikeo_core::{ExecutionMode, ScheduleType, TriggerType};
 use tracing::warn;
 
@@ -8,6 +9,28 @@ use crate::http::{AppState, error::ApiError, trace};
 
 pub(crate) fn trace_id(headers: &HeaderMap) -> String {
     trace::resolve_trace_id(headers)
+}
+
+/// Query-string authentication fallback for browser `EventSource` clients.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct StreamAuthQuery {
+    /// Bearer token appended as `?token=...` when `EventSource` cannot set headers.
+    pub token: Option<String>,
+}
+
+pub(super) fn apply_stream_token(
+    headers: &mut HeaderMap,
+    query: &StreamAuthQuery,
+) -> Result<(), ApiError> {
+    if let Some(token) = query.token.as_deref()
+        && !headers.contains_key(axum::http::header::AUTHORIZATION)
+    {
+        let value = format!("Bearer {token}")
+            .parse()
+            .map_err(|_| ApiError::unauthorized("invalid stream token"))?;
+        headers.insert(axum::http::header::AUTHORIZATION, value);
+    }
+    Ok(())
 }
 
 pub(crate) fn client_ip(headers: &HeaderMap) -> Option<String> {

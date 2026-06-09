@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 
-import { ApiClientError, createAppScope, createCalendar, createJob, createNamespace, createPlugin, createSdkApiKey, createServiceAccount, createWorkerPool, deletePlugin, diffGitOpsManifest, disableServiceAccount, dryRunWorkflow, exportGitOpsManifest, getAuthToken, listInstanceAttempts, listInstanceLogs, getJobImpact, getJobSchedulingAdvice, getJobTopology, getWorkflowReplay, listJobVersions, listJobs, listNamespaces, listPlugins, listServiceAccounts, listWorkerPools, login, rollbackJob, setAuthErrorHandler, setAuthToken, triggerJob, triggerJobWebhookEvent, updateJob, updatePlugin, updateSdkApiKey, updateServiceAccount, updateWorkflow } from './client';
+import { ApiClientError, createAppScope, createCalendar, createJob, createNamespace, createPlugin, createSdkApiKey, createServiceAccount, createWorkerPool, deletePlugin, diffGitOpsManifest, disableServiceAccount, dispatchQueueStreamUrl, dryRunWorkflow, exportGitOpsManifest, getAuthToken, instanceLogStreamUrl, listInstanceAttempts, listInstanceLogs, getJobImpact, getJobSchedulingAdvice, getJobTopology, getWorkflowReplay, listJobVersions, listJobs, listNamespaces, listPlugins, listServiceAccounts, listWorkerPools, login, rollbackJob, setAuthErrorHandler, setAuthToken, triggerJob, triggerJobWebhookEvent, updateJob, updatePlugin, updateSdkApiKey, updateServiceAccount, updateWorkflow, workerStreamUrl } from './client';
 
 const originalFetch = globalThis.fetch;
 
@@ -680,5 +680,13 @@ describe('api client envelope handling', () => {
     await triggerJob('job_1');
 
     expect(capturedHeaders.get('authorization')).toBe('Bearer AbC123xYz789AbC123xYz789AbC123xYz789AbC123xYz789');
+  });
+
+  test('builds token-authenticated SSE stream URLs for EventSource', () => {
+    setAuthToken('stream-token/with symbols');
+
+    expect(instanceLogStreamUrl('inst 1')).toBe('/api/v1/instances/inst%201/logs/stream?token=stream-token%2Fwith%20symbols');
+    expect(workerStreamUrl()).toBe('/api/v1/workers/stream?token=stream-token%2Fwith%20symbols');
+    expect(dispatchQueueStreamUrl()).toBe('/api/v1/dispatch-queue/stream?token=stream-token%2Fwith%20symbols');
   });
 });

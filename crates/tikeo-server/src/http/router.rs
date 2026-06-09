@@ -353,12 +353,18 @@ pub(super) fn api_router() -> Router<Arc<AppState>> {
             get(routes::list_instance_logs),
         )
         .route(
+            "/instances/{instance}/logs/stream",
+            get(routes::stream_instance_logs),
+        )
+        .route(
             "/instances/{instance}/attempts",
             get(routes::list_instance_attempts),
         )
         .route("/workers", get(routes::list_workers))
+        .route("/workers/stream", get(routes::stream_workers))
         .route("/workers/history", get(routes::worker_lifecycle_history))
         .route("/dispatch-queue", get(routes::dispatch_queue))
+        .route("/dispatch-queue/stream", get(routes::stream_dispatch_queue))
         .route(
             "/dispatch-queue:claim",
             axum::routing::post(routes::claim_dispatch_queue),

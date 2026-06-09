@@ -16,7 +16,7 @@ use tikeo_storage::{
 use tokio::{sync::mpsc, time};
 use tokio_stream::{Stream, wrappers::ReceiverStream};
 
-use super::common::audit;
+use super::common::{StreamAuthQuery, apply_stream_token, audit};
 
 use crate::http::{
     AppState, auth,
@@ -42,11 +42,6 @@ pub struct CreateWorkflowRequest {
 pub struct UpdateWorkflowRequest {
     pub name: String,
     pub definition: WorkflowDefinition,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-pub struct StreamAuthQuery {
-    pub token: Option<String>,
 }
 
 #[utoipa::path(post, path = "/api/v1/workflows", tag = "workflows", request_body = CreateWorkflowRequest)]
@@ -464,14 +459,7 @@ pub async fn stream_instance_events(
     Path(id): Path<String>,
     Query(query): Query<StreamAuthQuery>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
-    if let Some(token) = query.token
-        && !headers.contains_key(axum::http::header::AUTHORIZATION)
-    {
-        let value = format!("Bearer {token}")
-            .parse()
-            .map_err(|_| ApiError::unauthorized("invalid stream token"))?;
-        headers.insert(axum::http::header::AUTHORIZATION, value);
-    }
+    apply_stream_token(&mut headers, &query)?;
     auth::require_permission(&headers, &state, "workflows", "read").await?;
     let last_event_id = headers
         .get("last-event-id")

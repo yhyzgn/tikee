@@ -37,7 +37,7 @@ pub use gitops::{diff_gitops_manifest, export_gitops_manifest};
 pub use jobs::{
     cancel_job_instance, create_job, delete_job, get_job_instance, list_instance_attempts,
     list_instance_logs, list_job_instances, list_job_versions, list_jobs, rollback_job,
-    trigger_job, update_job,
+    stream_instance_logs, trigger_job, update_job,
 };
 pub use metrics::metrics_summary;
 pub use observability::observability_status;
@@ -65,7 +65,10 @@ pub use service_accounts::{
 pub use system::{cluster_diagnostics, cluster_status, system_info};
 pub use topology::{job_impact, job_topology, workflow_replay};
 pub use users::{create_user, delete_user, list_users, update_user};
-pub use workers::{claim_dispatch_queue, dispatch_queue, list_workers, worker_lifecycle_history};
+pub use workers::{
+    claim_dispatch_queue, dispatch_queue, list_workers, stream_dispatch_queue, stream_workers,
+    worker_lifecycle_history,
+};
 pub use workflows::{
     advance_workflow_instance, complete_workflow_shard, create_workflow, dry_run_workflow,
     get_workflow, get_workflow_instance as get_workflow_instance_route, list_workflow_shards,

@@ -2,7 +2,7 @@ import { ReloadOutlined } from '@ant-design/icons';
 import { Button, Card, Col, Row, Statistic, Tag, Typography, message } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
 
-import { getDispatchQueue, type QueueOverview } from '../api/client';
+import { dispatchQueueStreamUrl, getDispatchQueue, type QueueOverview } from '../api/client';
 import { DispatchQueuePanel } from './workers/DispatchQueuePanel';
 import { useRouteActive } from '../hooks/useRouteActivation';
 import { ROUTE_META } from '../routes';
@@ -25,6 +25,18 @@ export function DispatchQueuePage() {
   }, []);
 
   useEffect(() => { if (active) void refresh(); }, [active, refresh]);
+  useEffect(() => {
+    if (!active) return undefined;
+    const source = new EventSource(dispatchQueueStreamUrl());
+    source.addEventListener('dispatchQueue.snapshot', (event) => {
+      try {
+        setQueue(JSON.parse((event as MessageEvent).data) as QueueOverview);
+      } catch {
+        // Ignore malformed stream frames; users can still refresh manually.
+      }
+    });
+    return () => source.close();
+  }, [active]);
 
   const health = queueHealth(queue);
 

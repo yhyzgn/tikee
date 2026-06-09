@@ -20,9 +20,8 @@ describe('Worker cluster page redesign', () => {
     expect(pageSource).toContain('WorkerTable');
     expect(pageSource).toContain('const workerData = await listWorkers();');
     expect(pageSource).toContain('setWorkers(workerData);');
-    expect(pageSource).toContain('WORKER_REFRESH_INTERVAL_MS');
-    expect(pageSource).toContain('const WORKER_REFRESH_INTERVAL_MS = 3_000;');
-    expect(pageSource).toContain('refresh({ silent: true })');
+    expect(pageSource).toContain('new EventSource(workerStreamUrl())');
+    expect(pageSource).toContain("source.addEventListener('workers.snapshot'");
     expect(pageSource).not.toContain('DispatchQueuePanel');
     expect(pageSource).toContain('ROUTE_META.dispatchQueue.path');
     expect(pageSource).toContain('WorkerLifecycleHistory');
@@ -39,6 +38,8 @@ describe('Worker cluster page redesign', () => {
     expect(tableSource).toContain('从节点');
     expect(tableSource).toContain('worker.structuredCapabilities?.tags');
     expect(queuePageSource).toContain('调度队列');
+    expect(queuePageSource).toContain('new EventSource(dispatchQueueStreamUrl())');
+    expect(queuePageSource).toContain("source.addEventListener('dispatchQueue.snapshot'");
     expect(queueSource).toContain('Segmented');
     expect(queueSource).toContain('Pending');
     expect(modelSource).toContain('filterWorkers');

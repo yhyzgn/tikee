@@ -1,12 +1,16 @@
-use std::sync::Arc;
+use std::{convert::Infallible, sync::Arc, time::Duration};
 
 use axum::{
     Json,
     extract::{Path, Query, State},
     http::HeaderMap,
+    response::sse::{Event, Sse},
 };
+use serde::Serialize;
 use tikeo_core::ExecutionMode;
 use tikeo_storage::{CreateJob, CreateJobInstance, UpdateJob};
+use tokio::{sync::mpsc, time};
+use tokio_stream::{Stream, wrappers::ReceiverStream};
 
 use crate::tunnel::registry::BroadcastSelector;
 
@@ -25,9 +29,19 @@ use crate::http::{
 };
 
 use super::common::{
-    audit, defaulted, parse_execution_mode, parse_schedule_type, parse_trigger_path,
-    parse_trigger_type,
+    StreamAuthQuery, apply_stream_token, audit, defaulted, parse_execution_mode,
+    parse_schedule_type, parse_trigger_path, parse_trigger_type,
 };
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+/// Snapshot emitted on the job instance log stream when instance state changes.
+pub struct JobInstanceLogStreamSnapshot {
+    /// Latest instance summary.
+    pub instance: JobInstanceSummary,
+    /// Latest broadcast attempt summaries for the instance.
+    pub attempts: Vec<JobInstanceAttemptSummary>,
+}
 
 /// List jobs.
 ///
@@ -995,6 +1009,91 @@ pub async fn list_instance_logs(
     })))
 }
 
+/// Stream one job instance's logs and status snapshots via Server-Sent Events.
+///
+/// # Errors
+///
+/// Returns authentication, not-found, or storage errors before opening the stream.
+pub async fn stream_instance_logs(
+    State(state): State<Arc<AppState>>,
+    mut headers: HeaderMap,
+    Path(instance): Path<String>,
+    Query(query): Query<StreamAuthQuery>,
+) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
+    apply_stream_token(&mut headers, &query)?;
+    auth::require_permission(&headers, &state, "instances", "read").await?;
+
+    let _ = state
+        .instances
+        .get(&instance)
+        .await
+        .map_err(|error| ApiError::storage(&error))?
+        .ok_or_else(|| ApiError::not_found(format!("instance not found: {instance}")))?;
+
+    let last_event_id = headers
+        .get("last-event-id")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse::<i64>().ok())
+        .unwrap_or(-1);
+    let (tx, rx) = mpsc::channel(32);
+
+    tokio::spawn(async move {
+        let mut after_sequence = last_event_id;
+        let mut last_snapshot_json: Option<String> = None;
+        let mut interval = time::interval(Duration::from_secs(1));
+        loop {
+            if let Ok(snapshot) = instance_log_stream_snapshot(&state, &instance).await
+                && let Ok(snapshot_json) = serde_json::to_string(&snapshot)
+                && last_snapshot_json.as_deref() != Some(snapshot_json.as_str())
+            {
+                last_snapshot_json = Some(snapshot_json.clone());
+                if tx
+                    .send(Ok::<_, Infallible>(
+                        Event::default()
+                            .event("instance.snapshot")
+                            .data(snapshot_json),
+                    ))
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
+            }
+
+            if let Ok(logs) = state
+                .logs
+                .list_by_instance_after_sequence(&instance, after_sequence)
+                .await
+            {
+                for log in logs {
+                    let item = JobInstanceLogSummary::from(log);
+                    after_sequence = after_sequence.max(item.sequence);
+                    let Ok(log_json) = serde_json::to_string(&item) else {
+                        continue;
+                    };
+                    if tx
+                        .send(Ok::<_, Infallible>(
+                            Event::default()
+                                .id(item.sequence.to_string())
+                                .event("instance.log")
+                                .data(log_json),
+                        ))
+                        .await
+                        .is_err()
+                    {
+                        return;
+                    }
+                }
+            }
+
+            interval.tick().await;
+        }
+    });
+
+    Ok(Sse::new(ReceiverStream::new(rx))
+        .keep_alive(axum::response::sse::KeepAlive::new().interval(Duration::from_secs(15))))
+}
+
 fn serialize_schedule_calendar(value: Option<&serde_json::Value>) -> Option<String> {
     value.and_then(|value| {
         if value.is_null() {
@@ -1071,6 +1170,31 @@ async fn instance_summary_with_latest_log(
             completed_at: result.completed_at,
         }),
         canary_routing: None,
+    })
+}
+
+async fn instance_log_stream_snapshot(
+    state: &AppState,
+    instance: &str,
+) -> Result<JobInstanceLogStreamSnapshot, ApiError> {
+    let summary = state
+        .instances
+        .get(instance)
+        .await
+        .map_err(|error| ApiError::storage(&error))?
+        .ok_or_else(|| ApiError::not_found(format!("instance not found: {instance}")))?;
+    let attempts = state
+        .attempts
+        .list_by_instance(instance)
+        .await
+        .map_err(|error| ApiError::storage(&error))?
+        .into_iter()
+        .map(JobInstanceAttemptSummary::from)
+        .collect();
+
+    Ok(JobInstanceLogStreamSnapshot {
+        instance: instance_summary_with_latest_log(state, summary).await?,
+        attempts,
     })
 }
 
