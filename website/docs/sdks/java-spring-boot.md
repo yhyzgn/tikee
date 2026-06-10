@@ -258,6 +258,17 @@ var selector = new BroadcastSelectorRequest(
 client.triggerJob(created.id(), TriggerJobRequest.broadcastApi(selector));
 ```
 
+
+## Source-backed reference links
+
+Keep SDK helper docs anchored to source-derived API and protocol references:
+
+- Create helper endpoint: [`POST /api/v1/jobs`](../reference/management-openapi#post-api-v1-jobs)
+- Trigger helper endpoint: [`POST /api/v1/jobs/{job}:trigger`](../reference/management-openapi#post-api-v1-jobs-job-trigger)
+- Instance polling endpoint: [`GET /api/v1/instances/{instance}`](../reference/management-openapi#get-api-v1-instances-instance)
+- Instance log endpoint: [`GET /api/v1/instances/{instance}/logs`](../reference/management-openapi#get-api-v1-instances-instance-logs)
+- Worker dispatch message: [`DispatchTask`](../reference/worker-tunnel-protobuf#dispatchtask)
+
 ## Non-Boot Spring Framework integration
 
 Use `tikeo-spring`, `tikeo-spring6`, or `tikeo-spring5` when you have a Spring Framework application without Boot auto-configuration. You must define the registry and Worker client beans yourself.

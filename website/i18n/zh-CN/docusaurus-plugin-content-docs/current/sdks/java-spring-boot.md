@@ -258,6 +258,17 @@ var selector = new BroadcastSelectorRequest(
 client.triggerJob(created.id(), TriggerJobRequest.broadcastApi(selector));
 ```
 
+
+## Source-backed 参考链接
+
+SDK helper 文档必须锚定到从源码整理出的 API 与协议参考：
+
+- 创建 helper 端点：[`POST /api/v1/jobs`](../reference/management-openapi#post-api-v1-jobs)
+- 触发 helper 端点：[`POST /api/v1/jobs/{job}:trigger`](../reference/management-openapi#post-api-v1-jobs-job-trigger)
+- 实例轮询端点：[`GET /api/v1/instances/{instance}`](../reference/management-openapi#get-api-v1-instances-instance)
+- 实例日志端点：[`GET /api/v1/instances/{instance}/logs`](../reference/management-openapi#get-api-v1-instances-instance-logs)
+- Worker 派发消息：[`DispatchTask`](../reference/worker-tunnel-protobuf#dispatchtask)
+
 ## 非 Boot Spring Framework 集成
 
 已有 Spring Framework 应用但不使用 Boot auto-configuration 时，选择 `tikeo-spring`、`tikeo-spring6` 或 `tikeo-spring5`。你需要自己定义 registry 和 Worker client bean。

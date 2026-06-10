@@ -89,6 +89,17 @@ broadcast := tikeo.BroadcastAPITrigger(&tikeo.BroadcastSelectorRequest{
 _, err := client.TriggerJob(ctx, created.ID, broadcast)
 ```
 
+
+## Source-backed reference links
+
+Keep SDK helper docs anchored to source-derived API and protocol references:
+
+- Create helper endpoint: [`POST /api/v1/jobs`](../reference/management-openapi#post-api-v1-jobs)
+- Trigger helper endpoint: [`POST /api/v1/jobs/{job}:trigger`](../reference/management-openapi#post-api-v1-jobs-job-trigger)
+- Instance polling endpoint: [`GET /api/v1/instances/{instance}`](../reference/management-openapi#get-api-v1-instances-instance)
+- Instance log endpoint: [`GET /api/v1/instances/{instance}/logs`](../reference/management-openapi#get-api-v1-instances-instance-logs)
+- Worker dispatch message: [`DispatchTask`](../reference/worker-tunnel-protobuf#dispatchtask)
+
 ## Minimal worker mental model
 
 The Go SDK follows the same Worker Tunnel model as Rust and Java. A worker connects out to the Server, registers metadata, heartbeats, receives dispatches, and reports logs/results back through the tunnel.

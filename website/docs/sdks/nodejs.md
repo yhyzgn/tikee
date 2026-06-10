@@ -92,6 +92,17 @@ const selector: BroadcastSelectorRequest = {
 await management.triggerJob(created.id, broadcastApiTrigger(selector));
 ```
 
+
+## Source-backed reference links
+
+Keep SDK helper docs anchored to source-derived API and protocol references:
+
+- Create helper endpoint: [`POST /api/v1/jobs`](../reference/management-openapi#post-api-v1-jobs)
+- Trigger helper endpoint: [`POST /api/v1/jobs/{job}:trigger`](../reference/management-openapi#post-api-v1-jobs-job-trigger)
+- Instance polling endpoint: [`GET /api/v1/instances/{instance}`](../reference/management-openapi#get-api-v1-instances-instance)
+- Instance log endpoint: [`GET /api/v1/instances/{instance}/logs`](../reference/management-openapi#get-api-v1-instances-instance-logs)
+- Worker dispatch message: [`DispatchTask`](../reference/worker-tunnel-protobuf#dispatchtask)
+
 ## Capability discipline
 
 JavaScript and TypeScript workers can integrate quickly with web ecosystems, but they must still follow Tikeo's scheduling contract. Do not advertise SQL, script, plugin, or processor capabilities unless the runtime can execute them safely. Missing tools should fail closed and surface visible task or diagnostic errors.

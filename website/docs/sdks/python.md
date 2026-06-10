@@ -83,6 +83,17 @@ selector = tikeo.BroadcastSelectorRequest(
 management.trigger_job(created.id, tikeo.broadcast_api_trigger(selector))
 ```
 
+
+## Source-backed reference links
+
+Keep SDK helper docs anchored to source-derived API and protocol references:
+
+- Create helper endpoint: [`POST /api/v1/jobs`](../reference/management-openapi#post-api-v1-jobs)
+- Trigger helper endpoint: [`POST /api/v1/jobs/{job}:trigger`](../reference/management-openapi#post-api-v1-jobs-job-trigger)
+- Instance polling endpoint: [`GET /api/v1/instances/{instance}`](../reference/management-openapi#get-api-v1-instances-instance)
+- Instance log endpoint: [`GET /api/v1/instances/{instance}/logs`](../reference/management-openapi#get-api-v1-instances-instance-logs)
+- Worker dispatch message: [`DispatchTask`](../reference/worker-tunnel-protobuf#dispatchtask)
+
 ## Capability discipline
 
 Python is often used to shell out to local tools. Keep that flexibility governed: advertise script runners only when they are installed and controlled, route task logs through task context APIs, and keep SDK diagnostics separate from task execution evidence.

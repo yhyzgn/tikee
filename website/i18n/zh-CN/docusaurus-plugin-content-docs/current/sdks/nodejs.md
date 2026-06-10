@@ -91,6 +91,17 @@ const selector: BroadcastSelectorRequest = {
 await management.triggerJob(created.id, broadcastApiTrigger(selector));
 ```
 
+
+## Source-backed 参考链接
+
+SDK helper 文档必须锚定到从源码整理出的 API 与协议参考：
+
+- 创建 helper 端点：[`POST /api/v1/jobs`](../reference/management-openapi#post-api-v1-jobs)
+- 触发 helper 端点：[`POST /api/v1/jobs/{job}:trigger`](../reference/management-openapi#post-api-v1-jobs-job-trigger)
+- 实例轮询端点：[`GET /api/v1/instances/{instance}`](../reference/management-openapi#get-api-v1-instances-instance)
+- 实例日志端点：[`GET /api/v1/instances/{instance}/logs`](../reference/management-openapi#get-api-v1-instances-instance-logs)
+- Worker 派发消息：[`DispatchTask`](../reference/worker-tunnel-protobuf#dispatchtask)
+
 ## 能力广告纪律
 
 Node.js Worker 集成 Web 生态很快，但仍必须遵守 Tikeo 调度契约。SQL、script、plugin 或 processor capability 必须真实可执行；缺失工具应 fail closed，并产生可见任务或诊断错误。

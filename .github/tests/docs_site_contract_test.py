@@ -23,6 +23,8 @@ P0_DOCS = [
     "deployment/kubernetes.md",
     "integrations/overview.md",
     "reference/configuration.md",
+    "reference/management-openapi.md",
+    "reference/worker-tunnel-protobuf.md",
     "reference/troubleshooting.md",
 ]
 
@@ -70,6 +72,46 @@ SDK_MANAGEMENT_COMMON_TOKENS = [
     "triggerType=api",
     "executionMode=single",
     "broadcastSelector",
+]
+
+REFERENCE_DOC_EXPECTATIONS = {
+    "reference/management-openapi.md": [
+        "crates/tikeo-server/src/http/openapi.rs",
+        "crates/tikeo-server/src/http/router.rs",
+        "/api-docs/openapi.json",
+        "/api/v1/jobs",
+        "/api/v1/jobs/{job}:trigger",
+        "/api/v1/instances/{instance}",
+        "/api/v1/instances/{instance}/logs",
+        "CreateJobRequest",
+        "TriggerJobRequest",
+        "ApiResponse",
+        "x-tikeo-api-key",
+    ],
+    "reference/worker-tunnel-protobuf.md": [
+        "crates/tikeo-proto/proto/worker.proto",
+        "package tikeo.worker.v1",
+        "WorkerTunnelService",
+        "OpenTunnel",
+        "SubscribeTaskLogs",
+        "RegisterWorker",
+        "Heartbeat",
+        "WorkerRegistered",
+        "DispatchTask",
+        "TaskLog",
+        "TaskResult",
+        "TaskCheckpoint",
+        "assignment_token",
+        "processor_name",
+    ],
+}
+
+SDK_REFERENCE_LINK_TOKENS = [
+    "../reference/management-openapi#post-api-v1-jobs",
+    "../reference/management-openapi#post-api-v1-jobs-job-trigger",
+    "../reference/management-openapi#get-api-v1-instances-instance",
+    "../reference/management-openapi#get-api-v1-instances-instance-logs",
+    "../reference/worker-tunnel-protobuf#dispatchtask",
 ]
 
 
@@ -209,6 +251,56 @@ class DocsSiteContractTest(unittest.TestCase):
             for relative_path, specific_tokens in SDK_MANAGEMENT_EXPECTATIONS.items():
                 text = (root / relative_path).read_text()
                 for token in SDK_MANAGEMENT_COMMON_TOKENS + specific_tokens:
+                    self.assertIn(token, text, f"{root.relative_to(WEBSITE)} / {relative_path} missing {token!r}")
+
+    def test_reference_docs_are_source_backed_for_openapi_and_worker_proto(self):
+        openapi_source = "\n".join(
+            path.read_text()
+            for path in [
+                ROOT / "crates/tikeo-server/src/http/openapi.rs",
+                ROOT / "crates/tikeo-server/src/http/router.rs",
+                ROOT / "crates/tikeo-server/src/http/routes/jobs.rs",
+            ]
+        )
+        proto_source = (ROOT / "crates/tikeo-proto/proto/worker.proto").read_text()
+        for token in [
+            "/api-docs/openapi.json",
+            "/api/v1/jobs",
+            "/api/v1/jobs/{job}:trigger",
+            "/api/v1/instances/{instance}",
+            "/api/v1/instances/{instance}/logs",
+        ]:
+            self.assertIn(token, openapi_source)
+        for token in [
+            "WorkerTunnelService",
+            "OpenTunnel",
+            "RegisterWorker",
+            "DispatchTask",
+            "TaskLog",
+            "TaskResult",
+            "TaskCheckpoint",
+        ]:
+            self.assertIn(token, proto_source)
+
+        zh_root = WEBSITE / "i18n/zh-CN/docusaurus-plugin-content-docs/current"
+        for root in [WEBSITE / "docs", zh_root]:
+            for relative_path, tokens in REFERENCE_DOC_EXPECTATIONS.items():
+                path = root / relative_path
+                self.assertTrue(path.exists(), f"missing reference doc: {path}")
+                text = path.read_text()
+                for token in tokens:
+                    self.assertIn(token, text, f"{root.relative_to(WEBSITE)} / {relative_path} missing {token!r}")
+
+        sidebars = (WEBSITE / "sidebars.ts").read_text()
+        for item in ["reference/management-openapi", "reference/worker-tunnel-protobuf"]:
+            self.assertIn(item, sidebars)
+
+    def test_sdk_docs_link_helpers_to_exact_reference_anchors(self):
+        zh_root = WEBSITE / "i18n/zh-CN/docusaurus-plugin-content-docs/current"
+        for root in [WEBSITE / "docs", zh_root]:
+            for relative_path in SDK_MANAGEMENT_EXPECTATIONS:
+                text = (root / relative_path).read_text()
+                for token in SDK_REFERENCE_LINK_TOKENS:
                     self.assertIn(token, text, f"{root.relative_to(WEBSITE)} / {relative_path} missing {token!r}")
 
 

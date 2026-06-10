@@ -2676,3 +2676,33 @@ Verification:
 Notes:
 - The smoke uses app-scoped `x-tikeo-api-key` credentials only; no OIDC/browser session is used for SDK create/trigger.
 - The worker remains outbound-only via Worker Tunnel; no worker inbound port is opened.
+
+## 2026-06-10 — Source-derived OpenAPI/protobuf reference docs
+
+Agent:
+- Codex
+
+Work:
+- Added source-derived Management OpenAPI reference pages in English and zh-CN.
+- Added source-derived Worker Tunnel protobuf reference pages in English and zh-CN.
+- Added reference sidebar entries for `reference/management-openapi` and `reference/worker-tunnel-protobuf`.
+- Linked all English and zh-CN SDK docs for Rust, Go, Java Spring Boot, Python, and Node.js to exact create/trigger/instance/log endpoint anchors and the Worker Tunnel `DispatchTask` anchor.
+- Extended `.github/tests/docs_site_contract_test.py` with source-backed reference-page and SDK-link contracts.
+- Fixed Docusaurus/MDX endpoint-anchor rendering so `docs:build` completes without broken-anchor warnings.
+- Recorded the user's acceptance-stage rigor/context freshness directive in `~/.codex/CONSTITUTION.md`, OMX project memory/notepad, and `.memory/decisions.md`.
+
+Verification:
+- RED observed before reference implementation: `python3 .github/tests/docs_site_contract_test.py DocsSiteContractTest.test_reference_docs_are_source_backed_for_openapi_and_worker_proto DocsSiteContractTest.test_sdk_docs_link_helpers_to_exact_reference_anchors` failed because `website/docs/reference/management-openapi.md` was missing and SDK docs lacked exact reference links.
+- `python3 .github/tests/docs_site_contract_test.py DocsSiteContractTest.test_reference_docs_are_source_backed_for_openapi_and_worker_proto DocsSiteContractTest.test_sdk_docs_link_helpers_to_exact_reference_anchors` ✅
+- `python3 .github/tests/workflow_contract_test.py` ✅
+- `python3 .github/tests/docs_site_contract_test.py` ✅
+- `python3 .github/tests/management_smoke_contract_test.py` ✅
+- `python3 scripts/check-source-size.py` ✅
+- `python3 scripts/verify-github-actions-node-runtime.py --min-node-major 24` ✅
+- `.github/workflows/*.yml` YAML parse ✅
+- `git diff --check` ✅
+- `cd website && bun install --frozen-lockfile && bun run docs:typecheck && bun run docs:build` ✅; build output was checked for absence of `broken anchor` warnings.
+
+Notes:
+- First Docusaurus build surfaced a real MDX expression failure from bare `{job}` / `{instance}` in link text; this was fixed with MDX-safe code spans.
+- A later build surfaced Docusaurus broken-anchor warnings because raw `<a id=...>` anchors were not recognized by the anchor checker; headings were changed to stable generated-anchor text and reverified.

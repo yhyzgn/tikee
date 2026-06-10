@@ -90,6 +90,17 @@ broadcast := tikeo.BroadcastAPITrigger(&tikeo.BroadcastSelectorRequest{
 _, err := client.TriggerJob(ctx, created.ID, broadcast)
 ```
 
+
+## Source-backed 参考链接
+
+SDK helper 文档必须锚定到从源码整理出的 API 与协议参考：
+
+- 创建 helper 端点：[`POST /api/v1/jobs`](../reference/management-openapi#post-api-v1-jobs)
+- 触发 helper 端点：[`POST /api/v1/jobs/{job}:trigger`](../reference/management-openapi#post-api-v1-jobs-job-trigger)
+- 实例轮询端点：[`GET /api/v1/instances/{instance}`](../reference/management-openapi#get-api-v1-instances-instance)
+- 实例日志端点：[`GET /api/v1/instances/{instance}/logs`](../reference/management-openapi#get-api-v1-instances-instance-logs)
+- Worker 派发消息：[`DispatchTask`](../reference/worker-tunnel-protobuf#dispatchtask)
+
 ## Worker Tunnel 模型
 
 Go Worker 与 Rust、Java、Python、Node.js Worker 遵循同一协议：主动连接 Server，注册 metadata，心跳，接收派发，并通过 tunnel 回传日志和结果。

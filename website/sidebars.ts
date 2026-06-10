@@ -53,6 +53,8 @@ const sidebars: SidebarsConfig = {
       label: 'Reference',
       items: [
         'reference/configuration',
+        'reference/management-openapi',
+        'reference/worker-tunnel-protobuf',
         'reference/troubleshooting',
       ],
     },

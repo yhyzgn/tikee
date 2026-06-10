@@ -86,6 +86,17 @@ let broadcast = ManagementTriggerJobRequest::broadcast_api(Some(
 let _instance = management.trigger_job(&created.id, broadcast).await?;
 ```
 
+
+## Source-backed 参考链接
+
+SDK helper 文档必须锚定到从源码整理出的 API 与协议参考：
+
+- 创建 helper 端点：[`POST /api/v1/jobs`](../reference/management-openapi#post-api-v1-jobs)
+- 触发 helper 端点：[`POST /api/v1/jobs/{job}:trigger`](../reference/management-openapi#post-api-v1-jobs-job-trigger)
+- 实例轮询端点：[`GET /api/v1/instances/{instance}`](../reference/management-openapi#get-api-v1-instances-instance)
+- 实例日志端点：[`GET /api/v1/instances/{instance}/logs`](../reference/management-openapi#get-api-v1-instances-instance-logs)
+- Worker 派发消息：[`DispatchTask`](../reference/worker-tunnel-protobuf#dispatchtask)
+
 ## Worker 心智模型
 
 Rust Worker 负责三件事：连接 Server tunnel，只广告真实可执行能力，并带着 Server 下发的 assignment token 回传日志和结果。这样调度、审计、stale worker fencing 才能保持一致。

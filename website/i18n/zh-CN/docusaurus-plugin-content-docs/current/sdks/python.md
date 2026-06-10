@@ -82,6 +82,17 @@ selector = tikeo.BroadcastSelectorRequest(
 management.trigger_job(created.id, tikeo.broadcast_api_trigger(selector))
 ```
 
+
+## Source-backed 参考链接
+
+SDK helper 文档必须锚定到从源码整理出的 API 与协议参考：
+
+- 创建 helper 端点：[`POST /api/v1/jobs`](../reference/management-openapi#post-api-v1-jobs)
+- 触发 helper 端点：[`POST /api/v1/jobs/{job}:trigger`](../reference/management-openapi#post-api-v1-jobs-job-trigger)
+- 实例轮询端点：[`GET /api/v1/instances/{instance}`](../reference/management-openapi#get-api-v1-instances-instance)
+- 实例日志端点：[`GET /api/v1/instances/{instance}/logs`](../reference/management-openapi#get-api-v1-instances-instance-logs)
+- Worker 派发消息：[`DispatchTask`](../reference/worker-tunnel-protobuf#dispatchtask)
+
 ## 能力广告纪律
 
 Python Worker 很容易调用本地命令，因此更需要治理边界。只有 runner 已安装并处于受控边界内，才应广告 script capability。任务日志应通过 task context API 输出，SDK diagnostics 应与任务执行证据分离。

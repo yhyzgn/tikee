@@ -83,6 +83,17 @@ let broadcast = ManagementTriggerJobRequest::broadcast_api(Some(
 let _instance = management.trigger_job(&created.id, broadcast).await?;
 ```
 
+
+## Source-backed reference links
+
+Keep SDK helper docs anchored to source-derived API and protocol references:
+
+- Create helper endpoint: [`POST /api/v1/jobs`](../reference/management-openapi#post-api-v1-jobs)
+- Trigger helper endpoint: [`POST /api/v1/jobs/{job}:trigger`](../reference/management-openapi#post-api-v1-jobs-job-trigger)
+- Instance polling endpoint: [`GET /api/v1/instances/{instance}`](../reference/management-openapi#get-api-v1-instances-instance)
+- Instance log endpoint: [`GET /api/v1/instances/{instance}/logs`](../reference/management-openapi#get-api-v1-instances-instance-logs)
+- Worker dispatch message: [`DispatchTask`](../reference/worker-tunnel-protobuf#dispatchtask)
+
 ## Minimal worker mental model
 
 A Rust worker owns three responsibilities: connect to the Server tunnel, advertise only the capabilities it can really execute, and return logs/results with the assignment token supplied by the Server. This keeps scheduling, audit, and stale-worker fencing aligned.

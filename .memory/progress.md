@@ -1450,3 +1450,21 @@ Verification evidence:
 - Added `.github/tests/management_smoke_contract_test.py` and workflow contract coverage for the smoke script, repository contract-test CI policy, CI smoke execution, and management-trigger artifact upload.
 - Main CI `workflow-policy` now runs repository contract tests, and `other-cross-language-smoke` now runs the management trigger e2e smoke after the cross-language worker parity smoke using the already-built server binary.
 - Verification passed: RED->GREEN management smoke contract, RED->GREEN workflow contract for CI wiring, real management trigger e2e smoke, full workflow/docs contracts, source-size audit, GitHub Actions Node runtime policy, YAML parse, `git diff --check`, and Rust workspace fmt/clippy/test/build.
+
+### 2026-06-10 — Source-derived OpenAPI/protobuf reference docs
+- Added English and zh-CN reference pages for Management OpenAPI and Worker Tunnel protobuf, derived from `crates/tikeo-server/src/http/openapi.rs`, `crates/tikeo-server/src/http/router.rs`, `crates/tikeo-server/src/http/routes/jobs.rs`, and `crates/tikeo-proto/proto/worker.proto`.
+- Linked all Rust, Go, Java Spring Boot, Python, and Node.js SDK management helper docs to exact endpoint anchors for create, trigger, instance polling, instance logs, plus the Worker Tunnel `DispatchTask` message.
+- Extended docs contracts so future changes cannot drop reference pages, source tokens, sidebar entries, or SDK helper-to-reference links.
+- Fixed an MDX/Docusaurus anchor issue exposed by `docs:build`: endpoint headings now generate stable anchors without broken-anchor warnings.
+- Recorded the acceptance-stage rigor/context freshness rule in `~/.codex/CONSTITUTION.md`, OMX project memory/notepad, and `.memory/decisions.md` per user instruction.
+Verification evidence:
+- RED observed: `python3 .github/tests/docs_site_contract_test.py DocsSiteContractTest.test_reference_docs_are_source_backed_for_openapi_and_worker_proto DocsSiteContractTest.test_sdk_docs_link_helpers_to_exact_reference_anchors` failed because `website/docs/reference/management-openapi.md` was missing and SDK docs lacked exact reference links.
+- `python3 .github/tests/docs_site_contract_test.py DocsSiteContractTest.test_reference_docs_are_source_backed_for_openapi_and_worker_proto DocsSiteContractTest.test_sdk_docs_link_helpers_to_exact_reference_anchors` passed after implementation.
+- `python3 .github/tests/workflow_contract_test.py` passed.
+- `python3 .github/tests/docs_site_contract_test.py` passed.
+- `python3 .github/tests/management_smoke_contract_test.py` passed.
+- `python3 scripts/check-source-size.py` passed.
+- `python3 scripts/verify-github-actions-node-runtime.py --min-node-major 24` passed.
+- `.github/workflows/*.yml` YAML parse passed.
+- `git diff --check` passed.
+- `cd website && bun install --frozen-lockfile && bun run docs:typecheck && bun run docs:build` passed; build log checked for no `broken anchor` warnings.

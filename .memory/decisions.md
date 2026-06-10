@@ -551,3 +551,13 @@ Rationale:
 
 Constraint:
 - Future SDK docs must keep `x-tikeo-api-key` / `TIKEO_MANAGEMENT_API_KEY`, `triggerType=api`, default `executionMode=single`, and explicit `broadcastSelector` wording/source tests aligned.
+
+## 2026-06-10 — Acceptance-stage rigor and context freshness rule
+
+Decision:
+- During functional/module testing and acceptance phases, scope must not be silently reduced to make work look complete.
+- If an agent finds any missing, incomplete, untested, or hallucinated behavior, it must fill the gap with production-grade implementation or explicitly record the real blocker.
+- Source-backed facts, current context, memory, prompts, and verification evidence must be kept fresh so later agents do not inherit context rot.
+
+Constraint:
+- This rule is also recorded in `~/.codex/CONSTITUTION.md` and OMX project memory; future work must apply it as an acceptance-phase operating rule.
