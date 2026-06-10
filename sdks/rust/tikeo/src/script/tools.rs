@@ -148,7 +148,7 @@ impl SandboxToolResolver {
                 return Some(legacy_local);
             }
         }
-        let install_dir = self.install_dir(tool_key);
+        let install_dir = Self::install_dir(tool_key);
         let bin_dir = install_dir.join("bin");
         let local = bin_dir.join(binary);
         if command_available(&local) {
@@ -160,7 +160,7 @@ impl SandboxToolResolver {
         command_available(&local).then_some(local)
     }
 
-    fn install_dir(&self, binary: &str) -> PathBuf {
+    fn install_dir(binary: &str) -> PathBuf {
         host_sandbox_tools_root().join(binary)
     }
 
@@ -174,13 +174,15 @@ impl SandboxToolResolver {
 fn host_sandbox_tools_root() -> PathBuf {
     std::env::var_os("TIKEO_SANDBOX_TOOLS_DIR")
         .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            std::env::var_os("HOME")
-                .map_or_else(|| PathBuf::from("."), PathBuf::from)
-                .join(".tikeo")
-                .join("sandbox-tools")
-        })
+        .map_or_else(
+            || {
+                std::env::var_os("HOME")
+                    .map_or_else(|| PathBuf::from("."), PathBuf::from)
+                    .join(".tikeo")
+                    .join("sandbox-tools")
+            },
+            PathBuf::from,
+        )
 }
 
 fn install_powershell(timeout: Duration, install_dir: &Path, bin_dir: &Path) -> bool {
@@ -212,7 +214,7 @@ fn install_powershell(timeout: Duration, install_dir: &Path, bin_dir: &Path) -> 
     }
     let archive = install_dir.join(&archive_name);
     let partial_archive = install_dir.join(format!("{archive_name}.part"));
-    let Ok(tmp_root) = std::fs::create_dir_all(install_dir).and_then(|_| {
+    let Ok(tmp_root) = std::fs::create_dir_all(install_dir).and_then(|()| {
         std::process::Command::new("mktemp")
             .arg("-d")
             .arg(install_dir.join(".pwsh-install-XXXXXX"))
@@ -220,7 +222,9 @@ fn install_powershell(timeout: Duration, install_dir: &Path, bin_dir: &Path) -> 
             .map_err(std::io::Error::other)
             .and_then(|output| {
                 if output.status.success() {
-                    Ok(PathBuf::from(String::from_utf8_lossy(&output.stdout).trim().to_owned()))
+                    Ok(PathBuf::from(
+                        String::from_utf8_lossy(&output.stdout).trim().to_owned(),
+                    ))
                 } else {
                     Err(std::io::Error::other("mktemp failed"))
                 }
@@ -236,7 +240,8 @@ fn install_powershell(timeout: Duration, install_dir: &Path, bin_dir: &Path) -> 
         if archive.is_file() {
             std::fs::copy(&archive, &tmp_archive).ok()?;
         } else {
-            download_file(power_shell_install_timeout(timeout), &url, &partial_archive).then_some(())?;
+            download_file(power_shell_install_timeout(timeout), &url, &partial_archive)
+                .then_some(())?;
             std::fs::copy(&partial_archive, &tmp_archive).ok()?;
         }
         run_installer(
@@ -291,14 +296,13 @@ fn install_powershell(timeout: Duration, install_dir: &Path, bin_dir: &Path) -> 
 }
 
 fn power_shell_install_timeout(timeout: Duration) -> Duration {
-    if let Ok(configured) = std::env::var("TIKEO_POWERSHELL_INSTALL_TIMEOUT_MILLIS") {
-        if let Ok(millis) = configured.trim().parse::<u64>() {
-            return Duration::from_millis(millis.max(1_000));
-        }
+    if let Ok(configured) = std::env::var("TIKEO_POWERSHELL_INSTALL_TIMEOUT_MILLIS")
+        && let Ok(millis) = configured.trim().parse::<u64>()
+    {
+        return Duration::from_millis(millis.max(1_000));
     }
-    timeout.max(Duration::from_secs(30 * 60))
+    timeout.max(Duration::from_mins(30))
 }
-
 
 fn powershell_archive_platform() -> Option<&'static str> {
     match (std::env::consts::OS, std::env::consts::ARCH) {
@@ -318,8 +322,12 @@ fn download_file(timeout: Duration, url: &str, output: &Path) -> bool {
         return false;
     }
     let output_arg = output.to_string_lossy();
-    run_installer(timeout, "curl", &["-fL", "-C", "-", url, "-o", &output_arg], &[])
-        || run_installer(timeout, "wget", &["-q", url, "-O", &output_arg], &[])
+    run_installer(
+        timeout,
+        "curl",
+        &["-fL", "-C", "-", url, "-o", &output_arg],
+        &[],
+    ) || run_installer(timeout, "wget", &["-q", url, "-O", &output_arg], &[])
 }
 
 fn find_command(binary: &str) -> Option<PathBuf> {
@@ -461,19 +469,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn install_dir_prefers_host_cache_when_worker_state_has_no_existing_binary() {
-        let temp = std::env::temp_dir().join(format!(
-            "tikeo-rust-state-no-tool-{}",
-            std::process::id()
-        ));
-        let resolver = SandboxToolResolver {
-            state_dir: Some(temp.clone()),
-            auto_install: false,
-            install_timeout: Duration::from_secs(1),
-        };
-
-        assert_eq!(resolver.install_dir("pwsh"), host_sandbox_tools_root().join("pwsh"));
-        let _ = std::fs::remove_dir_all(temp);
+    fn install_dir_prefers_host_cache_root() {
+        assert_eq!(
+            SandboxToolResolver::install_dir("pwsh"),
+            host_sandbox_tools_root().join("pwsh")
+        );
     }
 
     #[test]
