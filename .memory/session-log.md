@@ -2735,4 +2735,6 @@ Verification:
 - Docs container smoke ✅: `/healthz`, `/docs/`, `/zh-CN/docs/`, `/search/`, `/robots.txt`, and `/search-index.json` returned expected content. `/search` redirects to canonical `/search/` under Docusaurus/nginx.
 
 Git:
-- Commit/push pending at time of memory update; final response should record hash and push status.
+- Commit: `1db7ade` (`Make the docs site a publishable module`).
+- Remote push: `git push origin main` succeeded (`413a21f..1db7ade main -> main`).
+- Note: `docs/Dockerfile`, `docs/.dockerignore`, and `docs/nginx/*` are committed and visible on `origin/main`; live Docker Hub push remains gated on release/manual workflow credentials.
