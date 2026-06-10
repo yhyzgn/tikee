@@ -2791,3 +2791,22 @@ Verification:
 Notes:
 - Live Docker Hub publish for `yhyzgn/tikeo-docs` remains the next release/workflow verification step.
 - Worker docs continue to preserve outbound-only boundaries; no business Worker inbound Service was documented.
+
+## 2026-06-11 — Notification Center and alerting boundary planning
+
+Agent:
+- Codex
+
+Work:
+- Audited the existing alerting implementation before planning: `alert_rules`, `alert_events`, `alert_delivery_attempts`, `AlertDispatcher`, provider adapters, alert retry/DLQ, alert HTTP routes, job instance statuses, Worker task-result transitions, and workflow `notification` node UI.
+- Determined that the existing Alert module should not be deleted or duplicated. It should remain the incident/rule/event subsystem, while a new Notification Center becomes the shared channel/template/policy/delivery subsystem.
+- Added `design/notification-center-alerting-plan.md` covering source-backed facts, vocabulary, data model, APIs, runtime flow, UI split, migration phases, acceptance criteria, and risks.
+- Updated `design/tikeo-architecture-design.md` to split Alerts from Notifications in route/UI planning and roadmap language.
+- Added `.prompt/165-notification-center-alerting-boundary.md` for the next implementation slice.
+
+Verification:
+- Planning was grounded in repository evidence from storage entities, server alert provider/retry modules, HTTP routes, job/instance lifecycle code, and workflow UI/docs references.
+- Pending local validation: diff whitespace/source-size checks before commit.
+
+Git:
+- Pending commit/push.

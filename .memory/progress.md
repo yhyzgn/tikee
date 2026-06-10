@@ -1496,3 +1496,9 @@ Verification evidence:
 - Verifier found three real quickstart defects; all were fixed and reverified.
 - Search and LLM static entrypoints now point at the deeper operator pages.
 Verification evidence: docs contract, workflow contract, management-smoke contract, Docusaurus typecheck/build, source-size audit, GitHub Actions runtime policy, diff whitespace check, docs Docker build, and docs container route smoke all passed.
+
+### 2026-06-11 — Notification Center / Alerting boundary plan
+- Planned the next alerting evolution as a separate Notification Center rather than a replacement for existing alerting.
+- Added `design/notification-center-alerting-plan.md` with source-backed current-state facts, canonical vocabulary, data model, API/UI/runtime migration plan, and acceptance criteria.
+- Updated the main architecture design so Alerts own rule/event/silence/recovery semantics while Notifications own reusable channels, templates, policies, delivery, retry, and DLQ.
+- Created `.prompt/165-notification-center-alerting-boundary.md` as the next implementation handoff for generic notification channels/policies while keeping existing alert APIs compatible.

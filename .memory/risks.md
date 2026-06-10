@@ -120,3 +120,9 @@
 - Risk that quickstart runbooks could hallucinate bootstrap fields or provide unrunnable SDK scripts is mitigated by contracts checking `data.registrationOpen`, exported `TOKEN`, repository-root `tikeo-quickstart-trigger.ts`, real Node.js SDK exports, and Docusaurus build.
 - Risk that docs containers behind local port mapping or reverse proxies redirect no-trailing-slash docs URLs to port 80 is mitigated by `absolute_redirect off` and `port_in_redirect off` in docs nginx config plus container route smoke.
 - Remaining risk: live Docker Hub digest for `yhyzgn/tikeo-docs` is still workflow-trigger-gated; live Kubernetes controller smokes still require external clusters/controllers.
+
+## 2026-06-11 — Alerting / Notification Center ambiguity risk
+
+- Existing alerting has real provider adapters, delivery attempts, retry, and DLQ, but alert rules still embed `channels_json`. If future work simply adds another notification implementation without a boundary, Tikeo will duplicate credentials, delivery state, provider adapters, and UI concepts.
+- Mitigation: treat Alerting as the abnormal-condition rule/event subsystem and Notification Center as the shared channel/template/policy/delivery subsystem. Preserve existing alert APIs during migration, but new job/workflow/alert touchpoints must use reusable notification channels and policies.
+- Additional risk: job retry flows can spam final-failure notifications on every failed attempt. Mitigation: model `retry_scheduled` separately and emit terminal `failed` / `retry_exhausted` only after retries are exhausted.

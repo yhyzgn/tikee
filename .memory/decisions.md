@@ -600,3 +600,17 @@ Rejected:
 
 Constraint:
 - Future docs updates must cite/source-check code paths, config defaults, SDK helpers, deploy scripts, Helm values, or smoke evidence before claiming behavior.
+
+## 2026-06-11 — Notification Center must be separate from Alerting
+
+Decision:
+- Alerting owns abnormal-condition rules, alert events, severity, dedupe, silence, recovery, and escalation.
+- Notification Center owns reusable outbound channels, templates, policies/subscriptions, provider delivery, retry, DLQ, channel tests, and redacted delivery history.
+- Alert rules should eventually reference notification policies/channels instead of embedding provider credentials in `alert_rules.channels_json`; existing alert routes and `channels_json` remain compatibility/migration surfaces.
+- Job, workflow, worker lifecycle, script governance, and alert events should all produce normalized notification messages through the same channel/policy/delivery engine.
+
+Rationale:
+- Current alerting code already supports real provider delivery and retry, but inline rule channels create duplicated credentials and cannot express job status or workflow notification-node touchpoints cleanly.
+
+Constraint:
+- Future implementation must preserve existing alert APIs while adding generic notification APIs; never confuse inbound webhook event sources with outbound webhook notification channels.
