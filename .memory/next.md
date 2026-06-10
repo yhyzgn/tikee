@@ -1,28 +1,25 @@
 # Latest completed slice
 
-- 2026-06-10: Docs module migration and publishing/search/user-guide completion are in place. The Docusaurus docs site module is now `docs/`, old shared docs media moved to `assets/docs/`, CI validates docs build plus docs Docker build, `publish-docker-docs.yml` publishes `yhyzgn/tikeo-docs`, and docs now include SEO/search/robots/OpenGraph/llms entrypoints plus source-backed English/zh-CN user guides for Dashboard, Jobs, Instances, Workers, Workflows, Scripts, Audit, and Settings. Follow-up prompt: `.prompt/162-docs-module-docker-and-acceptance-followup.md`.
+- 2026-06-10: Docs module migration, docs Docker publishing setup, SEO/search/llms readiness, source-backed user guides, and the pre-migration acceptance runbook follow-up are in place. The Docusaurus docs site module is `docs/`; shared media is under `assets/docs/`; docs Docker build/publish targets `yhyzgn/tikeo-docs`; and docs now include source-backed English/zh-CN runbooks for `scripts/management-trigger-e2e-smoke.sh` plus Nginx Ingress / Envoy Gateway / Traefik / Gateway API Kubernetes controller guidance. Follow-up prompt: `.prompt/163-docs-publish-verification-and-acceptance-followup.md`.
 
 # Next Work
 
 ## Current priority direction
 
-当前优先级：功能/模块测试验收阶段继续保持不收缩原则。独立 Docusaurus docs 站点已经完成 scaffold、P0 内容深度、zh-CN 路由镜像、部署 runbook、SDK create+trigger 文档、Management API trigger e2e smoke、source-derived Management OpenAPI / Worker Tunnel protobuf reference、docs module migration、docs Docker publishing、SEO/search/llms readiness 和用户指南深度。下一步应优先做真实验收证据扩展，而不是重复改名：docs Docker push workflow dry-run/发布验证、Management API trigger smoke 贡献者 runbook、Kubernetes controller-specific production docs，或继续补功能模块验收中发现的真实缺口。
+当前优先级仍是功能/模块测试验收阶段，不收缩、不臆造。已完成 docs scaffold、P0 内容深度、zh-CN 路由镜像、部署 runbook、SDK create+trigger 文档、Management API trigger e2e smoke、source-derived Management OpenAPI / Worker Tunnel protobuf reference、docs module migration、docs Docker publishing setup、SEO/search/llms readiness、用户指南深度、Management trigger smoke 贡献者 runbook，以及 Kubernetes controller-specific 文档。下一步应优先做 release/credential-gated 的真实发布验证或新发现的真实缺口，不要重复做已完成的 rename/runbook 工作。
 
 ## Immediate next slice
 
-1. Verify docs image publishing on a release/manual workflow run when credentials and tag are available; record the Docker Hub digest for `yhyzgn/tikeo-docs`.
-2. Add contributor runbook for `scripts/management-trigger-e2e-smoke.sh`:
-   - prerequisites
-   - `TIKEO_MANAGEMENT_TRIGGER_REBUILD_SERVER=0 scripts/management-trigger-e2e-smoke.sh`
-   - evidence directory and failure triage
-3. Kubernetes 后续可继续补真实控制器专项文档：Nginx/Envoy/Traefik/Gateway API controller 的实际生产 values、证书模式和 smoke runbook。
-4. 迁移工具（PowerJob/XXL-JOB）仍维持最低优先级 backlog，核心服务体验稳定后再做。
+1. Verify docs image publishing on a release/manual workflow run when Docker Hub credentials and tag/ref are available; record the Docker Hub digest for `yhyzgn/tikeo-docs`.
+2. If publish credentials/tag are unavailable, continue acceptance on newly discovered runtime gaps only; explicitly record blockers rather than inventing completion.
+3. 迁移工具（PowerJob/XXL-JOB）仍维持最低优先级 backlog，核心服务体验稳定后再做。
 
 ## Current verified baseline
 
-- Docs site module：默认 `/` 为英文站，`/zh-CN/` 为中文站；Docusaurus navbar/footer/sidebar/homepage/blog 均已本地化；`docs/docs/` 当前 P0 英文页面和 user-guide 页面通过最小深度/section/source-backed 契约；`docs/i18n/zh-CN/docusaurus-plugin-content-docs/current/` 覆盖所有当前 P0 与 user-guide routes，并通过 zh-CN 内容深度契约；共享 README/media assets 位于 `assets/docs/`。
+- Docs site module：默认 `/` 为英文站，`/zh-CN/` 为中文站；Docusaurus navbar/footer/sidebar/homepage/blog 均已本地化；`docs/docs/` 当前 P0 英文页面、user-guide 页面和 deployment runbooks 通过最小深度/section/source-backed 契约；`docs/i18n/zh-CN/docusaurus-plugin-content-docs/current/` 覆盖所有当前 P0、user-guide 和 runbook routes；共享 README/media assets 位于 `assets/docs/`。
 - Docs publishing/search：`docs/Dockerfile` 使用 Bun builder + nginx runtime；CI docs Docker build uses `context: docs` / `file: docs/Dockerfile` / `push: false`; publish workflow targets `yhyzgn/tikeo-docs`; docs static entrypoints include `robots.txt`, `search-index.json`, `llms.txt`, `llms-full.txt`, and `static/img/tikeo-og.png`, and a local `/search/` page backed by `search-index.json`.
 - Source-derived reference：`docs/docs/reference/management-openapi.md` / zh-CN mirror document `/api-docs/openapi.json`, `/api/v1/jobs`, `/api/v1/jobs/{job}:trigger`, `/api/v1/instances/{instance}`, `/api/v1/instances/{instance}/logs`, `CreateJobRequest`, `TriggerJobRequest`, `ApiResponse`, and `x-tikeo-api-key`; `docs/docs/reference/worker-tunnel-protobuf.md` / zh-CN mirror document `WorkerTunnelService`, `OpenTunnel`, `SubscribeTaskLogs`, `RegisterWorker`, `Heartbeat`, `WorkerRegistered`, `DispatchTask`, `TaskLog`, `TaskResult`, `TaskCheckpoint`, `assignment_token`, and `processor_name`.
+- Acceptance runbooks：`docs/docs/deployment/management-trigger-smoke-runbook.md` / zh-CN mirror cover the actual smoke script, evidence files, case IDs and failure triage; `docs/docs/deployment/kubernetes-controller-runbook.md` / zh-CN mirror cover Nginx Ingress, Envoy Gateway, Traefik, Gateway API, TLS/mTLS matrix, NetworkPolicy, and outbound-only Worker Tunnel boundary.
 - Main CI baseline：main CI contains `workflow-policy` repository contract tests, `Docs site` job, cross-language worker parity smoke, management-trigger e2e smoke artifact upload, and split Docker build validations for server/web/docs.
 - Source-size cleanup：`scripts/check-source-size.py` 已覆盖普通 `.rs` / `.ts` / `.tsx` 源码并排除 `.git`、`.dev`、`target`、`node_modules`、`dist`、`coverage` 等生成/依赖目录；当前全仓库审计通过，且已接入 main CI `workflow-policy` 快速门禁。
 

@@ -34,3 +34,8 @@ examples/java/**/.gradle/
 # Java IDE output
 sdks/java/**/bin/
 examples/java/**/bin/
+
+# Python test/cache output
+__pycache__/
+*.py[cod]
+.pytest_cache/

@@ -23,6 +23,8 @@ P0_DOCS = [
     "deployment/single-binary.md",
     "deployment/docker-compose.md",
     "deployment/kubernetes.md",
+    "deployment/kubernetes-controller-runbook.md",
+    "deployment/management-trigger-smoke-runbook.md",
     "integrations/overview.md",
     "reference/configuration.md",
     "reference/management-openapi.md",
@@ -400,6 +402,85 @@ class DocsSiteContractTest(unittest.TestCase):
                 text = (root / relative_path).read_text()
                 for token in SDK_REFERENCE_LINK_TOKENS:
                     self.assertIn(token, text, f"{root.relative_to(DOCS_SITE)} / {relative_path} missing {token!r}")
+
+    def test_management_trigger_smoke_runbook_is_source_backed(self):
+        script = (ROOT / "scripts/management-trigger-e2e-smoke.sh").read_text()
+        for source_token in [
+            "TIKEO_MANAGEMENT_TRIGGER_REBUILD_SERVER",
+            "TIKEO_MANAGEMENT_TRIGGER_REPORT_DIR",
+            "TIKEO_MANAGEMENT_TRIGGER_RUN_ID",
+            "management-sdk-create-trigger",
+            "management-instance-result",
+            "tikeo_smoke_finalize_report",
+            "nodejs demo echo processed",
+        ]:
+            self.assertIn(source_token, script)
+
+        zh_root = DOCS_SITE / "i18n/zh-CN/docusaurus-plugin-content-docs/current"
+        for root in [DOCS_SITE / "docs", zh_root]:
+            text = (root / "deployment/management-trigger-smoke-runbook.md").read_text()
+            for token in [
+                "scripts/management-trigger-e2e-smoke.sh",
+                "TIKEO_MANAGEMENT_TRIGGER_REBUILD_SERVER=0 scripts/management-trigger-e2e-smoke.sh",
+                "TIKEO_MANAGEMENT_TRIGGER_REPORT_DIR",
+                "TIKEO_MANAGEMENT_TRIGGER_RUN_ID",
+                "management-sdk-create-trigger",
+                "management-instance-result",
+                "management trigger e2e report:",
+                ".dev/reports/management-trigger-e2e-",
+                "x-tikeo-api-key",
+                "TIKEO_WORKER_CONNECT=1",
+                "nodejs demo echo processed",
+            ]:
+                self.assertIn(token, text, f"{root.relative_to(DOCS_SITE)} management runbook missing {token!r}")
+
+    def test_kubernetes_controller_runbook_is_controller_specific_and_source_backed(self):
+        source_bundle = "\n".join(
+            path.read_text()
+            for path in [
+                ROOT / "deploy/helm/tikeo/values.yaml",
+                ROOT / "deploy/helm/tikeo/examples/values-ingress-tls.yaml",
+                ROOT / "deploy/helm/tikeo/examples/values-gateway-api-worker-tunnel.yaml",
+                ROOT / "deploy/helm/tikeo/templates/server.yaml",
+                ROOT / "deploy/helm/tikeo/templates/gateway-api.yaml",
+                ROOT / "deploy/helm/tikeo/templates/networkpolicy.yaml",
+            ]
+        )
+        for source_token in [
+            "workerTunnelService",
+            "workerTunnel:",
+            "mtlsRequired: true",
+            "nginx.ingress.kubernetes.io/backend-protocol",
+            "gatewayApi:",
+            "kind: GRPCRoute",
+            "tikeo.yhyzgn.com/worker-networking",
+            "workers-connect-outbound-only",
+        ]:
+            self.assertIn(source_token, source_bundle)
+
+        zh_root = DOCS_SITE / "i18n/zh-CN/docusaurus-plugin-content-docs/current"
+        for root in [DOCS_SITE / "docs", zh_root]:
+            text = (root / "deployment/kubernetes-controller-runbook.md").read_text()
+            headings = [line for line in text.splitlines() if line.startswith("## ")]
+            self.assertGreaterEqual(len(headings), 6, f"{root.relative_to(DOCS_SITE)} controller runbook lacks sections")
+            for token in [
+                "Nginx Ingress",
+                "Envoy Gateway",
+                "Traefik",
+                "Gateway API",
+                "server.ingress.className",
+                "server.workerTunnelService.annotations",
+                "server.tls.workerTunnel.mtlsRequired",
+                "gatewayApi.enabled",
+                "GRPCRoute",
+                "grpc-worker-tunnel",
+                "workers-connect-outbound-only",
+                "values-ingress-tls.yaml",
+                "values-gateway-api-worker-tunnel.yaml",
+                "curl -fsS",
+                "kubectl -n tikeo",
+            ]:
+                self.assertIn(token, text, f"{root.relative_to(DOCS_SITE)} controller runbook missing {token!r}")
 
     def test_docs_publishing_search_and_seo_readiness(self):
         for relative_path, tokens in DOCS_PUBLISHING_TOKENS.items():

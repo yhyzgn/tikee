@@ -12,6 +12,18 @@
     "summary": "Source-derived WorkerTunnelService, OpenTunnel, DispatchTask, TaskLog, TaskResult, and TaskCheckpoint protocol reference."
   },
   {
+    "title": "Kubernetes controller-specific runbook",
+    "url": "/docs/deployment/kubernetes-controller-runbook",
+    "locale": "en",
+    "summary": "Nginx Ingress, Envoy Gateway, Traefik, and Gateway API production values, TLS/mTLS matrix, and smoke checks."
+  },
+  {
+    "title": "Management trigger smoke runbook",
+    "url": "/docs/deployment/management-trigger-smoke-runbook",
+    "locale": "en",
+    "summary": "Contributor runbook for scripts/management-trigger-e2e-smoke.sh evidence, environment overrides, and failure triage."
+  },
+  {
     "title": "Jobs user guide",
     "url": "/docs/user-guide/jobs",
     "locale": "en",
@@ -22,6 +34,18 @@
     "url": "/docs/user-guide/workers",
     "locale": "en",
     "summary": "How to read Worker Tunnel status, persisted Worker snapshots, lifecycle history, and dispatch capacity."
+  },
+  {
+    "title": "Kubernetes 控制器专项运行手册",
+    "url": "/zh-CN/docs/deployment/kubernetes-controller-runbook",
+    "locale": "zh-CN",
+    "summary": "Nginx Ingress、Envoy Gateway、Traefik 与 Gateway API 的生产 values、TLS/mTLS 和 smoke 检查。"
+  },
+  {
+    "title": "Management trigger smoke 运行手册",
+    "url": "/zh-CN/docs/deployment/management-trigger-smoke-runbook",
+    "locale": "zh-CN",
+    "summary": "scripts/management-trigger-e2e-smoke.sh 的证据目录、环境变量和排障说明。"
   },
   {
     "title": "作业用户指南",

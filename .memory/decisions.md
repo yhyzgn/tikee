@@ -576,3 +576,13 @@ Rationale:
 Constraint:
 - Future docs/frontend commands must use `bun`/`bunx`; docs module commands should run from `docs/`.
 - Do not reintroduce `website/` as a build module or point CI/publishing contracts back to it.
+
+## 2026-06-10 — Docs acceptance runbooks must stay source-backed
+
+Decision:
+- Management trigger contributor docs must be grounded in `scripts/management-trigger-e2e-smoke.sh`, not a simplified or mock-only flow.
+- Kubernetes controller-specific docs must be grounded in committed Helm values/templates and must preserve the Worker outbound-only model for Nginx Ingress, Envoy Gateway, Traefik, and Gateway API guidance.
+
+Constraint:
+- Future docs may add controller-specific overlays only when they cite committed values/templates or clearly mark operator-owned custom resources as external overlays.
+- Do not document business Worker inbound Services as a Tikeo deployment pattern.

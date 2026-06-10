@@ -1,9 +1,9 @@
 # Tikeo Docs Site Build Plan
 
-Status: Phase B/C P0 docs, zh-CN route mirror, and copy-paste deployment docs implemented
+Status: Phase B/C/D docs, zh-CN route mirror, copy-paste deployment docs, search/LLM export, and acceptance runbooks implemented
 Last refreshed: 2026-06-08
 Owner: Tikeo maintainers
-Scope: Standalone documentation site design plus current `docs/` scaffold, enriched P0 docs, full P0 zh-CN route mirror, SDK coverage for Rust/Go/Java/Python/Node.js, subpath-safe language switching, and copy-paste deployment docs for binary/systemd, Compose, and Helm. Deployment target selection remains separate.
+Scope: Standalone documentation site design plus current `docs/` scaffold, enriched P0 docs, full P0 zh-CN route mirror, SDK coverage for Rust/Go/Java/Python/Node.js, subpath-safe language switching, copy-paste deployment docs for binary/systemd, Compose, and Helm, local search/LLM export, Management trigger smoke runbook, and controller-specific Kubernetes runbooks. Live hosted Docker Hub publish verification remains release/credential-gated.
 
 ## 1. Goal
 
@@ -437,17 +437,23 @@ Acceptance:
 - Language switcher works for every current P0 page.
 - No mixed Chinese/English labels except official technology names.
 
-### Phase D — Search, LLM export, and publish readiness
+### Phase D — Search, LLM export, publish readiness, and acceptance runbooks
 
-- Add local search or DocSearch.
-- Generate `llms.txt` and `llms-full.txt`.
-- Add canonical URLs, sitemap, robots, OpenGraph images, and preview cards.
-- Add deployment instructions for the chosen external hosting target.
+Status: **Implemented on 2026-06-10** for local search/SEO/LLM export plus source-backed acceptance runbooks. Live Docker Hub publish verification remains gated by release/manual workflow credentials.
+
+- [x] Add local `/search/` backed by committed `search-index.json`.
+- [x] Generate and maintain `llms.txt` and `llms-full.txt`.
+- [x] Add canonical URL/baseUrl config, sitemap, robots, OpenGraph image, and preview-card metadata.
+- [x] Add a contributor runbook for `scripts/management-trigger-e2e-smoke.sh` with evidence directory and failure triage.
+- [x] Add Kubernetes controller-specific production runbook for Nginx Ingress, Envoy Gateway, Traefik, and Gateway API with TLS/mTLS matrix and smoke commands.
+- [x] Add docs Docker image boundary and publish workflow targeting `yhyzgn/tikeo-docs`.
 
 Acceptance:
 
-- Static build produces sitemap and LLM export files.
-- Public deployment target is documented but not hardwired to one vendor.
+- `python3 .github/tests/docs_site_contract_test.py` covers publishing/search/SEO, user guides, Management trigger smoke runbook, and controller-specific Kubernetes runbook.
+- `cd docs && bun run docs:typecheck && bun run docs:build` passes with no broken-anchor output.
+- `TIKEO_MANAGEMENT_TRIGGER_REBUILD_SERVER=0 scripts/management-trigger-e2e-smoke.sh` passed with evidence under `.dev/reports/management-trigger-e2e-20260610T153458Z-230214`.
+- Public Docker Hub digest recording remains pending until a release/manual workflow can push with credentials.
 
 ## 13. Initial page priority backlog
 
@@ -466,9 +472,11 @@ P0 for first public docs launch:
 11. `/docs/sdks/nodejs`
 12. `/docs/deployment/docker-compose`
 13. `/docs/deployment/kubernetes`
-14. `/docs/integrations/overview`
-15. `/docs/reference/configuration`
-16. `/docs/reference/troubleshooting`
+14. `/docs/deployment/kubernetes-controller-runbook`
+15. `/docs/deployment/management-trigger-smoke-runbook`
+16. `/docs/integrations/overview`
+17. `/docs/reference/configuration`
+18. `/docs/reference/troubleshooting`
 
 P1 after first launch:
 
@@ -486,7 +494,7 @@ P2 after ecosystem expansion:
 - Terraform Provider guide.
 - Kubernetes Operator guide.
 - Advanced workflow patterns.
-- Large-scale operations runbook.
+- Large-scale operations runbook beyond the current Nginx/Envoy Gateway/Traefik/Gateway API controller runbook.
 
 ## 14. Non-goals for the first docs implementation
 
@@ -507,4 +515,4 @@ P2 after ecosystem expansion:
 
 ## 16. Immediate next action
 
-Phase A scaffold and Phase B P0 content/localization are implemented in `docs/`. Next implementation step: add docs CI or a docs-specific workflow, then expand user-guide/API reference depth from generated OpenAPI/protobuf/source artifacts. Keep deployment provider configuration separate until the final hosting target is chosen.
+Phase A-D docs work is implemented in `docs/` for the current acceptance baseline. Next implementation step is release/manual publish verification for `yhyzgn/tikeo-docs` when credentials/tag are available, then record the Docker Hub digest. Keep provider-specific runtime claims source-backed and do not reintroduce `website/`.

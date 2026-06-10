@@ -688,3 +688,29 @@ docker build -f docs/Dockerfile docs -t tikeo-docs:local
 ```
 
 Docs lockfile guard: `docs/bun.lock` must use public `https://registry.npmjs.org/` tarball URLs so GitHub Actions docs verification does not depend on private npm proxy credentials.
+
+## 已验证命令（docs acceptance runbooks / 2026-06-10）
+
+```bash
+python3 .github/tests/docs_site_contract_test.py
+cd docs
+bun run docs:typecheck
+bun run docs:build
+cd ..
+TIKEO_MANAGEMENT_TRIGGER_REBUILD_SERVER=0 scripts/management-trigger-e2e-smoke.sh
+```
+
+Controller-specific Kubernetes docs should be checked against the committed Helm chart values/templates with render commands before release notes claim them:
+
+```bash
+.dev/tools/helm template tikeo ./deploy/helm/tikeo \
+  --namespace tikeo \
+  -f deploy/helm/tikeo/examples/values-external-postgres.yaml \
+  -f deploy/helm/tikeo/examples/values-ingress-tls.yaml
+
+.dev/tools/helm template tikeo ./deploy/helm/tikeo \
+  --namespace tikeo \
+  -f deploy/helm/tikeo/examples/values-external-postgres.yaml \
+  -f deploy/helm/tikeo/examples/values-ingress-tls.yaml \
+  -f deploy/helm/tikeo/examples/values-gateway-api-worker-tunnel.yaml
+```

@@ -29,4 +29,6 @@ Generated from docs/docs and zh-CN docs. This curated snapshot lists the source-
 - /docs/deployment/single-binary covers single binary and systemd.
 - /docs/deployment/docker-compose covers SQLite, PostgreSQL, and MySQL Compose examples.
 - /docs/deployment/kubernetes covers Helm, TLS/mTLS, and Worker outbound-only boundaries.
+- /docs/deployment/kubernetes-controller-runbook covers Nginx Ingress, Envoy Gateway, Traefik, Gateway API, server.workerTunnelService.annotations, server.tls.workerTunnel.mtlsRequired, GRPCRoute, grpc-worker-tunnel, workers-connect-outbound-only, and controller-specific smoke checks.
+- /docs/deployment/management-trigger-smoke-runbook covers scripts/management-trigger-e2e-smoke.sh, TIKEO_MANAGEMENT_TRIGGER_REBUILD_SERVER=0 scripts/management-trigger-e2e-smoke.sh, TIKEO_MANAGEMENT_TRIGGER_REPORT_DIR, TIKEO_MANAGEMENT_TRIGGER_RUN_ID, management-sdk-create-trigger, management-instance-result, x-tikeo-api-key, TIKEO_WORKER_CONNECT=1, and nodejs demo echo processed evidence.
 - /docs/deployment/sse-realtime covers proxy, load balancer, WAF, and Ingress requirements for SSE.

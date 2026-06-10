@@ -52,6 +52,8 @@ const sidebars: SidebarsConfig = {
         'deployment/single-binary',
         'deployment/docker-compose',
         'deployment/kubernetes',
+        'deployment/kubernetes-controller-runbook',
+        'deployment/management-trigger-smoke-runbook',
         'deployment/sse-realtime',
       ],
     },

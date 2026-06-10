@@ -2738,3 +2738,28 @@ Git:
 - Commit: `1db7ade` (`Make the docs site a publishable module`).
 - Remote push: `git push origin main` succeeded (`413a21f..1db7ade main -> main`).
 - Note: `docs/Dockerfile`, `docs/.dockerignore`, and `docs/nginx/*` are committed and visible on `origin/main`; live Docker Hub push remains gated on release/manual workflow credentials.
+
+## 2026-06-10 — Docs acceptance runbooks after module migration
+
+Agent:
+- Codex
+
+Work:
+- Continued the docs work that was in progress before the `website/` -> `docs/` migration: the remaining contributor runbook and controller-specific Kubernetes docs follow-up.
+- Added source-backed English and zh-CN Management trigger smoke runbooks for `scripts/management-trigger-e2e-smoke.sh`, including prerequisites, environment overrides, evidence files, case IDs, and failure triage.
+- Added source-backed English and zh-CN Kubernetes controller-specific runbooks for Nginx Ingress, Envoy Gateway, Traefik, and Gateway API, including Helm values, TLS/mTLS matrix, NetworkPolicy, Worker outbound-only boundary, and smoke commands.
+- Updated `docs/sidebars.ts`, `docs/static/search-index.json`, `docs/static/llms.txt`, and `docs/static/llms-full.txt` for discoverability.
+- Updated design docs, `.memory`, and `.prompt/163-docs-publish-verification-and-acceptance-followup.md` for the next handoff.
+
+Verification:
+- RED observed before docs implementation: `python3 .github/tests/docs_site_contract_test.py` failed because `deployment/kubernetes-controller-runbook.md` and `deployment/management-trigger-smoke-runbook.md` were missing in English and zh-CN routes.
+- `python3 .github/tests/docs_site_contract_test.py` ✅
+- `cd docs && bun run docs:typecheck && bun run docs:build` ✅; build output checked for no `broken anchor` warnings.
+- `TIKEO_MANAGEMENT_TRIGGER_REBUILD_SERVER=0 scripts/management-trigger-e2e-smoke.sh` ✅; evidence directory `.dev/reports/management-trigger-e2e-20260610T153458Z-230214/`, report `.dev/reports/management-trigger-e2e-20260610T153458Z-230214/management-trigger-e2e-20260610T153458Z-230214.json`.
+- `python3 -m unittest deploy.tests.iac_artifacts_test deploy.tests.smoke_assertions_test` ✅
+- `scripts/verify-deploy-bootstrap.sh` ✅
+- `docker build -f docs/Dockerfile docs -t tikeo-docs:local` ✅
+
+Notes:
+- Live Nginx/Envoy Gateway/Traefik/Gateway API controller smoke requires a Kubernetes cluster with those controllers/CRDs installed. This environment does not currently have `helm` / `.dev/tools/helm`, so local controller verification is source-backed docs contract plus deploy bootstrap/artifact contract tests rather than Helm render output.
+- Live Docker Hub digest for `yhyzgn/tikeo-docs` remains release/manual workflow credential-gated.

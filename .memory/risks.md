@@ -108,3 +108,8 @@
 - `docs/bun.lock` previously pinned tarball URLs to a private Nexus npm proxy; local `bun install --frozen-lockfile` demonstrated the failure mode with 401 responses.
 - The docs lockfile now uses public `https://registry.npmjs.org/` tarball URLs and `.github/tests/docs_site_contract_test.py` rejects private registry hosts.
 - Remaining risk: if a future docs dependency refresh is run against a private registry, the contract test will fail until the lockfile is normalized back to a CI-accessible registry.
+
+## 2026-06-10 — Docs publish and live controller verification gap
+
+- Docs publish workflow and docs Docker image build are implemented and locally verified, but live Docker Hub digest recording for `yhyzgn/tikeo-docs` requires a release/manual workflow with Docker Hub credentials.
+- Kubernetes controller-specific runbooks are source-backed by committed Helm values/templates and include smoke commands for Nginx Ingress, Envoy Gateway, Traefik, and Gateway API; live controller acceptance still depends on an external cluster with the corresponding controllers/CRDs installed.

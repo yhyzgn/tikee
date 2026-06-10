@@ -1477,3 +1477,15 @@ Verification evidence:
 - Completed the pending docs publishing/search/SEO readiness slice: canonical URL/baseUrl metadata, robots.txt, OpenGraph image, search-index.json, updated llms.txt, and llms-full.txt.
 - Added English and zh-CN source-backed user guides for Dashboard, Jobs, Instances, Workers, Workflows, Scripts, Audit, and Settings, all guarded by docs contract checks.
 - Verification passed: workflow/docs/management-smoke contracts, source-size audit, GitHub Actions Node runtime policy, workflow YAML parse, diff whitespace check, docs frozen install/typecheck/build with no broken-anchor output, `docker build -f docs/Dockerfile docs -t tikeo-docs:local`, and container smoke for `/healthz`, `/docs/`, `/zh-CN/docs/`, `/search/`, `/robots.txt`, and `/search-index.json`.
+
+### 2026-06-10 — Docs acceptance runbooks completed after docs module migration
+- Completed the pre-migration docs follow-up that remained after the `website/` -> `docs/` module migration.
+- Added source-backed English and zh-CN contributor runbooks for `scripts/management-trigger-e2e-smoke.sh`, including prerequisites, `TIKEO_MANAGEMENT_TRIGGER_REBUILD_SERVER=0 scripts/management-trigger-e2e-smoke.sh`, evidence layout, case IDs, and failure triage.
+- Added source-backed English and zh-CN Kubernetes controller-specific runbooks for Nginx Ingress, Envoy Gateway, Traefik, and Gateway API, grounded in Helm values/templates and preserving the Worker outbound-only boundary.
+- Updated docs sidebar, local search index, `llms.txt`, and `llms-full.txt` so the new runbooks are discoverable.
+- Docs contract now guards both runbooks against drifting away from the real smoke script and Helm chart sources.
+Verification evidence:
+- RED observed: `python3 .github/tests/docs_site_contract_test.py` failed because `deployment/kubernetes-controller-runbook.md` and `deployment/management-trigger-smoke-runbook.md` were missing in English and zh-CN routes.
+- `python3 .github/tests/docs_site_contract_test.py` passed after implementation.
+- `cd docs && bun run docs:typecheck && bun run docs:build` passed with no `broken anchor` output.
+- `TIKEO_MANAGEMENT_TRIGGER_REBUILD_SERVER=0 scripts/management-trigger-e2e-smoke.sh` passed; evidence directory `.dev/reports/management-trigger-e2e-20260610T153458Z-230214/`, report `.dev/reports/management-trigger-e2e-20260610T153458Z-230214/management-trigger-e2e-20260610T153458Z-230214.json`.

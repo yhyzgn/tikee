@@ -23,6 +23,8 @@ High-value pages:
 - /docs/sdks/nodejs — Node.js Worker SDK
 - /docs/deployment/docker-compose — Docker Compose path
 - /docs/deployment/kubernetes — Kubernetes and Helm boundaries
+- /docs/deployment/kubernetes-controller-runbook — Nginx Ingress, Envoy Gateway, Traefik, Gateway API, TLS/mTLS, and smoke runbook
+- /docs/deployment/management-trigger-smoke-runbook — contributor smoke runbook for scripts/management-trigger-e2e-smoke.sh
 - /docs/deployment/sse-realtime — SSE proxy, LB, WAF, and Ingress requirements
 - /docs/reference/management-openapi — Management OpenAPI reference
 - /docs/reference/worker-tunnel-protobuf — Worker Tunnel protobuf reference

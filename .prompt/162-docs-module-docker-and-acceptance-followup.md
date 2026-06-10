@@ -2,7 +2,7 @@
 
 ## Completed baseline
 
-2026-06-10 completed docs module migration and docs publishing/search/user-guide readiness:
+2026-06-10 completed docs module migration, docs publishing/search/user-guide readiness, and pre-migration acceptance runbook follow-up:
 
 - Docusaurus docs site module moved from `website/` to `docs/`.
 - Old top-level `docs/assets/` media moved to `assets/docs/` and README links were updated.
@@ -11,6 +11,8 @@
 - Main CI docs job now runs from `docs/`; split Docker validation includes server, web, and docs image builds with `push: false`.
 - Docs publishing/search/SEO readiness now includes `TIKEO_DOCS_URL`, `TIKEO_DOCS_BASE_URL`, metadata, sitemap config, `robots.txt`, `search-index.json`, `static/img/tikeo-og.png`, `llms.txt`, and `llms-full.txt`.
 - Source-backed user guides now exist in English and zh-CN for Dashboard, Jobs, Instances, Workers, Workflows, Scripts, Audit, and Settings.
+- Source-backed Management trigger smoke runbooks now exist in English and zh-CN for `scripts/management-trigger-e2e-smoke.sh`, including prerequisites, `TIKEO_MANAGEMENT_TRIGGER_REBUILD_SERVER=0 scripts/management-trigger-e2e-smoke.sh`, evidence layout, and failure triage.
+- Source-backed Kubernetes controller-specific runbooks now exist in English and zh-CN for Nginx Ingress, Envoy Gateway, Traefik, and Gateway API, including `server.workerTunnelService.annotations`, `server.tls.workerTunnel.mtlsRequired`, `GRPCRoute`, `grpc-worker-tunnel`, and smoke commands.
 
 ## Guardrails
 
@@ -23,8 +25,7 @@
 ## Suggested next slice
 
 1. Run or dry-run the docs image publish workflow when release tag/credentials are available, then record the Docker Hub digest for `yhyzgn/tikeo-docs`.
-2. Add a contributor runbook for `scripts/management-trigger-e2e-smoke.sh`.
-3. Add Kubernetes controller-specific docs for Nginx, Envoy, Traefik, and Gateway API with production values and smoke evidence.
+2. Continue functional/module acceptance on real gaps only: live Docker Hub publish verification, release digest recording, or any newly discovered incomplete runtime behavior. Do not repeat the completed docs module rename/runbook slice.
 
 ## Verification entrypoint
 
@@ -41,4 +42,5 @@ bun run docs:typecheck
 bun run docs:build
 cd ..
 docker build -f docs/Dockerfile docs -t tikeo-docs:local
+TIKEO_MANAGEMENT_TRIGGER_REBUILD_SERVER=0 scripts/management-trigger-e2e-smoke.sh
 ```
