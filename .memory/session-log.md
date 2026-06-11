@@ -2889,3 +2889,20 @@ Risks / gaps:
 - Alert-rule dual-write/backfill and Workflow notification-node migration remain future work.
 - Template references are soft links; deleting a template currently lacks impact preview/cascade guard.
 - Email HTML template remains schema-only; runtime still sends text/plain through SMTP adapter.
+
+## 2026-06-12 — Notification Center rich-provider fail-closed patch
+
+Agent:
+- Codex
+
+Work:
+- Reviewed stale subagent feedback after the `v0.2.4` tag was pushed and found one real production risk still present: rich provider message renderers could fall back to hardcoded `https://tikeo.local/notifications` placeholders when no template was supplied.
+- Removed those placeholder payload fallbacks from DingTalk link/actionCard/feedCard and WeCom news/template_card renderers.
+- Expanded fail-closed coverage so DingTalk link/actionCard/feedCard, Feishu image/share_chat, and WeCom image/news/file/voice/template_card require a channel inline template or enabled policy stored template before delivery.
+- Updated English and zh-CN Notification Center docs to state the rich-message template requirement.
+
+Verification:
+- Targeted server tests and clippy passed locally before the patch commit; full release verification is required before tagging the replacement formal release.
+
+Release note:
+- `v0.2.4` was pushed before this review feedback was integrated and is superseded by the next patch release for formal acceptance.

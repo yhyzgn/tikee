@@ -243,6 +243,8 @@ Official-document-backed built-in variants currently exposed by the drawer and d
 | `dingtalk` | `text`, `markdown`, `link`, `actionCard` with single-button or `btns` JSON, and `feedCard`; `atMobiles`, `atUserIds`, `isAtAll`. | Webhook URL as secret ref; optional `signingKey` signs URL with timestamp/HMAC. |
 | `feishu` | `text`, `post`, `image` (`image_key`), `share_chat` (`share_chat_id`), and `interactive` card. | Webhook URL as secret ref; optional `signingKey` adds body `timestamp`/`sign`. |
 | `wechat_work` | `text`, `markdown`, `markdown_v2`, `image`, `news`, `file`, `voice`, and `template_card`; mentions for text-compatible messages. | Webhook URL as secret ref. |
+
+Rich provider families that require URLs, media IDs, cards, links, or image/chat identifiers fail closed unless the delivery has a channel inline `config.template` or an enabled policy `templateRef` rendered into `payload.template`. This covers DingTalk `link`/`actionCard`/`feedCard`, Feishu `image`/`share_chat`, and WeCom `image`/`news`/`file`/`voice`/`template_card`; placeholder provider payloads are not generated.
 | `pagerduty` | Events API `trigger`, `acknowledge`, `resolve`; payload fields include `source`, `component`, `group`, `class`, `client`, `client_url`, `links`, `images`, and `custom_details`. | Routing/integration key must be supplied through `secretRefs.routingKey` / aliases. |
 | `email` | `plain` text and stored `html` template shape. Runtime still sends text/plain through the SMTP adapter. | SMTP URL/password should be secret refs. |
 | plugin webhook | Provider-neutral JSON unless plugin metadata supplies a custom template. | Plugin-defined. |

@@ -124,6 +124,8 @@ curl -fsS -X POST \
 
 模板不是 secret store。Webhook URL、签名密钥、PagerDuty routing key、SMTP URL/password、authorization header 和自定义 header 值必须放在 channel `secretRefs`。
 
+需要 provider-specific 字段的富消息类型在没有 channel inline template 或 enabled policy template 时会 fail closed。钉钉 `link`/`actionCard`/`feedCard`、飞书 `image`/`share_chat`、企业微信 `image`/`news`/`file`/`voice`/`template_card` 必须由 operator 提供真实模板字段；Tikeo 不会为生产投递合成占位 URL 或假 media ID。
+
 ## 安全策略创建示例
 
 `channelRefs` 可以是字符串，也可以是包含 `channelId`、`channel_id` 或 `id` 的对象。

@@ -726,11 +726,39 @@ async fn rich_provider_delivery_fails_closed_without_required_template() {
     for (provider, config) in [
         (
             "dingtalk",
+            serde_json::json!({"url": "http://127.0.0.1:9/notify", "messageType": "link"}),
+        ),
+        (
+            "dingtalk",
             serde_json::json!({"url": "http://127.0.0.1:9/notify", "messageType": "actionCard"}),
+        ),
+        (
+            "dingtalk",
+            serde_json::json!({"url": "http://127.0.0.1:9/notify", "messageType": "feedCard"}),
         ),
         (
             "feishu",
             serde_json::json!({"url": "http://127.0.0.1:9/notify", "messageType": "image"}),
+        ),
+        (
+            "feishu",
+            serde_json::json!({"url": "http://127.0.0.1:9/notify", "messageType": "share_chat"}),
+        ),
+        (
+            "wechat_work",
+            serde_json::json!({"url": "http://127.0.0.1:9/notify", "messageType": "image"}),
+        ),
+        (
+            "wechat_work",
+            serde_json::json!({"url": "http://127.0.0.1:9/notify", "messageType": "news"}),
+        ),
+        (
+            "wechat_work",
+            serde_json::json!({"url": "http://127.0.0.1:9/notify", "messageType": "file"}),
+        ),
+        (
+            "wechat_work",
+            serde_json::json!({"url": "http://127.0.0.1:9/notify", "messageType": "voice"}),
         ),
         (
             "wechat_work",

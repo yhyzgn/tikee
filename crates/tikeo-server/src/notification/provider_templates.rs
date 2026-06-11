@@ -142,26 +142,15 @@ pub(super) fn dingtalk_payload(
         }),
         "link" => serde_json::json!({
             "msgtype": "link",
-            "link": dingtalk_object_payload(template, serde_json::json!({
-                "title": message.subject,
-                "text": message.body,
-                "messageUrl": "https://tikeo.local/notifications"
-            }))
+            "link": dingtalk_object_payload(template)
         }),
         "actionCard" => serde_json::json!({
             "msgtype": "actionCard",
-            "actionCard": dingtalk_object_payload(template, serde_json::json!({
-                "title": message.subject,
-                "text": message.body,
-                "singleTitle": "View",
-                "singleURL": "https://tikeo.local/notifications"
-            }))
+            "actionCard": dingtalk_object_payload(template)
         }),
         "feedCard" => serde_json::json!({
             "msgtype": "feedCard",
-            "feedCard": dingtalk_feed_card_payload(template, serde_json::json!({
-                "links": [{"title": message.subject, "messageURL": "https://tikeo.local/notifications"}]
-            }))
+            "feedCard": dingtalk_feed_card_payload(template)
         }),
         _ => serde_json::json!({
             "msgtype": "text",
@@ -235,9 +224,7 @@ pub(super) fn wechat_work_payload(
         }),
         "news" => serde_json::json!({
             "msgtype": "news",
-            "news": wechat_news_payload(template, serde_json::json!({
-                "articles": [{"title": message.subject, "description": message.body, "url": "https://tikeo.local/notifications"}]
-            }))
+            "news": wechat_news_payload(template)
         }),
         "file" => serde_json::json!({
             "msgtype": "file",
@@ -249,11 +236,7 @@ pub(super) fn wechat_work_payload(
         }),
         "template_card" | "templateCard" => serde_json::json!({
             "msgtype": "template_card",
-            "template_card": wechat_template_card_payload(template, serde_json::json!({
-                "card_type": "text_notice",
-                "main_title": {"title": message.subject, "desc": message.body},
-                "card_action": {"type": 1, "url": "https://tikeo.local/notifications"}
-            }))
+            "template_card": wechat_template_card_payload(template)
         }),
         _ => serde_json::json!({
             "msgtype": "text",
@@ -424,11 +407,11 @@ fn template_object_or_default(
         .unwrap_or(default)
 }
 
-fn dingtalk_object_payload(
-    template: Option<&serde_json::Value>,
-    default: serde_json::Value,
-) -> serde_json::Value {
-    let mut payload = template_object_or_default(template, default);
+fn dingtalk_object_payload(template: Option<&serde_json::Value>) -> serde_json::Value {
+    let mut payload = template
+        .filter(|template| template.is_object())
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!({}));
     if let Some(object) = payload.as_object_mut() {
         if let Some(value) = object.remove("btnOrientation") {
             object.insert("btnOrientation".to_owned(), value);
@@ -440,17 +423,18 @@ fn dingtalk_object_payload(
     payload
 }
 
-fn dingtalk_feed_card_payload(
-    template: Option<&serde_json::Value>,
-    default: serde_json::Value,
-) -> serde_json::Value {
+fn dingtalk_feed_card_payload(template: Option<&serde_json::Value>) -> serde_json::Value {
     let Some(template) = template else {
-        return default;
+        return serde_json::json!({});
     };
     if let Some(links) = template.get("links") {
         return serde_json::json!({ "links": links.clone() });
     }
-    template_object_or_default(Some(template), default)
+    if template.is_object() {
+        template.clone()
+    } else {
+        serde_json::json!({})
+    }
 }
 
 fn feishu_post_content(
@@ -486,25 +470,23 @@ fn feishu_card_payload(
         .unwrap_or_else(|| template.clone())
 }
 
-fn wechat_news_payload(
-    template: Option<&serde_json::Value>,
-    default: serde_json::Value,
-) -> serde_json::Value {
+fn wechat_news_payload(template: Option<&serde_json::Value>) -> serde_json::Value {
     let Some(template) = template else {
-        return default;
+        return serde_json::json!({});
     };
     if let Some(articles) = template.get("articles") {
         return serde_json::json!({ "articles": articles.clone() });
     }
-    template_object_or_default(Some(template), default)
+    if template.is_object() {
+        template.clone()
+    } else {
+        serde_json::json!({})
+    }
 }
 
-fn wechat_template_card_payload(
-    template: Option<&serde_json::Value>,
-    default: serde_json::Value,
-) -> serde_json::Value {
+fn wechat_template_card_payload(template: Option<&serde_json::Value>) -> serde_json::Value {
     let Some(template) = template else {
-        return default;
+        return serde_json::json!({});
     };
     template
         .get("templateCard")

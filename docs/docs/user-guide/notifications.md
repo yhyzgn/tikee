@@ -146,6 +146,8 @@ Set a policy `templateRef` to the stored template `id` or `templateKey`. During 
 
 Template bodies are not secret stores. Keep webhook URLs, signing keys, PagerDuty routing keys, SMTP URLs/passwords, authorization headers, and custom header values in channel `secretRefs`.
 
+Rich message types that need provider-specific fields fail closed when no channel inline template or enabled policy template is available. DingTalk `link`/`actionCard`/`feedCard`, Feishu `image`/`share_chat`, and WeCom `image`/`news`/`file`/`voice`/`template_card` must be backed by real operator-supplied template fields; Tikeo does not synthesize placeholder URLs or fake media IDs for production delivery.
+
 ## Safe policy creation example
 
 `channelRefs` may contain strings or objects with `channelId`, `channel_id`, or `id`; both the materializer and policy validator extract those forms.

@@ -1,6 +1,6 @@
 # Latest completed slice
 
-- 2026-06-11: Notification Center provider-schema and first-class template hardening is locally complete pending commit/push/release verification in the current session. Reusable notification channels/policies/messages/delivery attempts, job lifecycle materialization, generic retry/DLQ, provider-specific message schema/rendering, `notification_templates` storage/API/render preview, Web template editor/preview, policy template selector, docs, and safety fixes are implemented and locally verified.
+- 2026-06-11: Notification Center provider-schema and first-class template hardening is complete with an additional rich-provider fail-closed patch pending final replacement release verification in the current session. Reusable notification channels/policies/messages/delivery attempts, job lifecycle materialization, generic retry/DLQ, provider-specific message schema/rendering, `notification_templates` storage/API/render preview, Web template editor/preview, policy template selector, docs, and safety fixes are implemented and locally verified.
 
 # Next Work
 
@@ -38,7 +38,7 @@
 
 ## Next after provider schema/template hardening
 
-1. Commit/push the current Notification Center provider/template hardening after final review and fresh verification.
-2. Trigger/monitor remote CI and publish a `v0.2.xxx` formal release tag once the current phase is green.
-3. Continue alert-rule dual-write/migration and workflow notification node migration after templates are real.
-4. Start the human-oriented docs-site rewrite as the next automatic task after the current phase has been committed, built, pushed, and released.
+1. Commit/push the rich-provider fail-closed patch and publish a replacement `v0.2.xxx` release tag superseding `v0.2.4`.
+2. Monitor remote CI and release/Docker workflows until green.
+3. Start the human-oriented docs-site rewrite as the next automatic task, then test, commit, build, tag, publish, and monitor its release.
+4. Continue alert-rule dual-write/migration and workflow notification node migration after the docs rewrite release unless the user reprioritizes.
