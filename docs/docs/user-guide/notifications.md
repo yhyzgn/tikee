@@ -10,7 +10,7 @@ Notification Center is the reusable outbound delivery layer in Tikeo. Use it whe
 
 The source-backed boundary is important:
 
-- **Notification Center** owns reusable outbound channels, policies/subscriptions, normalized messages, delivery attempts, retry, and DLQ state. Current source: `crates/tikeo-server/src/notification.rs`, `crates/tikeo-server/src/http/routes/notifications.rs`, `crates/tikeo-storage/src/repository/notification.rs`, and `web/src/pages/NotificationCenterPage.tsx`.
+- **Notification Center** owns reusable outbound channels, policies/subscriptions, normalized messages, delivery attempts, retry, and DLQ state. Current source: `crates/tikeo-server/src/notification.rs`, `crates/tikeo-server/src/http/routes/notification_providers.rs`, `crates/tikeo-storage/src/repository/notification.rs`, and `web/src/pages/NotificationCenterPage.tsx`.
 - **Alerts** own abnormal-condition rules, alert events, incident-like states, silence/recovery/suppression semantics, and the compatibility alert delivery ledger. See [Alerts](./alerts) before using an alert rule for a normal job-completion message.
 
 ## When to use notifications
@@ -30,20 +30,20 @@ Use Alerts instead when you need condition evaluation, dedupe/silence/recovery b
 
 ## Provider types
 
-The implemented built-in channel types come from `builtin_channel_types()` in `crates/tikeo-server/src/http/routes/notifications.rs`.
+The implemented built-in channel types come from `builtin_channel_types()` in `crates/tikeo-server/src/http/routes/notification_providers.rs`.
 
-| Provider | Required config keys | Secret config keys | Notes |
+| Provider | Non-secret config | Target / secret refs | Message types exposed by the drawer |
 | --- | --- | --- | --- |
-| `webhook` | `url` | `authorization` | Generic JSON POST target. |
-| `slack` | `url` | none in metadata | Slack incoming webhook-style target. |
-| `dingtalk` | `url` | `signingKey` | DingTalk robot webhook. |
-| `feishu` | `url` | `signingKey` | Feishu/Lark bot webhook. |
-| `wechat_work` | `url` | none in metadata | WeCom/WeChat Work robot webhook. |
-| `pagerduty` | `routingKey` | `routingKey` | PagerDuty Events v2 integration. |
-| `email` | `smtpUrl`, `to` | `password`, `smtpUrl` | SMTP delivery through the shared provider adapter. |
-| plugin type | usually `url` | plugin-defined | Plugin alert channel metadata is accepted as a compatibility alias for notification providers. |
+| `webhook` | none required | `secretRefs.url`, optional `authorization` | `json` |
+| `slack` | optional `threadTs` | `secretRefs.url` | `text`, `blockKit`, `attachments` |
+| `dingtalk` | `atMobiles`, `atUserIds`, `isAtAll` | `secretRefs.url`, optional `signingKey` | `text`, `markdown`, `link`, `actionCard`, `feedCard` |
+| `feishu` | none required | `secretRefs.url`, optional `signingKey` | `text`, `post`, `image`, `share_chat`, `interactive` |
+| `wechat_work` | mention lists | `secretRefs.url` | `text`, `markdown`, `markdown_v2`, `image`, `news`, `file`, `voice`, `template_card` |
+| `pagerduty` | `source`, `component`, `group`, `class`, `client`, `clientUrl`, `links`, `images`, `customDetails` | `secretRefs.routingKey` / aliases | `trigger`, `acknowledge`, `resolve` |
+| `email` | `to`/`recipients`, `from`, `username` | `secretRefs.smtpUrl`, optional `password` | `plain`, stored `html` shape; runtime text/plain |
+| plugin type | plugin-defined | plugin-defined | plugin-defined |
 
-Webhook-style providers accept `url`, `webhookUrl`, or `webhook_url`. PagerDuty accepts `routingKey`, `routing_key`, `integrationKey`, or `integration_key`. Email accepts `to` or `recipients`; its SMTP endpoint can come from `config.smtpUrl`, `config.smtp_url`, `config.url`, `secretRefs.smtpUrl`, `secretRefs.smtp_url`, `secretRefs.url`, `config.smtpUrlSecretRef`, `config.smtp_url_secret_ref`, `secretRefs.smtpUrlSecretRef`, or `secretRefs.smtp_url_secret_ref`. SMTP auth passwords use `config.passwordSecretRef`, `config.password_secret_ref`, `secretRefs.password`, `secretRefs.passwordSecretRef`, or `secretRefs.password_secret_ref`.
+Webhook-style providers accept `url`, `webhookUrl`, or `webhook_url` as target keys, but for built-ins the UI and validation prefer `secretRefs`. PagerDuty accepts `routingKey`, `routing_key`, `integrationKey`, or `integration_key` through `secretRefs`. Email accepts `to` or `recipients`; its SMTP endpoint can come from `secretRefs.smtpUrl`, `secretRefs.smtp_url`, `secretRefs.url`, `config.smtpUrlSecretRef`, `config.smtp_url_secret_ref`, `secretRefs.smtpUrlSecretRef`, or `secretRefs.smtp_url_secret_ref`. SMTP auth passwords use `config.passwordSecretRef`, `config.password_secret_ref`, `secretRefs.password`, `secretRefs.passwordSecretRef`, or `secretRefs.password_secret_ref`.
 
 Runtime secret resolution for Notification Center currently resolves `env:` references or bare environment variable names through the process environment. Do not enter raw secret values in `config` or `secretRefs`.
 
@@ -52,10 +52,11 @@ Runtime secret resolution for Notification Center currently resolves `env:` refe
 1. **Check access.** The route metadata in `web/src/routes.tsx` exposes `/notifications` to users with `notifications:read`. Creating/updating channels and policies requires `notifications:manage`. Retrying due delivery attempts requires `notifications:test`.
 2. **Create a channel.** A channel is a reusable outbound destination. Scope it as `global`, `namespace`, `app`, or `worker_pool`.
 3. **Create a policy.** A policy binds an owner, event family, event filter, severity, dedupe window, and ordered channel references.
-4. **Validate the policy.** Validation checks that channel references exist and are enabled.
-5. **Trigger or wait for source events.** Implemented job lifecycle events materialize messages through `NotificationCenter::emit_job_instance_event()`.
-6. **Inspect messages and delivery attempts.** The UI shows recent messages and queue state; API endpoints expose filters.
-7. **Operate retry/DLQ.** Let the background worker scan due attempts, or use the retry-due endpoint for operator-driven retry scans.
+4. **Create a reusable template when a provider-specific message body is needed.** Templates are scoped by provider and message type, can be dry-run rendered with sample JSON, and never store channel secrets.
+5. **Validate the policy.** Validation checks that channel references exist and are enabled.
+6. **Trigger or wait for source events.** Implemented job lifecycle events materialize messages through `NotificationCenter::emit_job_instance_event()`.
+7. **Inspect messages and delivery attempts.** The UI shows recent messages and queue state; API endpoints expose filters.
+8. **Operate retry/DLQ.** Let the background worker scan due attempts, or use the retry-due endpoint for operator-driven retry scans.
 
 ## Safe channel creation example
 
@@ -73,9 +74,10 @@ curl -fsS -X POST http://127.0.0.1:9090/api/v1/notification-channels \
     "provider": "webhook",
     "enabled": true,
     "config": {
-      "url": "https://hooks.example.invalid/tikeo/billing"
+      "messageType": "json"
     },
     "secretRefs": {
+      "url": "env:TIKEO_NOTIFICATION_WEBHOOK_URL",
       "authorization": "env:TIKEO_NOTIFICATION_WEBHOOK_AUTH"
     }
   }'
@@ -91,7 +93,7 @@ Expected response shape:
     "id": "notification-channel-example",
     "scopeType": "app",
     "provider": "webhook",
-    "targetRedacted": "https://hooks.example.invalid/...",
+    "targetRedacted": "webhook:secret-ref",
     "targetConfigured": true,
     "secretConfigured": true
   }
@@ -99,6 +101,50 @@ Expected response shape:
 ```
 
 The exact `id` is generated by storage. `secretRefsJson` is skipped during serialization, and `configJson` is redacted by `NotificationChannelSummary::from()` in `crates/tikeo-storage/src/repository/notification.rs`.
+
+## Reusable templates
+
+Use templates when the same policy-level message body should be reused across channels or edited without touching channel credentials. A template has `templateKey`, `provider`, `messageType`, `body`, optional `variables`, and `enabled`. For built-in providers, the drawer and backend validate the selected message type and its required body fields from provider metadata.
+
+Rendering is intentionally a safe token replacer, not an arbitrary expression engine. Unknown tokens such as `{{env.SECRET}}`, malformed delimiters, and malformed JSON array/object fields are rejected before a template can be saved or previewed.
+
+Safe Slack Block Kit template example:
+
+```bash
+curl -fsS -X POST http://127.0.0.1:9090/api/v1/notification-templates \
+  -H 'Authorization: Bearer <operator-token>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "templateKey": "ops.slack.failure",
+    "name": "Ops Slack failure",
+    "provider": "slack",
+    "messageType": "blockKit",
+    "enabled": true,
+    "body": {
+      "subject": "[{{severity}}] {{subject}}",
+      "body": "{{body}}",
+      "text": "{{subject}}",
+      "blocks": [
+        {"type":"section","text":{"type":"mrkdwn","text":"*{{subject}}*\n{{body}}"}}
+      ]
+    },
+    "variables": {"severity": "critical"}
+  }'
+```
+
+Dry-run render before attaching the template to a policy:
+
+```bash
+curl -fsS -X POST \
+  http://127.0.0.1:9090/api/v1/notification-templates/ops.slack.failure/render \
+  -H 'Authorization: Bearer <operator-token>' \
+  -H 'Content-Type: application/json' \
+  -d '{"sample":{"subject":"Nightly failed","body":"exit 2","severity":"critical","eventType":"job_instance.failed"}}'
+```
+
+Set a policy `templateRef` to the stored template `id` or `templateKey`. During job-instance materialization, enabled templates can override the normalized message `subject` and `body`, and the rendered provider body is stored under `payload.template`. Provider delivery then uses that rendered template before any channel inline `config.template`, so policy-selected enabled storage templates are not silently shadowed by channel defaults. Missing or disabled template refs are ignored for compatibility, so production policies should reference existing enabled templates and be checked in the UI before rollout.
+
+Template bodies are not secret stores. Keep webhook URLs, signing keys, PagerDuty routing keys, SMTP URLs/passwords, authorization headers, and custom header values in channel `secretRefs`.
 
 ## Safe policy creation example
 
@@ -194,12 +240,13 @@ The handler clamps `limit` to at most `500`, `maxAttempts` to `1..20`, and `back
 
 ## UI workflow
 
-Open **Notification Center / 通知中心** at `/notifications`. The console page is backed by `web/src/pages/NotificationCenterPage.tsx` and `web/src/api/notifications.ts`; it now supports redacted channel/policy inspection plus governed channel and policy create/edit/delete/validate operations.
+Open **Notification Center / 通知中心** at `/notifications`. The console page is backed by `web/src/pages/NotificationCenterPage.tsx`, `web/src/pages/notifications/TemplateDrawer.tsx`, and `web/src/api/notifications.ts`; it supports redacted channel/policy inspection plus governed channel, template, and policy create/edit/delete/validate operations.
 
 | Tab | What to check |
 | --- | --- |
 | Channels | Channel name, provider, scope, redacted target, whether a secret is configured, enabled state, create/edit/delete drawers, and backend conflict handling for referenced channels. |
-| Policies | Owner, event family, severity, dedupe seconds, enabled state, create/edit/delete drawers, channel multi-select, JSON event filters, and policy validation. |
+| Templates | Provider, message type, enabled state, schema-driven body fields, variables JSON, backend render preview, create/edit/delete actions, and no secret-field exposure. |
+| Policies | Owner, event family, severity, dedupe seconds, enabled state, create/edit/delete drawers, channel multi-select, template selector, JSON event filters, and policy validation. |
 | Delivery | Total attempts, delivered count, retry-pending count, retry-consumed count, DLQ count, failed count, recent DLQ rows, and **Retry due** action. |
 | Messages | Recent normalized messages, event type, resource, subject, status, and creation time. |
 

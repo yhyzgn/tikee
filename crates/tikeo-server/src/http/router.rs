@@ -398,6 +398,21 @@ pub(super) fn api_router() -> Router<Arc<AppState>> {
                 .post(routes::validate_notification_policy),
         )
         .route(
+            "/notification-templates",
+            get(routes::list_notification_templates).post(routes::create_notification_template),
+        )
+        .route(
+            "/notification-templates/{template_action}",
+            get(routes::get_notification_template)
+                .patch(routes::update_notification_template)
+                .delete(routes::delete_notification_template)
+                .post(routes::render_notification_template),
+        )
+        .route(
+            "/notification-templates/{id}/render",
+            axum::routing::post(routes::render_notification_template_by_id),
+        )
+        .route(
             "/notification-messages",
             get(routes::list_notification_messages),
         )

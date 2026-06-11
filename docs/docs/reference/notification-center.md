@@ -12,8 +12,8 @@ Primary sources:
 
 - Design and boundary: `design/notification-center-alerting-plan.md`
 - Materialization and delivery: `crates/tikeo-server/src/notification.rs`
-- HTTP routes and OpenAPI annotations: `crates/tikeo-server/src/http/routes/notifications.rs`
-- Storage repositories and redaction: `crates/tikeo-storage/src/repository/notification.rs`
+- HTTP routes and OpenAPI annotations: `crates/tikeo-server/src/http/routes/notifications.rs`, `crates/tikeo-server/src/http/routes/notification_templates.rs`
+- Storage repositories and redaction: `crates/tikeo-storage/src/repository/notification.rs`, `crates/tikeo-storage/src/repository/notification_template.rs`
 - Storage entities/migration: `crates/tikeo-storage/src/entities/notification_*.rs`, `crates/tikeo-storage/src/migration/notification_center.rs`
 - Config defaults: `crates/tikeo-config/src/lib.rs`, `config/dev.toml`, `config/container.toml`
 - Web UI: `web/src/pages/NotificationCenterPage.tsx`, `web/src/api/notifications.ts`
@@ -24,6 +24,7 @@ Primary sources:
 | --- | --- | --- |
 | Channel | `notification_channels` | Reusable outbound destination with scope, provider, redacted config, secret refs, and safety policy. |
 | Policy/subscription | `notification_policies` | Owner/event filter that maps source events to ordered channel references and optional template refs. |
+| Template | `notification_templates` | Reusable provider/message-type template body with safe variable rendering and preview. |
 | Message | `notification_messages` | Normalized outbound message produced from a source event and policy. |
 | Delivery attempt | `notification_delivery_attempts` | One provider attempt for one message/channel pair, with retry and DLQ state. |
 
@@ -94,12 +95,18 @@ Examples in this reference use placeholders. Do not include real tokens, webhook
 | `PATCH /api/v1/notification-policies/{id}` | Update policy fields. | `notifications:manage` |
 | `DELETE /api/v1/notification-policies/{id}` | Delete a policy. | `notifications:manage` |
 | `POST /api/v1/notification-policies/{id}:validate` | Validate channel references. | `notifications:read` |
+| `GET /api/v1/notification-templates` | List reusable templates with provider/message-type/enabled filters. | `notifications:read` |
+| `POST /api/v1/notification-templates` | Create a reusable provider-specific template. | `notifications:manage` |
+| `GET /api/v1/notification-templates/{id-or-key}` | Read one template by id or `templateKey`. | `notifications:read` |
+| `PATCH /api/v1/notification-templates/{id}` | Update template metadata, body, variables, or enabled state. | `notifications:manage` |
+| `DELETE /api/v1/notification-templates/{id}` | Delete a template row. Policies are soft-linked and should be updated first. | `notifications:manage` |
+| `POST /api/v1/notification-templates/{id}/render` | Render a stored or unsaved draft template against sample JSON without provider delivery. The `{id}` value may be a generated id, `templateKey`, or draft key when the request body supplies `provider`, `messageType`, and `template`. | `notifications:read` |
 | `GET /api/v1/notification-messages` | List normalized messages. | `notifications:read` |
 | `GET /api/v1/notification-delivery-attempts` | List delivery attempts. | `notifications:read` |
 | `GET /api/v1/notification-delivery-attempts:queue-status` | Count retry/DLQ state and return recent dead letters. | `notifications:read` |
 | `POST /api/v1/notification-delivery-attempts:retry-due` | Process due attempts in a bounded scan. | `notifications:test` |
 
-The current source does **not** expose a separate `POST /api/v1/notification-channels/{id}:test` endpoint. Channel type metadata now reports `supportsTestSend: false`; the implemented operator action is the generic retry-due scan.
+The current source does **not** expose a separate `POST /api/v1/notification-channels/{id}:test` endpoint. Channel type metadata now reports `supportsTestSend=false`; the implemented operator action is the generic retry-due scan.
 
 ## Channel request fields
 
@@ -147,12 +154,35 @@ Provider validation:
 | `eventFamily` | string | yes | API accepts `job_instance`, `workflow`, `alert`, `worker`, or `script_governance`; current runtime materialization is implemented for `job_instance` only. |
 | `eventFilter` | object | no | Job materializer supports `statuses` and `eventTypes`/`event_types`. |
 | `channelRefs` | array | yes | Ordered channel refs. Empty list is rejected. |
-| `templateRef` | string/null | no | Stored as a soft link; current materializer uses built-in rendering. |
+| `templateRef` | string/null | no | Soft link to `notification_templates.id` or `templateKey`. Enabled stored templates are loaded during `job_instance` materialization and can override subject/body plus `payload.template`. Missing/disabled refs are ignored for compatibility. |
 | `severity` | string | yes | If blank in service materialization, default severity is derived from event. |
 | `enabled` | boolean | no | Defaults to `true`. |
 | `dedupeSeconds` | integer | no | Defaults to `300`. |
 
 `PATCH` additionally accepts nullable `throttle`, `quietHours`, and `escalation` JSON fields, persisted as JSON strings. Current job-event materialization source only enforces event filtering and dedupe; future UI/runbooks should not claim full throttle/quiet-hours/escalation behavior until service code implements it.
+
+## Template fields and rendering
+
+`notification_templates` stores reusable provider-specific template bodies. The API shape is:
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `templateKey` | string | yes | Stable operator key; letters, numbers, dot, underscore, and dash only; maximum 128 bytes. |
+| `name` | string | yes | Operator-facing name. |
+| `description` | string/null | no | Optional description. |
+| `provider` | string | yes | Built-in or plugin provider slug. |
+| `messageType` | string | yes | Must be supported by the provider schema when provider is built-in. |
+| `enabled` | boolean | no | Disabled templates remain stored but are skipped during runtime materialization. |
+| `body` | object | no | Provider-specific message template body. Required fields are validated from provider metadata. |
+| `variables` | object | no | Documentation/default-variable metadata; not secret storage. |
+
+The render dry-run endpoint uses the same variable replacement engine as delivery payload rendering and returns only the rendered JSON body; it does not resolve channel secret refs or call external providers. Stored templates can be rendered by id or `templateKey`. Unsaved drafts are also supported when the request body supplies `provider`, `messageType`, and a `template` object; the path segment then acts only as a draft key for validation. Supported template variables include `{{subject}}`, `{{body}}`, `{{eventType}}`, `{{resourceType}}`, `{{resourceId}}`, `{{severity}}`, `{{messageId}}`, `{{policyId}}`, `{{dedupeKey}}`, `{{triggeredAt}}`, and `{{createdAt}}`.
+
+The renderer is fail-closed for template syntax: unknown tokens such as `{{env.SECRET}}`, unopened `}}`, or unclosed `{{` delimiters are rejected on create, update, and render preview. Provider fields that are documented as JSON arrays or objects are also parsed during validation so malformed Block Kit, DingTalk feed cards, Feishu cards, WeCom cards, PagerDuty links/images, or webhook JSON bodies do not reach provider delivery.
+
+When a job-instance policy references an enabled stored template by `id` or `templateKey`, the materializer renders the template before message insertion. `subject`/`title` can override the normalized message subject; `body`/`text`/`content` can override the normalized message body; the complete rendered JSON is stored under `payload.template` together with `templateRef` and `templateKey`. Provider renderers prefer `payload.template` over channel inline `config.template`, so one enabled stored template can drive Slack/DingTalk/Feishu/WeCom/PagerDuty/webhook/email payload shape without duplicating channel secrets or being shadowed by channel defaults.
+
+Template rows never store provider credentials. Webhook URLs, signing keys, PagerDuty routing keys, SMTP URLs, SMTP passwords, authorization headers, and custom secret headers remain channel `secretRefs` only.
 
 ## Message fields
 
@@ -200,22 +230,26 @@ Implemented job event names and default severities:
 
 Worker-result failure semantics are retry-aware: a failure that schedules another attempt emits `job_instance.retry_scheduled`; a non-retrying terminal failure emits `job_instance.failed`; `job_instance.retry_exhausted` is emitted only after an enabled retry policy with at least one retry has exhausted its configured attempts.
 
-## Provider delivery behavior
+## Provider schema and delivery behavior
 
-The generic delivery worker reuses provider adapter shapes from alert delivery:
+`GET /api/v1/notification-channel-types` returns schema metadata used by the channel drawer. The metadata separates non-secret `requiredConfigKeys` from `requiredTargetKeys`, because built-in targets such as webhook URLs, PagerDuty routing keys, and SMTP URLs should normally be supplied through `secretRefs` rather than raw config. Server validation also enforces provider `messageType` values and required template fields for built-in providers.
 
-| Provider | Delivered payload behavior |
-| --- | --- |
-| `webhook` | POST provider-neutral JSON payload. |
-| `slack` | POST `{text}` containing a compact notification summary. |
-| `dingtalk` | POST text message body. |
-| `feishu` | POST Feishu/Lark text message body. |
-| `wechat_work` | POST WeCom text message body. |
-| `pagerduty` | POST Events API v2 trigger payload; default URL is `https://events.pagerduty.com/v2/enqueue` when not configured. |
-| `email` | Uses the email branch of `AlertDispatcher` with the normalized message converted to an alert-like payload. |
-| plugin webhook | POST provider-neutral JSON payload with configured headers. |
+Official-document-backed built-in variants currently exposed by the drawer and delivery renderer:
+
+| Provider | Message types and notable fields | Secret/ref behavior |
+| --- | --- | --- |
+| `webhook` | `json` body template. | `secretRefs.url`, optional `secretRefs.authorization` or `secretRefs.headers.*`. |
+| `slack` | `text`, `blockKit` (`blocks`), `attachments`; optional `threadTs` maps to Slack `thread_ts` for webhook thread replies when the parent message timestamp is known. | Incoming webhook URL should be a secret reference. |
+| `dingtalk` | `text`, `markdown`, `link`, `actionCard` with single-button or `btns` JSON, and `feedCard`; `atMobiles`, `atUserIds`, `isAtAll`. | Webhook URL as secret ref; optional `signingKey` signs URL with timestamp/HMAC. |
+| `feishu` | `text`, `post`, `image` (`image_key`), `share_chat` (`share_chat_id`), and `interactive` card. | Webhook URL as secret ref; optional `signingKey` adds body `timestamp`/`sign`. |
+| `wechat_work` | `text`, `markdown`, `markdown_v2`, `image`, `news`, `file`, `voice`, and `template_card`; mentions for text-compatible messages. | Webhook URL as secret ref. |
+| `pagerduty` | Events API `trigger`, `acknowledge`, `resolve`; payload fields include `source`, `component`, `group`, `class`, `client`, `client_url`, `links`, `images`, and `custom_details`. | Routing/integration key must be supplied through `secretRefs.routingKey` / aliases. |
+| `email` | `plain` text and stored `html` template shape. Runtime still sends text/plain through the SMTP adapter. | SMTP URL/password should be secret refs. |
+| plugin webhook | Provider-neutral JSON unless plugin metadata supplies a custom template. | Plugin-defined. |
 
 URL safety uses `alert::validate_webhook_url()`. Production targets should be HTTPS and publicly routable; `safetyPolicy.allowInsecureLoopback` is only for explicit local smoke tests.
+
+Official/standard references used for the built-in schema include Slack incoming webhooks and `chat.postMessage` thread field semantics, DingTalk custom robot and robot security settings, Feishu custom bot and message-card custom-bot docs, WeCom group robot, PagerDuty Events API v2, IETF RFC 9110/8259 for generic HTTP/JSON, and RFC 5321/5322/2045/4954/6409 for email/SMTP concepts.
 
 ## UI reference
 
@@ -224,10 +258,11 @@ URL safety uses `alert::validate_webhook_url()`. Production targets should be HT
 - `GET /api/v1/notification-channel-types`
 - `GET /api/v1/notification-channels`
 - `GET /api/v1/notification-policies`
+- `GET /api/v1/notification-templates`
 - `GET /api/v1/notification-messages`
 - `GET /api/v1/notification-delivery-attempts:queue-status`
 
-The page renders statistics for channels, policies, retry-pending attempts, and DLQ count. Tabs show channel summaries, policy summaries, queue/DLQ state with a **Retry due** action, and the latest 20 messages. Operators with `notifications:manage` can create, edit, and delete channels/policies; all policy validation is backed by `POST /api/v1/notification-policies/{id}:validate`.
+The page renders statistics for channels, policies, templates, retry-pending attempts, and DLQ count. Tabs show channel summaries, reusable templates, policy summaries, queue/DLQ state with a **Retry due** action, and the latest 20 messages. Operators with `notifications:manage` can create, edit, delete, and render-preview templates; create/edit/delete channels and policies; and validate policies through `POST /api/v1/notification-policies/{id}:validate`. The template drawer is provider/message-type schema driven and intentionally does not show `secretRefsJson` or provider secret fields.
 
 ## Static examples that are safe to copy
 
@@ -236,6 +271,34 @@ List provider metadata:
 ```bash
 curl -fsS http://127.0.0.1:9090/api/v1/notification-channel-types \
   -H 'Authorization: Bearer <operator-token>'
+```
+
+Create and render a safe template preview:
+
+```bash
+curl -fsS -X POST http://127.0.0.1:9090/api/v1/notification-templates \
+  -H 'Authorization: Bearer <operator-token>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "templateKey": "ops.slack.failure",
+    "name": "Ops Slack failure",
+    "provider": "slack",
+    "messageType": "blockKit",
+    "body": {
+      "subject": "[{{severity}}] {{subject}}",
+      "body": "{{body}}",
+      "text": "{{subject}}",
+      "blocks": [
+        {"type":"section","text":{"type":"mrkdwn","text":"*{{subject}}*\n{{body}}"}}
+      ]
+    }
+  }'
+
+curl -fsS -X POST \
+  http://127.0.0.1:9090/api/v1/notification-templates/ops.slack.failure/render \
+  -H 'Authorization: Bearer <operator-token>' \
+  -H 'Content-Type: application/json' \
+  -d '{"sample":{"subject":"Nightly failed","body":"exit 2","severity":"critical"}}'
 ```
 
 List queue status:

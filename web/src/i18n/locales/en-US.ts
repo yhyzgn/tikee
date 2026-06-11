@@ -83,6 +83,7 @@ export const messages: Record<string, string> = {
     "事件过滤 JSON": "Event filter JSON",
     "请输入事件过滤 JSON": "Enter event filter JSON",
     "模板引用": "Template reference",
+    "只能选择已启用且与所选渠道提供方匹配的存储模板。": "Select only enabled stored templates that match the selected channel providers.",
     "限流 JSON": "Throttle JSON",
     "静默时段 JSON": "Quiet hours JSON",
     "升级 JSON": "Escalation JSON",
@@ -140,6 +141,7 @@ export const messages: Record<string, string> = {
     "签发": "Issue",
     "明文 API-Key 创建后只显示一次；有效期留空则永久有效。": "The plaintext API-Key is shown only once after creation; leave expiration empty for no expiry.",
     "请输入名称": "Please enter a name",
+    "计费任务失败": "Billing failed job",
     "请选择 Service Account": "Select a Service Account",
     "选择已有 Service Account": "Select an existing Service Account",
     "权限 scopes": "Permission scopes",
@@ -1253,4 +1255,7 @@ export const messages: Record<string, string> = {
     "User": "User",
     "owner 或 owner@example.com": "owner or owner@example.com",
     "owner@example.com": "owner@example.com",
+    "开启替换渠道配置后才能修改消息类型和 inline 模板字段。": "Enable Replace channel configuration before editing message type or inline template fields.",
+    "开启替换渠道配置后才能修改高级配置 JSON。": "Enable Replace channel configuration before editing advanced config JSON.",
+    "开启替换密钥引用后才能修改高级密钥引用对象。": "Enable Replace secret references before editing advanced secret refs.",
 };

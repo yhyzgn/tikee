@@ -9,6 +9,8 @@ pub(crate) mod event_sources;
 pub(crate) mod gitops;
 pub(crate) mod jobs;
 pub(crate) mod metrics;
+pub(crate) mod notification_providers;
+pub(crate) mod notification_templates;
 pub(crate) mod notifications;
 pub(crate) mod observability;
 pub(crate) mod oidc_identity;
@@ -41,6 +43,11 @@ pub use jobs::{
     stream_instance_logs, stream_instances, trigger_job, update_job,
 };
 pub use metrics::metrics_summary;
+pub use notification_templates::{
+    create_notification_template, delete_notification_template, get_notification_template,
+    list_notification_templates, render_notification_template, render_notification_template_by_id,
+    update_notification_template,
+};
 pub use notifications::{
     create_notification_channel, create_notification_policy, delete_notification_channel,
     delete_notification_policy, get_notification_channel, get_notification_policy,

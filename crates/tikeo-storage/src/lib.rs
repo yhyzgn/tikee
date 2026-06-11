@@ -21,10 +21,10 @@ pub use repository::{
     CalendarRepository, CalendarSummary, CalendarWindowSummary, CompleteWorkflowShardInput,
     CompleteWorkflowShardResult, CreateAlertRule, CreateAuditLog, CreateAuthSession, CreateJob,
     CreateJobInstance, CreateJobInstanceAttempt, CreateNotificationChannel,
-    CreateNotificationMessage, CreateNotificationPolicy, CreateOidcAuthState, CreatePlugin,
-    CreateRole, CreateScript, CreateSdkApiKey, CreateSecret, CreateServiceAccount, CreateUser,
-    CreateWorkflow, DispatchQueueClaim, DispatchQueueSloSummary, DispatchQueueSummary,
-    InstanceEventSummary, JobDurationHistory, JobInstanceAttemptRepository,
+    CreateNotificationMessage, CreateNotificationPolicy, CreateNotificationTemplate,
+    CreateOidcAuthState, CreatePlugin, CreateRole, CreateScript, CreateSdkApiKey, CreateSecret,
+    CreateServiceAccount, CreateUser, CreateWorkflow, DispatchQueueClaim, DispatchQueueSloSummary,
+    DispatchQueueSummary, InstanceEventSummary, JobDurationHistory, JobInstanceAttemptRepository,
     JobInstanceAttemptSummary, JobInstanceLogRepository, JobInstanceLogSummary,
     JobInstanceRepository, JobInstanceResult, JobInstanceSummary, JobRepository, JobRetryPolicy,
     JobSummary, JobVersionRepository, JobVersionSummary, MaterializeWorkflowNodeResult,
@@ -33,7 +33,8 @@ pub use repository::{
     NotificationDeliveryAttemptFilters, NotificationDeliveryAttemptRepository,
     NotificationDeliveryAttemptSummary, NotificationMessageFilters, NotificationMessageRepository,
     NotificationMessageSummary, NotificationPolicyFilters, NotificationPolicyRepository,
-    NotificationPolicySummary, NotificationPolicyValidationSummary, OidcAuthStateRepository,
+    NotificationPolicySummary, NotificationPolicyValidationSummary, NotificationTemplateFilters,
+    NotificationTemplateRepository, NotificationTemplateSummary, OidcAuthStateRepository,
     OidcAuthStateSummary, OidcIdentityRepository, OidcIdentitySummary, PermissionCatalogItem,
     PermissionSummary, PersistedOnlineWorkerSummary, PluginAlertChannelTypeSummary,
     PluginProcessorTypeSummary, PluginRepository, PluginSummary, QueueOverview,
@@ -47,15 +48,15 @@ pub use repository::{
     ScriptSummary, ScriptVersionRepository, ScriptVersionSummary, SdkApiKeyRepository,
     SdkApiKeySummary, SecretRepository, SecretSummary, ServiceAccountRepository,
     ServiceAccountSummary, UpdateJob, UpdateNotificationChannel, UpdateNotificationPolicy,
-    UpdatePlugin, UpdateRole, UpdateScript, UpdateSdkApiKey, UpdateServiceAccount, UpdateUser,
-    UpdateWorkerPoolQuota, UpdateWorkflow, UpsertCalendar, UpsertOidcIdentity, UpsertRaftLogEntry,
-    UpsertRaftMember, UpsertRaftMetadata, UpsertRaftSnapshot, UserRepository, UserSummary,
-    VerifiedScriptReleaseGrants, VerifiedScriptReleaseSignature, WorkerHeartbeat,
-    WorkerLifecycleRepository, WorkerPoolSummary, WorkerSessionEventSummary,
-    WorkerSessionSnapshotUpdate, WorkerSessionSummary, WorkflowDefinition, WorkflowEdgeSpec,
-    WorkflowInstanceSummary, WorkflowJobResultOutcome, WorkflowNodeInstanceSummary,
-    WorkflowNodeSpec, WorkflowRepository, WorkflowShardSummary, WorkflowSloSummary,
-    WorkflowSummary, WorkflowValidationResult, validate_workflow_definition,
+    UpdateNotificationTemplate, UpdatePlugin, UpdateRole, UpdateScript, UpdateSdkApiKey,
+    UpdateServiceAccount, UpdateUser, UpdateWorkerPoolQuota, UpdateWorkflow, UpsertCalendar,
+    UpsertOidcIdentity, UpsertRaftLogEntry, UpsertRaftMember, UpsertRaftMetadata,
+    UpsertRaftSnapshot, UserRepository, UserSummary, VerifiedScriptReleaseGrants,
+    VerifiedScriptReleaseSignature, WorkerHeartbeat, WorkerLifecycleRepository, WorkerPoolSummary,
+    WorkerSessionEventSummary, WorkerSessionSnapshotUpdate, WorkerSessionSummary,
+    WorkflowDefinition, WorkflowEdgeSpec, WorkflowInstanceSummary, WorkflowJobResultOutcome,
+    WorkflowNodeInstanceSummary, WorkflowNodeSpec, WorkflowRepository, WorkflowShardSummary,
+    WorkflowSloSummary, WorkflowSummary, WorkflowValidationResult, validate_workflow_definition,
 };
 pub use sea_orm::DbErr;
 
@@ -132,6 +133,37 @@ mod tests {
                 "table {table} must use soft relationships only"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn notification_templates_upgrade_is_tracked_as_versioned_migration() {
+        let db = crate::connect_and_migrate("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("sqlite memory db should initialize: {error}"));
+
+        let migration_rows = db
+            .query_all(Statement::from_string(
+                DatabaseBackend::Sqlite,
+                "SELECT version FROM seaql_migrations ORDER BY version",
+            ))
+            .await
+            .unwrap_or_else(|error| panic!("migration history should query: {error}"));
+        let versions = migration_rows
+            .iter()
+            .map(|row| row.try_get::<String>("", "version"))
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap_or_else(|error| panic!("migration version rows should decode: {error}"));
+
+        assert!(
+            versions
+                .iter()
+                .any(|version| version == "m20260611_000002_notification_templates"),
+            "notification_templates must be added by a distinct versioned migration, got {versions:?}"
+        );
+        assert!(
+            sqlite_table_has_column(&db, "notification_templates", "template_key").await,
+            "notification_templates.template_key should exist after migrations"
+        );
     }
 
     #[tokio::test]

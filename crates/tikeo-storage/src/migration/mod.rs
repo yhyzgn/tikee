@@ -20,13 +20,13 @@ use self::{
         AlertDeliveryAttempts, AlertEvents, AlertRules, Apps, AuditLogs, AuthSessions,
         DispatchQueue, InstanceEvents, JobInstanceAttempts, JobInstanceLogs, JobInstances,
         JobVersions, Jobs, Namespaces, NotificationChannels, NotificationDeliveryAttempts,
-        NotificationMessages, NotificationPolicies, OidcAuthStates, OidcIdentities, Permissions,
-        Plugins, RaftAppliedCommands, RaftLogEntries, RaftMembers, RaftMembershipProposals,
-        RaftMetadata, RaftSnapshots, RoleMenuPermissions, RolePermissions, RoleUiActionPermissions,
-        Roles, ScheduleCursors, ScriptVersions, Scripts, SdkApiKeys, Secrets, ServiceAccounts,
-        UserRoles, Users, WorkerLogicalInstances, WorkerPools, WorkerSessionEvents, WorkerSessions,
-        WorkflowEdges, WorkflowInstances, WorkflowNodeInstances, WorkflowNodes, WorkflowShards,
-        Workflows,
+        NotificationMessages, NotificationPolicies, NotificationTemplates, OidcAuthStates,
+        OidcIdentities, Permissions, Plugins, RaftAppliedCommands, RaftLogEntries, RaftMembers,
+        RaftMembershipProposals, RaftMetadata, RaftSnapshots, RoleMenuPermissions, RolePermissions,
+        RoleUiActionPermissions, Roles, ScheduleCursors, ScriptVersions, Scripts, SdkApiKeys,
+        Secrets, ServiceAccounts, UserRoles, Users, WorkerLogicalInstances, WorkerPools,
+        WorkerSessionEvents, WorkerSessions, WorkflowEdges, WorkflowInstances,
+        WorkflowNodeInstances, WorkflowNodes, WorkflowShards, Workflows,
     },
     indexes::create_indexes,
     sqlite_compat::LegacySqliteSchemaCompatibility,
@@ -45,11 +45,12 @@ impl MigratorTrait for Migrator {
             Box::new(LegacySqliteSchemaCompatibility),
             Box::new(RbacRoleManagementMigration),
             Box::new(NotificationCenterMigration),
+            Box::new(NotificationTemplatesMigration),
         ]
     }
 }
 
-use notification_center::NotificationCenterMigration;
+use notification_center::{NotificationCenterMigration, NotificationTemplatesMigration};
 use rbac_role_management::RbacRoleManagementMigration;
 
 #[derive(DeriveMigrationName)]

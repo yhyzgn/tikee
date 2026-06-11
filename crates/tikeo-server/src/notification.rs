@@ -2,6 +2,9 @@
 
 use std::time::Duration;
 
+mod provider_templates;
+mod signing;
+
 use serde::{Deserialize, Serialize};
 use tikeo_core::InstanceStatus;
 use tikeo_storage::{
@@ -9,10 +12,18 @@ use tikeo_storage::{
     NotificationChannelDeliveryConfig, NotificationChannelFilters, NotificationChannelRepository,
     NotificationDeliveryAttemptRepository, NotificationDeliveryAttemptSummary,
     NotificationMessageRepository, NotificationMessageSummary, NotificationPolicyRepository,
-    NotificationPolicySummary, RecordNotificationDeliveryAttempt,
+    NotificationPolicySummary, NotificationTemplateRepository, NotificationTemplateSummary,
+    RecordNotificationDeliveryAttempt,
 };
 use tokio::time as tokio_time;
 use tracing::{info, warn};
+
+use provider_templates::{
+    dingtalk_payload, email_alert_payload_from_message, feishu_payload,
+    missing_required_template_reason, pagerduty_payload, render_template_value, slack_payload,
+    validate_template_tokens, webhook_payload, wechat_work_payload,
+};
+use signing::{add_feishu_signature, signed_dingtalk_url};
 
 use crate::{
     alert::{
@@ -150,6 +161,7 @@ pub struct NotificationCenter {
     policies: NotificationPolicyRepository,
     messages: NotificationMessageRepository,
     attempts: NotificationDeliveryAttemptRepository,
+    templates: NotificationTemplateRepository,
     jobs: JobRepository,
 }
 
@@ -161,6 +173,7 @@ impl NotificationCenter {
         policies: NotificationPolicyRepository,
         messages: NotificationMessageRepository,
         attempts: NotificationDeliveryAttemptRepository,
+        templates: NotificationTemplateRepository,
         jobs: JobRepository,
     ) -> Self {
         Self {
@@ -168,6 +181,7 @@ impl NotificationCenter {
             policies,
             messages,
             attempts,
+            templates,
             jobs,
         }
     }
@@ -208,8 +222,8 @@ impl NotificationCenter {
             } else {
                 policy.severity.clone()
             };
-            let subject = format!("Tikeo job {}: {}", job.name, event.filter_status());
-            let body = reason.map_or_else(
+            let mut subject = format!("Tikeo job {}: {}", job.name, event.filter_status());
+            let mut body = reason.map_or_else(
                 || {
                     format!(
                         "Job {} instance {} emitted {}",
@@ -227,7 +241,8 @@ impl NotificationCenter {
                     )
                 },
             );
-            let payload_json = serde_json::json!({
+            let dedupe_key = format!("{}:{}:{}", policy.id, instance.id, event.event_type());
+            let mut payload = serde_json::json!({
                 "eventType": event.event_type(),
                 "jobId": job.id,
                 "jobName": job.name,
@@ -236,9 +251,21 @@ impl NotificationCenter {
                 "instanceId": instance.id,
                 "status": instance.status.to_string(),
                 "reason": reason,
-            })
-            .to_string();
-            let dedupe_key = format!("{}:{}:{}", policy.id, instance.id, event.event_type());
+                "severity": severity,
+                "policyId": policy.id,
+                "dedupeKey": dedupe_key,
+            });
+            if let Some(template) = load_policy_template(&self.templates, &policy).await? {
+                apply_message_template(
+                    &mut subject,
+                    &mut body,
+                    &mut payload,
+                    &template,
+                    &policy.id,
+                    &dedupe_key,
+                );
+            }
+            let payload_json = payload.to_string();
             let (message, created_message) = if let Some(message) = self
                 .messages
                 .latest_message_by_dedupe_key(&dedupe_key)
@@ -297,6 +324,93 @@ impl NotificationCenter {
             }
         }
         Ok(summary)
+    }
+}
+
+/// Render a reusable notification template body against a sample payload without provider delivery.
+#[must_use]
+pub fn render_notification_template_preview(
+    template: &serde_json::Value,
+    sample: &serde_json::Value,
+) -> serde_json::Value {
+    render_notification_template_preview_with_overlay(template, sample, None, None)
+}
+
+/// Validate that a reusable notification template only uses supported inert replacement tokens.
+///
+/// # Errors
+///
+/// Returns a string describing unsupported or malformed template delimiters.
+pub fn validate_notification_template_tokens(template: &serde_json::Value) -> Result<(), String> {
+    validate_template_tokens(template)
+}
+
+fn render_notification_template_preview_with_overlay(
+    template: &serde_json::Value,
+    sample: &serde_json::Value,
+    subject_overlay: Option<&str>,
+    body_overlay: Option<&str>,
+) -> serde_json::Value {
+    let message = sample_notification_message(sample, subject_overlay, body_overlay);
+    let mut rendered = template.clone();
+    render_template_value(&mut rendered, &message);
+    rendered
+}
+
+fn sample_notification_message(
+    sample: &serde_json::Value,
+    subject_overlay: Option<&str>,
+    body_overlay: Option<&str>,
+) -> NotificationMessageSummary {
+    let payload = if sample.is_object() {
+        sample.clone()
+    } else {
+        serde_json::json!({})
+    };
+    let string = |keys: &[&str], default: &str| {
+        keys.iter()
+            .find_map(|key| payload.get(*key).and_then(serde_json::Value::as_str))
+            .unwrap_or(default)
+            .to_owned()
+    };
+    NotificationMessageSummary {
+        id: string(
+            &["messageId", "message_id", "id"],
+            "notification-message-preview",
+        ),
+        source_type: string(&["sourceType", "source_type"], "preview"),
+        source_id: string(&["sourceId", "source_id"], "preview-source"),
+        policy_id: string(&["policyId", "policy_id"], "notification-policy-preview"),
+        event_type: string(&["eventType", "event_type"], "job_instance.failed"),
+        resource_type: string(&["resourceType", "resource_type"], "job"),
+        resource_id: string(&["resourceId", "resource_id"], "job-preview"),
+        severity: string(&["severity"], "critical"),
+        subject: subject_overlay.map_or_else(
+            || string(&["subject", "title"], "Preview notification"),
+            ToOwned::to_owned,
+        ),
+        body: body_overlay.map_or_else(
+            || {
+                string(
+                    &["body", "message", "content"],
+                    "This is a template preview.",
+                )
+            },
+            ToOwned::to_owned,
+        ),
+        payload_json: payload.to_string(),
+        dedupe_key: string(&["dedupeKey", "dedupe_key"], "preview-dedupe-key"),
+        trace_id: payload
+            .get("traceId")
+            .or_else(|| payload.get("trace_id"))
+            .and_then(serde_json::Value::as_str)
+            .map(ToOwned::to_owned),
+        status: string(&["status"], "pending"),
+        created_at: string(
+            &["triggeredAt", "createdAt", "created_at"],
+            "2026-06-11T00:00:00Z",
+        ),
+        updated_at: string(&["updatedAt", "updated_at"], "2026-06-11T00:00:00Z"),
     }
 }
 
@@ -421,6 +535,91 @@ pub async fn emit_job_instance_event_best_effort(
     {
         warn!(%error, instance_id = %instance.id, "failed to materialize notification event");
     }
+}
+
+async fn load_policy_template(
+    templates: &NotificationTemplateRepository,
+    policy: &NotificationPolicySummary,
+) -> Result<Option<NotificationTemplateSummary>, tikeo_storage::DbErr> {
+    let Some(template_ref) = policy
+        .template_ref
+        .as_deref()
+        .filter(|item| !item.trim().is_empty())
+    else {
+        return Ok(None);
+    };
+    templates
+        .get_template(template_ref)
+        .await
+        .map(|template| template.filter(|item| item.enabled))
+}
+
+fn apply_message_template(
+    subject: &mut String,
+    body: &mut String,
+    payload: &mut serde_json::Value,
+    template: &NotificationTemplateSummary,
+    policy_id: &str,
+    dedupe_key: &str,
+) {
+    let body_json = serde_json::from_str::<serde_json::Value>(&template.body_json)
+        .unwrap_or_else(|_| serde_json::json!({}));
+    let sample = serde_json::json!({
+        "subject": subject.as_str(),
+        "body": body.as_str(),
+        "eventType": payload.get("eventType"),
+        "resourceType": "job",
+        "resourceId": payload.get("jobId"),
+        "severity": payload.get("severity"),
+        "messageId": "pending",
+        "policyId": policy_id,
+        "dedupeKey": dedupe_key,
+        "triggeredAt": payload.get("createdAt"),
+    });
+
+    let preview = render_notification_template_preview_with_overlay(
+        &body_json,
+        &sample,
+        Some(subject),
+        Some(body),
+    );
+    if let Some(rendered_subject) = template_string_field(&preview, &["subject", "title"]) {
+        *subject = rendered_subject;
+    }
+    if let Some(rendered_body) = template_string_field(&preview, &["body", "text", "content"]) {
+        *body = rendered_body;
+    }
+
+    let mut rendered = render_notification_template_preview_with_overlay(
+        &body_json,
+        &sample,
+        Some(subject),
+        Some(body),
+    );
+    if let Some(object) = rendered.as_object_mut() {
+        object
+            .entry("messageType")
+            .or_insert_with(|| serde_json::Value::String(template.message_type.clone()));
+    }
+    if let Some(object) = payload.as_object_mut() {
+        object.insert(
+            "templateRef".to_owned(),
+            serde_json::Value::String(template.id.clone()),
+        );
+        object.insert(
+            "templateKey".to_owned(),
+            serde_json::Value::String(template.template_key.clone()),
+        );
+        object.insert("template".to_owned(), rendered);
+    }
+}
+
+fn template_string_field(value: &serde_json::Value, keys: &[&str]) -> Option<String> {
+    keys.iter()
+        .find_map(|key| value.get(*key).and_then(serde_json::Value::as_str))
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
 }
 
 fn policy_matches_job_event(
@@ -651,6 +850,15 @@ impl NotificationProviderClient {
                 error: Some("notification channel configuration is incomplete".to_owned()),
             };
         };
+        if let Some(error) = missing_required_template_reason(&channel.provider, message, &config) {
+            return NotificationProviderDeliveryResult {
+                provider: channel.provider.clone(),
+                target_redacted: channel.target_redacted.clone(),
+                delivered: false,
+                status_code: None,
+                error: Some(error),
+            };
+        }
         match notification_channel {
             NotificationChannel::Webhook { url } => {
                 let headers = webhook_headers(&config, &secrets);
@@ -658,34 +866,33 @@ impl NotificationProviderClient {
                     "webhook",
                     channel,
                     &url,
-                    &notification_payload(message),
+                    &webhook_payload(message, &config),
                     &headers,
                 )
                 .await
             }
             NotificationChannel::Slack { url } => {
-                let body = serde_json::json!({ "text": notification_text(message) });
+                let body = slack_payload(message, &config);
                 self.post_json("slack", channel, &url, &body, &[]).await
             }
             NotificationChannel::DingTalk { url } => {
-                let body = serde_json::json!({
-                    "msgtype": "text",
-                    "text": { "content": notification_text(message) },
-                });
+                let url = if let Some(secret) = optional_signing_secret(&config, &secrets) {
+                    signed_dingtalk_url(&url, &secret)
+                } else {
+                    url
+                };
+                let body = dingtalk_payload(message, &config);
                 self.post_json("dingtalk", channel, &url, &body, &[]).await
             }
             NotificationChannel::Feishu { url } => {
-                let body = serde_json::json!({
-                    "msg_type": "text",
-                    "content": { "text": notification_text(message) },
-                });
+                let mut body = feishu_payload(message, &config);
+                if let Some(secret) = optional_signing_secret(&config, &secrets) {
+                    add_feishu_signature(&mut body, &secret);
+                }
                 self.post_json("feishu", channel, &url, &body, &[]).await
             }
             NotificationChannel::WechatWork { url } => {
-                let body = serde_json::json!({
-                    "msgtype": "text",
-                    "text": { "content": notification_text(message) },
-                });
+                let body = wechat_work_payload(message, &config);
                 self.post_json("wechat_work", channel, &url, &body, &[])
                     .await
             }
@@ -693,18 +900,7 @@ impl NotificationProviderClient {
                 let target = url
                     .as_deref()
                     .unwrap_or("https://events.pagerduty.com/v2/enqueue");
-                let body = serde_json::json!({
-                    "routing_key": routing_key,
-                    "event_action": "trigger",
-                    "dedup_key": message.dedupe_key,
-                    "payload": {
-                        "summary": message.subject,
-                        "source": "tikeo",
-                        "severity": pagerduty_severity(&message.severity),
-                        "component": message.resource_type,
-                        "custom_details": notification_payload(message),
-                    },
-                });
+                let body = pagerduty_payload(message, &routing_key, &config);
                 self.post_json("pagerduty", channel, target, &body, &[])
                     .await
             }
@@ -718,7 +914,7 @@ impl NotificationProviderClient {
                     &channel_type,
                     channel,
                     &url,
-                    &notification_payload(message),
+                    &webhook_payload(message, &config),
                     &headers,
                 )
                 .await
@@ -726,7 +922,10 @@ impl NotificationProviderClient {
             email @ NotificationChannel::Email { .. } => {
                 let policy = effective_delivery_policy(self.policy, channel);
                 let mut results = AlertDispatcher::new_with_policy(Vec::new(), policy)
-                    .deliver_payload(&[email], &alert_payload_from_message(message))
+                    .deliver_payload(
+                        &[email],
+                        &email_alert_payload_from_message(message, &config),
+                    )
                     .await;
                 results.pop().map_or_else(
                     || NotificationProviderDeliveryResult {
@@ -931,6 +1130,34 @@ fn optional_secret(
     secret_ref_string(map, keys).and_then(|reference| alert::resolve_secret_ref(Some(&reference)))
 }
 
+fn optional_signing_secret(
+    config: &serde_json::Map<String, serde_json::Value>,
+    secrets: &serde_json::Map<String, serde_json::Value>,
+) -> Option<String> {
+    optional_string(
+        config,
+        &[
+            "signingKey",
+            "signing_key",
+            "secret",
+            "secretKey",
+            "secret_key",
+        ],
+    )
+    .or_else(|| {
+        optional_secret(
+            secrets,
+            &[
+                "signingKey",
+                "signing_key",
+                "secret",
+                "secretKey",
+                "secret_key",
+            ],
+        )
+    })
+}
+
 fn secret_ref_string(
     map: &serde_json::Map<String, serde_json::Value>,
     keys: &[&str],
@@ -1019,6 +1246,14 @@ fn notification_payload(message: &NotificationMessageSummary) -> serde_json::Val
         map.insert(
             "body".to_owned(),
             serde_json::Value::String(message.body.clone()),
+        );
+        map.insert(
+            "triggeredAt".to_owned(),
+            serde_json::Value::String(message.created_at.clone()),
+        );
+        map.insert(
+            "createdAt".to_owned(),
+            serde_json::Value::String(message.created_at.clone()),
         );
     }
     payload

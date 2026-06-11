@@ -10,8 +10,9 @@ use tikeo_storage::{
     AlertRepository, AuditLogRepository, AuthSessionRepository, JobInstanceAttemptRepository,
     JobInstanceLogRepository, JobInstanceRepository, JobRepository, NotificationChannelRepository,
     NotificationDeliveryAttemptRepository, NotificationMessageRepository,
-    NotificationPolicyRepository, PluginRepository, RaftRepository, RbacRepository,
-    ScriptRepository, UserRepository, WorkerLifecycleRepository, WorkflowRepository,
+    NotificationPolicyRepository, NotificationTemplateRepository, PluginRepository, RaftRepository,
+    RbacRepository, ScriptRepository, UserRepository, WorkerLifecycleRepository,
+    WorkflowRepository,
 };
 
 use super::{
@@ -34,6 +35,7 @@ pub struct AppState {
     pub(crate) alerts: AlertRepository,
     pub(crate) notification_channels: NotificationChannelRepository,
     pub(crate) notification_policies: NotificationPolicyRepository,
+    pub(crate) notification_templates: NotificationTemplateRepository,
     pub(crate) notification_messages: NotificationMessageRepository,
     pub(crate) notification_delivery_attempts: NotificationDeliveryAttemptRepository,
     pub(crate) plugins: PluginRepository,
@@ -72,6 +74,7 @@ impl AppState {
         let alerts = AlertRepository::new(db.clone());
         let notification_channels = NotificationChannelRepository::new(db.clone());
         let notification_policies = NotificationPolicyRepository::new(db.clone());
+        let notification_templates = NotificationTemplateRepository::new(db.clone());
         let notification_messages = NotificationMessageRepository::new(db.clone());
         let notification_delivery_attempts = NotificationDeliveryAttemptRepository::new(db.clone());
         let plugins = PluginRepository::new(db.clone());
@@ -93,6 +96,7 @@ impl AppState {
             alerts,
             notification_channels,
             notification_policies,
+            notification_templates,
             notification_messages,
             notification_delivery_attempts,
             plugins,

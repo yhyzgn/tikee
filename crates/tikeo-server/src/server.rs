@@ -60,6 +60,7 @@ pub async fn serve(config: TikeoConfig) -> Result<()> {
         NotificationPolicyRepository::new(db.clone()),
         NotificationMessageRepository::new(db.clone()),
         NotificationDeliveryAttemptRepository::new(db.clone()),
+        tikeo_storage::NotificationTemplateRepository::new(db.clone()),
         jobs.clone(),
     );
     let worker_lifecycle = WorkerLifecycleRepository::new(db.clone());

@@ -23,7 +23,8 @@ fn notification_center(jobs: &JobRepository) -> crate::notification::Notificatio
         NotificationChannelRepository::new(db.clone()),
         NotificationPolicyRepository::new(db.clone()),
         NotificationMessageRepository::new(db.clone()),
-        NotificationDeliveryAttemptRepository::new(db),
+        NotificationDeliveryAttemptRepository::new(db.clone()),
+        tikeo_storage::NotificationTemplateRepository::new(db),
         jobs.clone(),
     )
 }
@@ -331,11 +332,13 @@ async fn broadcast_task_result_persists_per_worker_attempt_result() {
     };
     let (tx, _events) = mpsc::channel(8);
     let broadcaster = TaskLogBroadcaster::default();
+    let templates = tikeo_storage::NotificationTemplateRepository::new(channels.db());
     let notifications = crate::notification::NotificationCenter::new(
         channels,
         policies,
         messages.clone(),
         delivery_attempts,
+        templates,
         jobs.clone(),
     );
     let context = WorkerMessageContext {
@@ -733,11 +736,13 @@ async fn failed_single_task_result_emits_job_notification_policy() {
     };
     let (tx, _events) = mpsc::channel(8);
     let broadcaster = TaskLogBroadcaster::default();
+    let templates = tikeo_storage::NotificationTemplateRepository::new(channels.db());
     let notifications = crate::notification::NotificationCenter::new(
         channels,
         policies,
         messages.clone(),
         delivery_attempts.clone(),
+        templates,
         jobs.clone(),
     );
     let context = WorkerMessageContext {
@@ -956,11 +961,13 @@ async fn non_retrying_failed_task_result_emits_failed_notification_policy() {
     };
     let (tx, _events) = mpsc::channel(8);
     let broadcaster = TaskLogBroadcaster::default();
+    let templates = tikeo_storage::NotificationTemplateRepository::new(channels.db());
     let notifications = crate::notification::NotificationCenter::new(
         channels,
         policies,
         messages.clone(),
         delivery_attempts,
+        templates,
         jobs.clone(),
     );
     let context = WorkerMessageContext {

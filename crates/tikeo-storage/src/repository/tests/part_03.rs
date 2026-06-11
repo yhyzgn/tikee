@@ -1,6 +1,8 @@
 use crate::repository::{
-    CreateNotificationChannel, CreateNotificationPolicy, NotificationChannelRepository,
-    NotificationChannelFilters, NotificationPolicyRepository, UpdateNotificationChannel,
+    CreateNotificationChannel, CreateNotificationPolicy, CreateNotificationTemplate,
+    NotificationChannelFilters, NotificationChannelRepository, NotificationPolicyRepository,
+    NotificationTemplateFilters, NotificationTemplateRepository, UpdateNotificationChannel,
+    UpdateNotificationTemplate,
 };
 
 #[tokio::test]
@@ -297,4 +299,187 @@ async fn notification_center_menu_permission_is_seeded_for_builtin_roles() {
     assert!(owner_keys.iter().any(|key| key == "/notifications"));
     assert!(operator_keys.iter().any(|key| key == "/notifications"));
     assert!(viewer_keys.iter().any(|key| key == "/notifications"));
+}
+
+
+#[tokio::test]
+async fn notification_templates_are_persisted_filtered_and_mutable() {
+    let db = crate::connect_and_migrate("sqlite::memory:")
+        .await
+        .unwrap_or_else(|error| panic!("sqlite memory db should connect: {error}"));
+    let templates = NotificationTemplateRepository::new(db);
+
+    let created = templates
+        .create_template(CreateNotificationTemplate {
+            template_key: "slack.failure".to_owned(),
+            name: "Slack failure".to_owned(),
+            description: Some("Failure Block Kit template".to_owned()),
+            provider: "slack".to_owned(),
+            message_type: "blockKit".to_owned(),
+            enabled: true,
+            body_json: serde_json::json!({
+                "messageType":"blockKit",
+                "text":"{{subject}}",
+                "blocks":[{"type":"section","text":{"type":"mrkdwn","text":"{{body}}"}}]
+            })
+            .to_string(),
+            variables_json: serde_json::json!(["{{subject}}", "{{body}}"]).to_string(),
+        })
+        .await
+        .unwrap_or_else(|error| panic!("template should create: {error}"));
+
+    assert_eq!(created.template_key, "slack.failure");
+    assert_eq!(created.provider, "slack");
+    assert!(created.body_json.contains("blockKit"));
+
+    let by_key = templates
+        .get_template("slack.failure")
+        .await
+        .unwrap_or_else(|error| panic!("template should load by key: {error}"))
+        .unwrap_or_else(|| panic!("template key should resolve"));
+    assert_eq!(by_key.id, created.id);
+
+    let filtered = templates
+        .list_templates(NotificationTemplateFilters {
+            provider: Some("slack".to_owned()),
+            message_type: Some("blockKit".to_owned()),
+            enabled: Some(true),
+        })
+        .await
+        .unwrap_or_else(|error| panic!("templates should list: {error}"));
+    assert_eq!(filtered.len(), 1);
+
+    let updated = templates
+        .update_template(
+            &created.id,
+            UpdateNotificationTemplate {
+                name: Some("Slack failure v2".to_owned()),
+                enabled: Some(false),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap_or_else(|error| panic!("template should update: {error}"))
+        .unwrap_or_else(|| panic!("template should exist"));
+    assert_eq!(updated.name, "Slack failure v2");
+    assert!(!updated.enabled);
+
+    assert!(templates
+        .delete_template(&created.id)
+        .await
+        .unwrap_or_else(|error| panic!("template should delete: {error}")));
+}
+
+#[tokio::test]
+async fn notification_channel_updates_preserve_unsubmitted_config_and_secret_refs() {
+    let db = crate::connect_and_migrate("sqlite::memory:")
+        .await
+        .unwrap_or_else(|error| panic!("sqlite memory db should connect: {error}"));
+    let channels = NotificationChannelRepository::new(db);
+
+    let created = channels
+        .create_channel(CreateNotificationChannel {
+            scope_type: "global".to_owned(),
+            namespace: None,
+            app: None,
+            worker_pool: None,
+            name: "Ops webhook".to_owned(),
+            provider: "webhook".to_owned(),
+            enabled: true,
+            config_json: serde_json::json!({
+                "messageType": "json",
+                "headers": {"X-Trace": "trace-header"},
+                "template": {"body": {"text": "{{subject}}"}}
+            })
+            .to_string(),
+            secret_refs_json: serde_json::json!({
+                "url": "env:TIKEO_NOTIFICATION_WEBHOOK_URL",
+                "authorization": "env:TIKEO_NOTIFICATION_AUTH"
+            })
+            .to_string(),
+            safety_policy_json: None,
+        })
+        .await
+        .unwrap_or_else(|error| panic!("channel should create: {error}"));
+
+    assert!(!created.config_json.contains("trace-header"));
+    assert!(!created.secret_refs_json.is_empty());
+
+    let renamed = channels
+        .update_channel(
+            &created.id,
+            UpdateNotificationChannel {
+                name: Some("Ops webhook renamed".to_owned()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap_or_else(|error| panic!("metadata-only update should succeed: {error}"))
+        .unwrap_or_else(|| panic!("channel should exist"));
+    assert_eq!(renamed.name, "Ops webhook renamed");
+    assert!(renamed.secret_configured);
+
+    let delivery_after_rename = channels
+        .get_channel_delivery_config(&created.id)
+        .await
+        .unwrap_or_else(|error| panic!("delivery config should load: {error}"))
+        .unwrap_or_else(|| panic!("delivery config should exist"));
+    assert!(delivery_after_rename.config_json.contains("trace-header"));
+    assert!(
+        delivery_after_rename
+            .secret_refs_json
+            .contains("TIKEO_NOTIFICATION_AUTH")
+    );
+
+    let config_replaced = channels
+        .update_channel(
+            &created.id,
+            UpdateNotificationChannel {
+                config_json: Some(
+                    serde_json::json!({"messageType":"json","template":{"body":{"text":"{{body}}"}}})
+                        .to_string(),
+                ),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap_or_else(|error| panic!("config update should succeed: {error}"))
+        .unwrap_or_else(|| panic!("channel should exist"));
+    assert!(config_replaced.secret_configured);
+    let delivery_after_config = channels
+        .get_channel_delivery_config(&created.id)
+        .await
+        .unwrap_or_else(|error| panic!("delivery config should load: {error}"))
+        .unwrap_or_else(|| panic!("delivery config should exist"));
+    assert!(
+        delivery_after_config
+            .secret_refs_json
+            .contains("TIKEO_NOTIFICATION_AUTH")
+    );
+
+    let secret_replaced = channels
+        .update_channel(
+            &created.id,
+            UpdateNotificationChannel {
+                secret_refs_json: Some(
+                    serde_json::json!({"url":"env:TIKEO_NEW_WEBHOOK_URL"}).to_string(),
+                ),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap_or_else(|error| panic!("secret update should succeed: {error}"))
+        .unwrap_or_else(|| panic!("channel should exist"));
+    assert!(secret_replaced.config_json.contains("{{body}}"));
+    let delivery_after_secret = channels
+        .get_channel_delivery_config(&created.id)
+        .await
+        .unwrap_or_else(|error| panic!("delivery config should load: {error}"))
+        .unwrap_or_else(|| panic!("delivery config should exist"));
+    assert!(delivery_after_secret.config_json.contains("{{body}}"));
+    assert!(
+        delivery_after_secret
+            .secret_refs_json
+            .contains("TIKEO_NEW_WEBHOOK_URL")
+    );
 }

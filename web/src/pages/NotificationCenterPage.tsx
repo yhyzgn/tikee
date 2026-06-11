@@ -2,20 +2,19 @@ import { Alert, Button, Card, Col, Drawer, Form, Input, InputNumber, Popconfirm,
 import { useEffect, useMemo, useState } from 'react';
 
 import {
-  createNotificationChannel,
   createNotificationPolicy,
   deleteNotificationChannel,
   deleteNotificationPolicy,
+  deleteNotificationTemplate,
   getNotificationDeliveryQueueStatus,
   listNotificationChannelTypes,
   listNotificationChannels,
   listNotificationMessages,
   listNotificationPolicies,
+  listNotificationTemplates,
   retryDueNotificationDeliveryAttempts,
-  updateNotificationChannel,
   updateNotificationPolicy,
   validateNotificationPolicy,
-  type CreateNotificationChannelRequest,
   type CreateNotificationPolicyRequest,
   type NotificationChannelSummary,
   type NotificationChannelTypeSummary,
@@ -23,9 +22,13 @@ import {
   type NotificationDeliveryQueueStatus,
   type NotificationMessageSummary,
   type NotificationPolicySummary,
-  type UpdateNotificationChannelRequest,
+  type NotificationTemplateSummary,
   type UpdateNotificationPolicyRequest,
 } from '../api/notifications';
+import { blankToNull, formatJson, parseJsonObject } from './notifications/jsonUtils';
+import { ChannelDrawer } from './notifications/ChannelDrawer';
+import { TemplateDrawer } from './notifications/TemplateDrawer';
+import { notificationTemplateOptions, selectedPolicyProviders } from './notifications/templateCatalog';
 import { PermissionGate } from '../components/Permission';
 import { useRouteActive } from '../hooks/useRouteActivation';
 import { useI18n } from '../i18n';
@@ -40,23 +43,9 @@ const stateColor: Record<string, string> = {
   failed: 'red',
 };
 
-const CHANNEL_SCOPE_OPTIONS = ['global', 'namespace', 'app', 'worker_pool'];
 const POLICY_OWNER_OPTIONS = ['global', 'namespace', 'app', 'job', 'workflow', 'workflow_node', 'alert_rule', 'worker_pool'];
 const EVENT_FAMILY_OPTIONS = ['job_instance', 'workflow', 'alert', 'worker', 'script_governance'];
 const SEVERITY_OPTIONS = ['info', 'warning', 'critical'];
-
-interface ChannelFormValues {
-  scopeType: string;
-  namespace?: string;
-  app?: string;
-  workerPool?: string;
-  name: string;
-  provider: string;
-  enabled: boolean;
-  configJsonText: string;
-  secretRefsJsonText?: string;
-  safetyPolicyJsonText?: string;
-}
 
 interface PolicyFormValues {
   ownerType: string;
@@ -72,37 +61,6 @@ interface PolicyFormValues {
   throttleJsonText?: string;
   quietHoursJsonText?: string;
   escalationJsonText?: string;
-}
-
-function formatJson(raw: string | null | undefined, fallback = '{}'): string {
-  if (!raw || raw.trim() === '') return fallback;
-  try {
-    return JSON.stringify(JSON.parse(raw), null, 2);
-  } catch {
-    return raw;
-  }
-}
-
-function blankToNull(value: string | undefined): string | null {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : null;
-}
-
-function parseJsonObject(raw: string | undefined, fieldLabel: string, fallback: Record<string, unknown> | null): Record<string, unknown> | null {
-  const trimmed = raw?.trim();
-  if (!trimmed) return fallback;
-  const parsed = JSON.parse(trimmed) as unknown;
-  if (parsed === null) return null;
-  if (typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error(`${fieldLabel} 必须是 JSON object`);
-  }
-  return parsed as Record<string, unknown>;
-}
-
-function assertNoRedactedMarker(raw: string | undefined, fieldLabel: string) {
-  if (raw?.includes('***redacted***')) {
-    throw new Error(`${fieldLabel} 包含脱敏占位符；请填写完整新值，或保持字段不变以保留原配置。`);
-  }
 }
 
 function extractChannelIds(raw: string): string[] {
@@ -134,34 +92,37 @@ function extractChannelIds(raw: string): string[] {
 export function NotificationCenterPage() {
   const active = useRouteActive(ROUTE_META.notifications.path);
   const { t } = useI18n();
-  const [channelForm] = Form.useForm<ChannelFormValues>();
   const [policyForm] = Form.useForm<PolicyFormValues>();
   const [channelTypes, setChannelTypes] = useState<NotificationChannelTypeSummary[]>([]);
   const [channels, setChannels] = useState<NotificationChannelSummary[]>([]);
   const [policies, setPolicies] = useState<NotificationPolicySummary[]>([]);
+  const [templates, setTemplates] = useState<NotificationTemplateSummary[]>([]);
   const [messages, setMessages] = useState<NotificationMessageSummary[]>([]);
   const [status, setStatus] = useState<NotificationDeliveryQueueStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
-  const [savingChannel, setSavingChannel] = useState(false);
   const [savingPolicy, setSavingPolicy] = useState(false);
   const [validatingPolicyId, setValidatingPolicyId] = useState<string | null>(null);
   const [channelDrawerOpen, setChannelDrawerOpen] = useState(false);
   const [policyDrawerOpen, setPolicyDrawerOpen] = useState(false);
+  const [templateDrawerOpen, setTemplateDrawerOpen] = useState(false);
   const [editingChannel, setEditingChannel] = useState<NotificationChannelSummary | null>(null);
   const [editingPolicy, setEditingPolicy] = useState<NotificationPolicySummary | null>(null);
+  const [editingTemplate, setEditingTemplate] = useState<NotificationTemplateSummary | null>(null);
 
   const refresh = useMemo(() => async () => {
-    const [typesData, channelsData, policiesData, messagesData, statusData] = await Promise.all([
+    const [typesData, channelsData, policiesData, templatesData, messagesData, statusData] = await Promise.all([
       listNotificationChannelTypes(),
       listNotificationChannels(),
       listNotificationPolicies(),
+      listNotificationTemplates(),
       listNotificationMessages(),
       getNotificationDeliveryQueueStatus(),
     ]);
     setChannelTypes(typesData);
     setChannels(channelsData);
     setPolicies(policiesData);
+    setTemplates(templatesData);
     setMessages(messagesData.slice(0, 20));
     setStatus(statusData);
     setError(null);
@@ -194,99 +155,48 @@ export function NotificationCenterPage() {
 
   const openCreateChannel = () => {
     setEditingChannel(null);
-    channelForm.resetFields();
-    channelForm.setFieldsValue({
-      scopeType: 'global',
-      provider: channelTypes[0]?.type ?? 'webhook',
-      enabled: true,
-      configJsonText: '{\n  "url": "https://hooks.example.invalid/tikeo"\n}',
-      secretRefsJsonText: '{}',
-      safetyPolicyJsonText: '',
-    });
     setChannelDrawerOpen(true);
   };
 
   const openEditChannel = (channel: NotificationChannelSummary) => {
     setEditingChannel(channel);
-    channelForm.resetFields();
-    channelForm.setFieldsValue({
-      scopeType: channel.scopeType,
-      namespace: channel.namespace ?? undefined,
-      app: channel.app ?? undefined,
-      workerPool: channel.workerPool ?? undefined,
-      name: channel.name,
-      provider: channel.provider,
-      enabled: channel.enabled,
-      configJsonText: formatJson(channel.configJson),
-      secretRefsJsonText: '',
-      safetyPolicyJsonText: formatJson(channel.safetyPolicyJson, ''),
-    });
     setChannelDrawerOpen(true);
   };
 
   const closeChannelDrawer = () => {
     setChannelDrawerOpen(false);
     setEditingChannel(null);
-    channelForm.resetFields();
-  };
-
-  const handleChannelSubmit = async (values: ChannelFormValues) => {
-    setSavingChannel(true);
-    try {
-      if (editingChannel) {
-        const payload: UpdateNotificationChannelRequest = {
-          scopeType: values.scopeType,
-          namespace: blankToNull(values.namespace),
-          app: blankToNull(values.app),
-          workerPool: blankToNull(values.workerPool),
-          name: values.name,
-          provider: values.provider,
-          enabled: values.enabled,
-        };
-        if (channelForm.isFieldTouched('configJsonText')) {
-          assertNoRedactedMarker(values.configJsonText, t('渠道配置 JSON'));
-          payload.config = parseJsonObject(values.configJsonText, t('渠道配置 JSON'), {}) ?? {};
-        }
-        if (channelForm.isFieldTouched('secretRefsJsonText')) {
-          assertNoRedactedMarker(values.secretRefsJsonText, t('密钥引用 JSON'));
-          payload.secretRefs = parseJsonObject(values.secretRefsJsonText, t('密钥引用 JSON'), {}) ?? {};
-        }
-        if (channelForm.isFieldTouched('safetyPolicyJsonText')) {
-          payload.safetyPolicy = parseJsonObject(values.safetyPolicyJsonText, t('安全策略 JSON'), null);
-        }
-        await updateNotificationChannel(editingChannel.id, payload);
-        message.success(t('通知渠道已更新'));
-      } else {
-        assertNoRedactedMarker(values.configJsonText, t('渠道配置 JSON'));
-        assertNoRedactedMarker(values.secretRefsJsonText, t('密钥引用 JSON'));
-        const payload: CreateNotificationChannelRequest = {
-          scopeType: values.scopeType,
-          namespace: blankToNull(values.namespace),
-          app: blankToNull(values.app),
-          workerPool: blankToNull(values.workerPool),
-          name: values.name,
-          provider: values.provider,
-          enabled: values.enabled,
-          config: parseJsonObject(values.configJsonText, t('渠道配置 JSON'), {}) ?? {},
-          secretRefs: parseJsonObject(values.secretRefsJsonText, t('密钥引用 JSON'), {}) ?? {},
-          safetyPolicy: parseJsonObject(values.safetyPolicyJsonText, t('安全策略 JSON'), null),
-        };
-        await createNotificationChannel(payload);
-        message.success(t('通知渠道已创建'));
-      }
-      closeChannelDrawer();
-      await refresh();
-    } catch (cause) {
-      message.error(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setSavingChannel(false);
-    }
   };
 
   const handleDeleteChannel = async (channel: NotificationChannelSummary) => {
     try {
       await deleteNotificationChannel(channel.id);
       message.success(t('通知渠道已删除'));
+      await refresh();
+    } catch (cause) {
+      message.error(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
+
+  const openCreateTemplate = () => {
+    setEditingTemplate(null);
+    setTemplateDrawerOpen(true);
+  };
+
+  const openEditTemplate = (template: NotificationTemplateSummary) => {
+    setEditingTemplate(template);
+    setTemplateDrawerOpen(true);
+  };
+
+  const closeTemplateDrawer = () => {
+    setTemplateDrawerOpen(false);
+    setEditingTemplate(null);
+  };
+
+  const handleDeleteTemplate = async (template: NotificationTemplateSummary) => {
+    try {
+      await deleteNotificationTemplate(template.id);
+      message.success(t('通知模板已删除'));
       await refresh();
     } catch (cause) {
       message.error(cause instanceof Error ? cause.message : String(cause));
@@ -409,15 +319,14 @@ export function NotificationCenterPage() {
     }
   };
 
-  const channelProviderOptions = channelTypes.map((item) => ({
-    value: item.type,
-    label: `${item.label} · ${item.type}`,
-  }));
+  const selectedPolicyChannelIds = Form.useWatch('channelIds', policyForm);
   const channelOptions = channels.map((channel) => ({
     value: channel.id,
     label: `${channel.name} · ${channel.provider} · ${channel.targetRedacted}`,
     disabled: !channel.enabled,
   }));
+  const policyProviderFilter = selectedPolicyProviders(channels, selectedPolicyChannelIds);
+  const templateRefOptions = notificationTemplateOptions(templates, policyProviderFilter);
 
   return (
     <Space direction="vertical" size={20} style={{ width: '100%' }}>
@@ -431,6 +340,7 @@ export function NotificationCenterPage() {
       <Row gutter={[16, 16]}>
         <Col xs={12} md={6}><Card><Statistic title={t('渠道')} value={channels.length} /></Card></Col>
         <Col xs={12} md={6}><Card><Statistic title={t('策略')} value={policies.length} /></Card></Col>
+        <Col xs={12} md={6}><Card><Statistic title={t('模板')} value={templates.length} /></Card></Col>
         <Col xs={12} md={6}><Card><Statistic title={t('待重试')} value={status?.retryPending ?? 0} valueStyle={{ color: '#d48806' }} /></Card></Col>
         <Col xs={12} md={6}><Card><Statistic title={t('死信队列')} value={status?.deadLetter ?? 0} valueStyle={{ color: '#cf1322' }} /></Card></Col>
       </Row>
@@ -462,6 +372,41 @@ export function NotificationCenterPage() {
                           <PermissionGate resource="notifications" action="manage"><Button size="small" onClick={() => openEditChannel(row)}>{t('编辑')}</Button></PermissionGate>
                           <PermissionGate resource="notifications" action="manage">
                             <Popconfirm title={t('删除通知渠道')} description={t('被策略引用的渠道会被后端拒绝删除。')} onConfirm={() => void handleDeleteChannel(row)}>
+                              <Button size="small" danger>{t('删除')}</Button>
+                            </Popconfirm>
+                          </PermissionGate>
+                        </Space>
+                      ),
+                    },
+                  ]}
+                />
+              </Card>
+            ),
+          },
+          {
+            key: 'templates',
+            label: t('模板'),
+            children: (
+              <Card title={t('通知模板')} extra={<PermissionGate resource="notifications" action="manage"><Button type="primary" onClick={openCreateTemplate}>{t('新建模板')}</Button></PermissionGate>}>
+                <Table<NotificationTemplateSummary>
+                  rowKey="id"
+                  dataSource={templates}
+                  pagination={{ pageSize: 8 }}
+                  columns={[
+                    { title: t('模板 Key'), dataIndex: 'templateKey' },
+                    { title: t('名称'), dataIndex: 'name' },
+                    { title: t('提供方'), dataIndex: 'provider', render: (value: string) => <Tag>{value}</Tag> },
+                    { title: t('消息类型'), dataIndex: 'messageType' },
+                    { title: t('启用'), dataIndex: 'enabled', render: (value: boolean) => <Tag color={value ? 'green' : 'red'}>{value ? t('是') : t('否')}</Tag> },
+                    { title: t('创建时间'), dataIndex: 'createdAt' },
+                    {
+                      title: t('操作'),
+                      render: (_, row) => (
+                        <Space>
+                          <PermissionGate resource="notifications" action="manage"><Button size="small" onClick={() => openEditTemplate(row)}>{t('预览')}</Button></PermissionGate>
+                          <PermissionGate resource="notifications" action="manage"><Button size="small" onClick={() => openEditTemplate(row)}>{t('编辑')}</Button></PermissionGate>
+                          <PermissionGate resource="notifications" action="manage">
+                            <Popconfirm title={t('删除通知模板')} description={t('删除后引用该模板的策略可能需要改用其他模板引用。')} onConfirm={() => void handleDeleteTemplate(row)}>
                               <Button size="small" danger>{t('删除')}</Button>
                             </Popconfirm>
                           </PermissionGate>
@@ -563,33 +508,20 @@ export function NotificationCenterPage() {
           },
         ]}
       />
-      <Drawer title={editingChannel ? t('编辑通知渠道') : t('新建渠道')} open={channelDrawerOpen} onClose={closeChannelDrawer} width={880} destroyOnClose>
-        <Alert type="info" showIcon style={{ marginBottom: 16 }} message={t('渠道配置会脱敏展示')} description={t('编辑已有渠道时，配置 JSON 中的脱敏值仅用于展示；保持字段不变会保留后端原值，修改时必须填写完整新值或 secret ref。')} />
-        <Form form={channelForm} layout="vertical" onFinish={(values) => void handleChannelSubmit(values)}>
-          <Row gutter={16}>
-            <Col xs={24} md={12}><Form.Item name="name" label={t('名称')} rules={[{ required: true, message: t('请输入名称') }]}><Input placeholder="billing-ops-webhook" /></Form.Item></Col>
-            <Col xs={24} md={12}><Form.Item name="provider" label={t('提供方')} rules={[{ required: true }]}><Select showSearch options={channelProviderOptions} /></Form.Item></Col>
-            <Col xs={24} md={12}><Form.Item name="scopeType" label={t('作用域类型')} rules={[{ required: true }]}><Select options={CHANNEL_SCOPE_OPTIONS.map((value) => ({ value, label: value }))} /></Form.Item></Col>
-            <Col xs={24} md={12}><Form.Item name="enabled" label={t('启用')} valuePropName="checked"><Switch /></Form.Item></Col>
-            <Col xs={24} md={8}><Form.Item name="namespace" label={t('Namespace')}><Input /></Form.Item></Col>
-            <Col xs={24} md={8}><Form.Item name="app" label={t('App')}><Input /></Form.Item></Col>
-            <Col xs={24} md={8}><Form.Item name="workerPool" label={t('Worker Pool')}><Input /></Form.Item></Col>
-          </Row>
-          <Form.Item name="configJsonText" label={t('渠道配置 JSON')} rules={[{ required: true, message: t('请输入渠道配置 JSON') }]}>
-            <Input.TextArea rows={8} spellCheck={false} />
-          </Form.Item>
-          <Form.Item name="secretRefsJsonText" label={t('密钥引用 JSON')} extra={t('只填写 secret 引用；当前运行时解析 env: 前缀或环境变量名，不要填写真实密钥值。')}>
-            <Input.TextArea rows={4} spellCheck={false} placeholder="{}" />
-          </Form.Item>
-          <Form.Item name="safetyPolicyJsonText" label={t('安全策略 JSON')}>
-            <Input.TextArea rows={4} spellCheck={false} placeholder="{}" />
-          </Form.Item>
-          <Space>
-            <PermissionGate resource="notifications" action="manage"><Button type="primary" htmlType="submit" loading={savingChannel}>{editingChannel ? t('保存渠道') : t('创建渠道')}</Button></PermissionGate>
-            <Button onClick={closeChannelDrawer}>{t('取消')}</Button>
-          </Space>
-        </Form>
-      </Drawer>
+      <ChannelDrawer
+        open={channelDrawerOpen}
+        channelTypes={channelTypes}
+        editingChannel={editingChannel}
+        onClose={closeChannelDrawer}
+        onSaved={refresh}
+      />
+      <TemplateDrawer
+        open={templateDrawerOpen}
+        channelTypes={channelTypes}
+        editingTemplate={editingTemplate}
+        onClose={closeTemplateDrawer}
+        onSaved={refresh}
+      />
 
       <Drawer title={editingPolicy ? t('编辑通知策略') : t('新建策略')} open={policyDrawerOpen} onClose={closePolicyDrawer} width={920} destroyOnClose>
         <Form form={policyForm} layout="vertical" onFinish={(values) => void handlePolicySubmit(values)}>
@@ -608,7 +540,9 @@ export function NotificationCenterPage() {
           <Form.Item name="eventFilterJsonText" label={t('事件过滤 JSON')} rules={[{ required: true, message: t('请输入事件过滤 JSON') }]}>
             <Input.TextArea rows={7} spellCheck={false} />
           </Form.Item>
-          <Form.Item name="templateRef" label={t('模板引用')}><Input placeholder="optional-template-ref" /></Form.Item>
+          <Form.Item name="templateRef" label={t('模板引用')} extra={t('只能选择已启用且与所选渠道提供方匹配的存储模板。')}>
+            <Select allowClear showSearch options={templateRefOptions} placeholder="optional-template-ref" filterOption={(input, option) => String(option?.label ?? option?.value ?? '').toLowerCase().includes(input.toLowerCase())} />
+          </Form.Item>
           <Row gutter={16}>
             <Col xs={24} md={8}><Form.Item name="throttleJsonText" label={t('限流 JSON')}><Input.TextArea rows={4} spellCheck={false} placeholder="{}" /></Form.Item></Col>
             <Col xs={24} md={8}><Form.Item name="quietHoursJsonText" label={t('静默时段 JSON')}><Input.TextArea rows={4} spellCheck={false} placeholder="{}" /></Form.Item></Col>

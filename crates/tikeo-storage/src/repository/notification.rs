@@ -283,6 +283,10 @@ impl NotificationChannelRepository {
         Self { db }
     }
 
+    pub fn db(&self) -> DatabaseConnection {
+        self.db.clone()
+    }
+
     pub async fn create_channel(
         &self,
         input: CreateNotificationChannel,

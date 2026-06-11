@@ -5,6 +5,10 @@ const appSource = readFileSync(new URL('../../App.tsx', import.meta.url), 'utf8'
 const routesSource = readFileSync(new URL('../../routes.tsx', import.meta.url), 'utf8');
 const clientSource = readFileSync(new URL('../../api/notifications.ts', import.meta.url), 'utf8');
 const pageSource = readFileSync(new URL('../NotificationCenterPage.tsx', import.meta.url), 'utf8');
+const channelDrawerSource = readFileSync(new URL('../notifications/ChannelDrawer.tsx', import.meta.url), 'utf8');
+const providerSchemaSource = readFileSync(new URL('../notifications/providerSchema.ts', import.meta.url), 'utf8');
+const templateDrawerSource = readFileSync(new URL('../notifications/TemplateDrawer.tsx', import.meta.url), 'utf8');
+const templateCatalogSource = readFileSync(new URL('../notifications/templateCatalog.ts', import.meta.url), 'utf8');
 
 describe('notification center console page', () => {
   test('wires Notification Center as a first-class observability menu route', () => {
@@ -32,8 +36,6 @@ describe('notification center console page', () => {
 
   test('exposes channel and policy configuration operations instead of read-only inspection', () => {
     for (const token of [
-      'createNotificationChannel',
-      'updateNotificationChannel',
       'deleteNotificationChannel',
       'createNotificationPolicy',
       'updateNotificationPolicy',
@@ -41,8 +43,14 @@ describe('notification center console page', () => {
       'validateNotificationPolicy',
     ]) {
       expect(clientSource).toContain(token);
-      expect(pageSource).toContain(token);
+      if (token === 'createNotificationChannel' || token === 'updateNotificationChannel') {
+        expect(channelDrawerSource).toContain(token);
+      } else {
+        expect(pageSource).toContain(token);
+      }
     }
+    expect(channelDrawerSource).toContain('createNotificationChannel');
+    expect(channelDrawerSource).toContain('updateNotificationChannel');
     expect(pageSource).toContain('channelDrawerOpen');
     expect(pageSource).toContain('policyDrawerOpen');
     expect(pageSource).toContain('新建渠道');
@@ -52,8 +60,135 @@ describe('notification center console page', () => {
   });
 
   test('does not overclaim vault secret resolution for notification channels', () => {
-    expect(pageSource).toContain('当前运行时解析 env: 前缀或环境变量名');
-    expect(pageSource).not.toContain('env 或 vault');
-    expect(pageSource).not.toContain('vault 路径');
+    expect(channelDrawerSource).toContain('当前运行时解析 env: 前缀或环境变量名');
+    expect(pageSource + channelDrawerSource).not.toContain('env 或 vault');
+    expect(pageSource + channelDrawerSource).not.toContain('vault 路径');
   });
+
+  test('uses a schema-driven channel drawer instead of raw JSON-only editing', () => {
+    expect(pageSource).toContain('ChannelDrawer');
+    expect(channelDrawerSource).toContain('ProviderSchema');
+    expect(channelDrawerSource).toContain('messageType');
+    expect(channelDrawerSource).toContain('schema.configFields');
+    expect(channelDrawerSource).toContain('schema.secretFields');
+    expect(channelDrawerSource).toContain('schema.messageTypes');
+    expect(channelDrawerSource).toContain('模板变量');
+    expect(channelDrawerSource).toContain('官方文档');
+    expect(channelDrawerSource).not.toContain('渠道配置 JSON');
+    expect(channelDrawerSource).not.toContain('密钥引用 JSON');
+  });
+
+  test('links channel scope, tenant resources, and secret reference choices', () => {
+    for (const token of ['listNamespaces', 'listAppScopes', 'listWorkerPools', 'listSecrets']) {
+      expect(channelDrawerSource).toContain(token);
+    }
+    expect(channelDrawerSource).toContain('filteredApps');
+    expect(channelDrawerSource).toContain('filteredWorkerPools');
+    expect(channelDrawerSource).toContain('filteredSecrets');
+    expect(channelDrawerSource).toContain("nextScopeType === 'global'");
+    expect(channelDrawerSource).toContain('clearScopeDependents');
+  });
+
+  test('has built-in provider schema fallbacks for rich message types and templates', () => {
+    for (const token of ['slack', 'dingtalk', 'feishu', 'wechat_work', 'pagerduty', 'email', 'webhook']) {
+      expect(providerSchemaSource).toContain(token);
+    }
+    for (const token of ['blockKit', 'actionCard', 'feedCard', 'interactive', 'share_chat', 'markdown', 'news', 'file', 'voice', 'html', 'trigger', 'resolve']) {
+      expect(providerSchemaSource).toContain(token);
+    }
+    for (const token of ['{{subject}}', '{{body}}', '{{eventType}}', '{{resourceId}}', '{{severity}}']) {
+      expect(providerSchemaSource).toContain(token);
+    }
+  });
+
+  test('covers official built-in provider variants and linked drawer affordances', () => {
+    for (const token of [
+      'attachments',
+      'markdown_v2',
+      'template_card',
+      'atUserIds',
+      'mentionedList',
+      'mentionedMobileList',
+      'customDetails',
+      'clientUrl',
+      'threadTs',
+      'routingKey',
+    ]) {
+      expect(providerSchemaSource).toContain(token);
+    }
+    for (const token of ['scopedSecretOptions', 'appSelectDisabled', 'workerPoolSelectDisabled', 'templatePreview', 'replaceConfig', 'replaceSecretRefs']) {
+      expect(channelDrawerSource).toContain(token);
+    }
+    expect(channelDrawerSource).toContain('先选择 Namespace');
+    expect(channelDrawerSource).toContain('按当前 scope 过滤 Secret 引用');
+    expect(channelDrawerSource).toContain('保持现有渠道配置');
+    expect(channelDrawerSource).toContain('保持现有密钥引用');
+  });
+
+  test('allows metadata-only channel edits without re-entering preserved secrets', () => {
+    expect(channelDrawerSource).toContain('fieldRequired');
+    expect(channelDrawerSource).toContain("field.required && (!editing || replacing)");
+    expect(channelDrawerSource).toContain('replaceConfig');
+    expect(channelDrawerSource).toContain('replaceSecretRefs');
+    expect(channelDrawerSource).toContain('configControlsDisabled');
+    expect(channelDrawerSource).toContain('secretControlsDisabled');
+    expect(channelDrawerSource).toContain('开启替换渠道配置后才能修改消息类型和 inline 模板字段。');
+    expect(channelDrawerSource).toContain('开启替换渠道配置后才能修改高级配置 JSON。');
+    expect(channelDrawerSource).toContain('开启替换密钥引用后才能修改高级密钥引用对象。');
+    expect(channelDrawerSource).toContain('保持现有渠道配置');
+    expect(channelDrawerSource).toContain('保持现有密钥引用');
+  });
+
+
+  test('wires first-class notification template endpoints and page tab', () => {
+    for (const token of [
+      '/api/v1/notification-templates',
+      'listNotificationTemplates',
+      'createNotificationTemplate',
+      'updateNotificationTemplate',
+      'deleteNotificationTemplate',
+      'renderNotificationTemplate',
+      '/render',
+    ]) {
+      expect(clientSource).toContain(token);
+    }
+    expect(pageSource).toContain('TemplateDrawer');
+    expect(pageSource).toContain('templates');
+    expect(pageSource).toContain('listNotificationTemplates');
+    expect(pageSource).toContain('templateKey');
+    expect(pageSource).toContain('messageType');
+    expect(pageSource).toContain('createdAt');
+    expect(pageSource).toContain('新建模板');
+    expect(pageSource).toContain('预览');
+  });
+
+  test('uses schema-driven template drawer with render preview and no secret fields', () => {
+    for (const token of [
+      'providerSchemaFor',
+      'schema.messageTypes',
+      'selectedMessageType?.templateFields',
+      'createNotificationTemplate',
+      'updateNotificationTemplate',
+      'renderNotificationTemplate',
+      '渲染预览',
+    ]) {
+      expect(templateDrawerSource).toContain(token);
+    }
+    expect(templateDrawerSource).not.toContain('secretRefsJson');
+    expect(templateDrawerSource).not.toContain('schema.secretFields');
+  });
+
+  test('offers policy template options from enabled stored templates only', () => {
+    expect(templateCatalogSource).toContain('notificationTemplateOptions');
+    expect(templateCatalogSource).toContain('selectedPolicyProviders');
+    expect(templateCatalogSource).toContain('!template.enabled');
+    expect(templateCatalogSource).not.toContain('builtInTemplateRefs');
+    expect(pageSource).toContain('templateRefOptions');
+    expect(pageSource).toContain('只能选择已启用且与所选渠道提供方匹配的存储模板');
+    expect(pageSource).toContain('Select allowClear showSearch options={templateRefOptions}');
+    expect(pageSource).not.toContain('AutoComplete');
+    expect(pageSource).not.toContain('手工输入外部系统已同步');
+    expect(pageSource).not.toContain("name=\"templateRef\" label={t('模板引用')}><Input");
+  });
+
 });

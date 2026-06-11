@@ -1511,3 +1511,16 @@ Verification evidence: docs contract, workflow contract, management-smoke contra
 - Job lifecycle events now materialize reusable notification messages/attempts for success, failed, partial failed, cancelled, retry scheduled, retry exhausted, no eligible worker, and script governance failure.
 - Acceptance hardening fixed email secret alias drift, secret header injection coverage, config header redaction, viewer menu consistency, env-only secretRef docs/UI wording, and retry-aware failed vs retry_exhausted semantics.
 - Verification passed across targeted RED->GREEN tests, Rust fmt/clippy/test/build, CLI smoke, Web lint/typecheck/test/build, docs typecheck/build, workflow/docs/management contract tests, Node runtime policy, source-size audit, and diff whitespace check.
+
+## 2026-06-11 — Notification Center provider schema/drawer hardening
+
+- Notification channel drawer is now provider-schema driven with linked scope, resource, secret-ref, message type, and template fields.
+- Edit mode preserves existing config/secret refs unless replacement toggles are explicitly enabled, preventing redacted API summaries from being written back as real provider config.
+- Backend validates channel scope consistency, built-in message types, required template fields, and rejects raw secret config keys for built-in providers.
+- Built-in provider coverage now includes Slack Block Kit/attachments/thread, DingTalk action/feed cards and signing, Feishu image/share_chat/card/signing, WeCom voice/template card variants, PagerDuty lifecycle/custom fields, webhook JSON, and email subject/body overrides.
+
+### 2026-06-11 — Notification Center templates and provider schema hardening completed
+- Provider-schema driven channel and template editing is implemented for Notification Center, including linked scope/resource/secret selectors and edit-mode preservation of existing provider config/secret refs.
+- First-class `notification_templates` are implemented with migration/entity/repository, API CRUD/list/get/delete/render preview, OpenAPI wiring, Web template drawer/preview, and policy template selector.
+- Runtime job notification materialization loads enabled stored templates by id or templateKey, performs safe token rendering, stores rendered output under `payload.template`, and provider delivery prefers stored template payloads over channel inline defaults.
+- Fresh verification passed: Rust fmt/clippy/test/build, Web lint/typecheck/test/build, docs typecheck/build, docs/workflow/management contracts, GitHub Actions Node runtime policy, source-size audit, and diff whitespace check.

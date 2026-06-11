@@ -129,8 +129,14 @@
 
 ## 2026-06-11 — Notification Center remaining hardening risks
 
-- Notification templates are not yet implemented as first-class storage/API/render endpoints. `templateRef` is persisted but currently a soft-link placeholder; current materialization uses built-in subject/body rendering.
 - Alert rules still keep inline `channels_json` for compatibility. Reusable channel/policy migration for Alerting must be implemented before claiming alert delivery is fully unified under Notification Center.
 - Workflow `notification` nodes still use raw `channel/target/template` config in the workflow editor/runtime shape; they must migrate to registered channels/templates before claiming workflow notification-node convergence.
 - Generic delivery is now at-least-once rather than at-most-once: a crash after result row insertion but before old attempt consumption may duplicate delivery. Future mitigation should add lease/in-progress recovery and idempotency keys without reintroducing lost notifications.
 - Live external provider smoke remains credential-gated. Local tests cover loopback/webhook/header/email mechanics and redaction, not Slack/DingTalk/Feishu/WeCom/PagerDuty live SaaS acceptance.
+
+## 2026-06-11 — Notification provider schema/template hardening residual risks
+
+- First-class reusable `notification_templates` CRUD/render is implemented and locally tested, but policies still soft-link by id/templateKey; deleting a template does not yet provide an impact preview or cascade guard for policies that reference it.
+- Built-in provider payload shapes are source-backed and locally tested against loopback HTTP receivers, but live Slack/DingTalk/Feishu/WeCom/PagerDuty acceptance remains credential-gated.
+- Channel test-send is still not implemented. Metadata must remain `supportsTestSend=false` until a real endpoint persists attempts and redacts results.
+- Email exposes an HTML template shape for future compatibility, but the current SMTP adapter sends text/plain only; do not claim HTML/MIME email delivery until implemented and tested.

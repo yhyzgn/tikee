@@ -132,7 +132,9 @@ impl ApiError {
         }
     }
 
-    fn message(&self) -> String {
+    /// Return the human-readable API error message.
+    #[must_use]
+    pub fn message(&self) -> String {
         match self {
             Self::NotImplemented { message }
             | Self::Storage { message }

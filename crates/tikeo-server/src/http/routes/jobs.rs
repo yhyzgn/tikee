@@ -998,6 +998,7 @@ pub async fn cancel_job_instance(
             state.notification_policies.clone(),
             state.notification_messages.clone(),
             state.notification_delivery_attempts.clone(),
+            state.notification_templates.clone(),
             state.jobs.clone(),
         );
         emit_job_instance_event_best_effort(

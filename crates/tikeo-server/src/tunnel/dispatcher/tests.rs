@@ -49,7 +49,8 @@ fn notification_center(jobs: &JobRepository) -> crate::notification::Notificatio
         NotificationChannelRepository::new(db.clone()),
         NotificationPolicyRepository::new(db.clone()),
         NotificationMessageRepository::new(db.clone()),
-        NotificationDeliveryAttemptRepository::new(db),
+        NotificationDeliveryAttemptRepository::new(db.clone()),
+        tikeo_storage::NotificationTemplateRepository::new(db),
         jobs.clone(),
     )
 }

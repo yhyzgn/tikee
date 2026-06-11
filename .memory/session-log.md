@@ -2850,8 +2850,42 @@ Review:
 - Second focused reviewer found 3 HIGH issues (failed vs retry_exhausted semantics, delivery crash-window, config.headers leakage) plus metadata/doc issues; all were fixed and targeted tests added.
 - Final focused reviewer returned PASS with caveat: crash after inserting a new delivery result row but before consuming the old row may duplicate delivery rather than lose it. This is intentionally safer than lost notification and is recorded as a future lease/idempotency hardening risk.
 
-Known not implemented in this slice:
-- `notification_templates` table/API/render endpoint; `templateRef` is persisted only as a soft-link field and current rendering is built-in.
+Known not implemented in that slice (superseded for templates by the later provider/template hardening slice):
 - Alert-rule backfill/dual-write from `alert_rules.channels_json` into `notification_policies(owner_type='alert_rule')`.
 - Workflow `notification` node runtime/UI migration from raw channel/target/template to registered channel/template refs.
 - Real channel test-send endpoint; metadata correctly reports `supportsTestSend=false`.
+
+## 2026-06-11 — Notification Center provider schema/template hardening
+
+Agent:
+- Codex, with code-reviewer subagent.
+
+Work:
+- Hardened Notification Center channel drawer linkage for provider/message type/template fields, scope cascade, and secret-ref suggestions.
+- Added edit-mode protection so redacted channel summaries do not overwrite existing provider config or secret refs unless explicit replacement toggles are enabled.
+- Expanded built-in provider metadata and runtime renderers for Slack, DingTalk, Feishu/Lark, WeCom, PagerDuty, generic webhook, and email using official/standard source checks.
+- Added backend validation for scope consistency, built-in message types, required template fields, and raw secret config rejection for built-in secret material.
+- Implemented first-class `notification_templates`: explicit SeaORM migration/entity/repository, CRUD/list/get/delete HTTP routes, OpenAPI registration, safe token validation, render-preview endpoint, and Web template drawer/preview.
+- Wired policy `templateRef` to enabled stored templates. Runtime materialization loads enabled templates by id or templateKey, renders safe tokens, stores output under `payload.template`, and provider delivery prefers the stored rendered template over channel inline defaults.
+- Updated English and zh-CN Notification Center docs and created `.prompt/167-notification-center-provider-schema-template-hardening.md`.
+
+Verification:
+- `cargo fmt --all -- --check` ✅
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings` ✅
+- `cargo test --workspace --all-features -- --test-threads=1` ✅ (191 server tests, 51 storage tests, workspace docs/tests included)
+- `cargo build --workspace --all-features` ✅
+- `cd web && bun run lint && bun run typecheck && bun test src && bun run build` ✅ (139 tests; known large Ant Design chunk warning only)
+- `cd docs && bun run docs:typecheck && bun run docs:build` ✅
+- `python3 .github/tests/docs_site_contract_test.py` ✅ (24 tests)
+- `python3 .github/tests/workflow_contract_test.py` ✅ (15 tests)
+- `python3 .github/tests/management_smoke_contract_test.py` ✅
+- `python3 scripts/verify-github-actions-node-runtime.py --min-node-major 24` ✅
+- `python3 scripts/check-source-size.py` ✅
+- `git diff --check` ✅
+
+Risks / gaps:
+- No live SaaS provider smoke without external credentials.
+- Channel test-send endpoint remains future work and metadata correctly reports `supportsTestSend=false`.
+- Alert-rule dual-write/backfill and Workflow notification-node migration remain future work.
+- Template references are soft links; deleting a template currently lacks impact preview/cascade guard.
+- Email HTML template remains schema-only; runtime still sends text/plain through SMTP adapter.

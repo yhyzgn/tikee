@@ -71,7 +71,8 @@ impl WorkerTunnelRuntime {
                 NotificationChannelRepository::new(db.clone()),
                 NotificationPolicyRepository::new(db.clone()),
                 NotificationMessageRepository::new(db.clone()),
-                NotificationDeliveryAttemptRepository::new(db),
+                NotificationDeliveryAttemptRepository::new(db.clone()),
+                tikeo_storage::NotificationTemplateRepository::new(db),
                 jobs.clone(),
             )
         });

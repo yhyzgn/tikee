@@ -177,6 +177,39 @@ USER_GUIDE_EXPECTATIONS = {
     "user-guide/settings.md": ["Settings", "web/src/routes.tsx", "API-Key", "RBAC"],
 }
 
+NOTIFICATION_CENTER_DOC_TOKENS = [
+    "crates/tikeo-server/src/http/routes/notifications.rs",
+    "crates/tikeo-server/src/http/routes/notification_templates.rs",
+    "notification_templates",
+    "/api/v1/notification-templates",
+    "/api/v1/notification-templates/{id}/render",
+    "templateRef",
+    "blockKit",
+    "actionCard",
+    "feedCard",
+    "interactive",
+    "share_chat",
+    "markdown_v2",
+    "template_card",
+    "PagerDuty",
+    "supportsTestSend=false",
+]
+
+NOTIFICATION_CENTER_SOURCE_TOKENS = [
+    "create_notification_templates",
+    "render_notification_template",
+    "validate_provider_message_template",
+    "builtin_channel_template",
+    "blockKit",
+    "actionCard",
+    "feedCard",
+    "interactive",
+    "share_chat",
+    "markdown_v2",
+    "template_card",
+    "supports_test_send: false",
+]
+
 
 class DocsSiteContractTest(unittest.TestCase):
 
@@ -508,6 +541,35 @@ class DocsSiteContractTest(unittest.TestCase):
                 self.assertGreaterEqual(len(headings), 4, f"{root.relative_to(DOCS_SITE)} / {relative_path} lacks sections")
                 for token in tokens:
                     self.assertIn(token, text, f"{root.relative_to(DOCS_SITE)} / {relative_path} missing {token!r}")
+
+    def test_notification_center_docs_are_template_and_provider_schema_backed(self):
+        source_bundle = "\n".join(
+            path.read_text()
+            for path in [
+                ROOT / "crates/tikeo-server/src/http/routes/notifications.rs",
+                ROOT / "crates/tikeo-server/src/http/routes/notification_providers.rs",
+                ROOT / "crates/tikeo-server/src/http/routes/notification_templates.rs",
+                ROOT / "crates/tikeo-server/src/notification.rs",
+                ROOT / "crates/tikeo-server/src/notification/provider_templates.rs",
+                ROOT / "crates/tikeo-storage/src/migration/notification_center.rs",
+            ]
+        )
+        for token in NOTIFICATION_CENTER_SOURCE_TOKENS:
+            self.assertIn(token, source_bundle, f"notification center source missing {token!r}")
+
+        zh_root = DOCS_SITE / "i18n/zh-CN/docusaurus-plugin-content-docs/current"
+        for root in [DOCS_SITE / "docs", zh_root]:
+            combined = "\n".join(
+                (root / relative_path).read_text()
+                for relative_path in [
+                    "reference/notification-center.md",
+                    "user-guide/notifications.md",
+                ]
+            )
+            for token in NOTIFICATION_CENTER_DOC_TOKENS:
+                self.assertIn(token, combined, f"{root.relative_to(DOCS_SITE)} notification docs missing {token!r}")
+            self.assertNotIn("vault 路径", combined)
+            self.assertNotIn("env 或 vault", combined)
 
 
     def test_quickstart_manual_path_uses_real_bootstrap_fields_and_runnable_sdk_script(self):

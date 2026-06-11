@@ -19,20 +19,10 @@ use crate::{
     notification::{NotificationDeliveryPolicy, process_due_notification_delivery_attempts},
 };
 
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct NotificationChannelTypeSummary {
-    pub r#type: String,
-    pub label: String,
-    pub category: String,
-    pub target_kind: String,
-    pub description: String,
-    pub required_config_keys: Vec<String>,
-    pub secret_config_keys: Vec<String>,
-    pub supports_test_send: bool,
-    pub plugin_provided: bool,
-    pub template: serde_json::Value,
-}
+use super::notification_providers::{
+    ChannelValidationInput, NotificationChannelTypeSummary, builtin_channel_types, json_to_string,
+    validate_channel_request,
+};
 
 #[derive(Debug, Clone, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -195,6 +185,7 @@ pub async fn list_notification_channel_types(
                 .description
                 .unwrap_or_else(|| "Plugin-provided notification channel".to_owned()),
             required_config_keys: vec!["url".to_owned()],
+            required_target_keys: vec!["url".to_owned()],
             secret_config_keys: Vec::new(),
             supports_test_send: false,
             plugin_provided: true,
@@ -240,11 +231,16 @@ pub async fn create_notification_channel(
     let principal = auth::require_permission(&headers, &state, "notifications", "manage").await?;
     validate_channel_request(
         &state,
-        &request.scope_type,
-        &request.provider,
-        &request.name,
-        &request.config,
-        &request.secret_refs,
+        ChannelValidationInput {
+            scope_type: &request.scope_type,
+            namespace: request.namespace.as_deref(),
+            app: request.app.as_deref(),
+            worker_pool: request.worker_pool.as_deref(),
+            provider: &request.provider,
+            name: &request.name,
+            config: &request.config,
+            secret_refs: &request.secret_refs,
+        },
     )
     .await?;
     let created = state
@@ -325,7 +321,32 @@ pub async fn update_notification_channel(
         .as_ref()
         .unwrap_or(&existing_secret_refs);
     let scope_type = request.scope_type.as_ref().unwrap_or(&existing.scope_type);
-    validate_channel_request(&state, scope_type, provider, name, config, secret_refs).await?;
+    let namespace = request
+        .namespace
+        .as_ref()
+        .map_or(existing.namespace.as_deref(), Option::as_deref);
+    let app = request
+        .app
+        .as_ref()
+        .map_or(existing.app.as_deref(), Option::as_deref);
+    let worker_pool = request
+        .worker_pool
+        .as_ref()
+        .map_or(existing.worker_pool.as_deref(), Option::as_deref);
+    validate_channel_request(
+        &state,
+        ChannelValidationInput {
+            scope_type,
+            namespace,
+            app,
+            worker_pool,
+            provider,
+            name,
+            config,
+            secret_refs,
+        },
+    )
+    .await?;
     let updated = state
         .notification_channels
         .update_channel(
@@ -417,6 +438,12 @@ pub async fn create_notification_policy(
         &request.channel_refs,
     )?;
     validate_policy_channel_refs(&state, &request.channel_refs).await?;
+    validate_policy_template_ref(
+        &state,
+        request.template_ref.as_deref(),
+        &request.channel_refs,
+    )
+    .await?;
     let created = state
         .notification_policies
         .create_policy(tikeo_storage::CreateNotificationPolicy {
@@ -531,6 +558,19 @@ pub async fn update_notification_policy(
             .unwrap_or(&existing_channel_refs),
     )
     .await?;
+    let next_template_ref = request
+        .template_ref
+        .as_ref()
+        .map_or(existing.template_ref.as_deref(), |value| value.as_deref());
+    validate_policy_template_ref(
+        &state,
+        next_template_ref,
+        request
+            .channel_refs
+            .as_deref()
+            .unwrap_or(&existing_channel_refs),
+    )
+    .await?;
     let updated = state
         .notification_policies
         .update_policy(
@@ -634,7 +674,9 @@ pub async fn validate_notification_policy(
         .await
         .map_err(|error| ApiError::storage(&error))?
         .ok_or_else(|| ApiError::not_found("notification policy not found"))?;
-    Ok(Json(ApiResponse::success(result)))
+    Ok(Json(ApiResponse::success(
+        append_template_validation_issues(&state, result).await?,
+    )))
 }
 
 #[utoipa::path(
@@ -758,177 +800,6 @@ pub async fn retry_due_notification_delivery_attempts(
     Ok(Json(ApiResponse::success(summary)))
 }
 
-fn builtin_channel_types() -> Vec<NotificationChannelTypeSummary> {
-    [
-        (
-            "webhook",
-            "Generic Webhook",
-            "webhook",
-            "HTTP webhook",
-            vec!["url"],
-            vec!["authorization"],
-        ),
-        (
-            "slack",
-            "Slack Incoming Webhook",
-            "office_bot",
-            "Slack robot webhook",
-            vec!["url"],
-            vec![],
-        ),
-        (
-            "dingtalk",
-            "DingTalk Robot",
-            "office_bot",
-            "DingTalk robot webhook",
-            vec!["url"],
-            vec!["signingKey"],
-        ),
-        (
-            "feishu",
-            "Feishu/Lark Bot",
-            "office_bot",
-            "Feishu/Lark bot webhook",
-            vec!["url"],
-            vec!["signingKey"],
-        ),
-        (
-            "wechat_work",
-            "WeCom Bot",
-            "office_bot",
-            "WeChat Work/WeCom robot webhook",
-            vec!["url"],
-            vec![],
-        ),
-        (
-            "pagerduty",
-            "PagerDuty Events API",
-            "incident",
-            "PagerDuty Events v2 integration",
-            vec!["routingKey"],
-            vec!["routingKey"],
-        ),
-        (
-            "email",
-            "SMTP Email",
-            "email",
-            "SMTP email delivery",
-            vec!["smtpUrl", "to"],
-            vec![
-                "password",
-                "passwordSecretRef",
-                "smtpUrl",
-                "smtpUrlSecretRef",
-            ],
-        ),
-    ]
-    .into_iter()
-    .map(|(r#type, label, category, description, required, secret)| {
-        NotificationChannelTypeSummary {
-            r#type: r#type.to_owned(),
-            label: label.to_owned(),
-            category: category.to_owned(),
-            target_kind: if r#type == "email" {
-                "email"
-            } else {
-                "webhook"
-            }
-            .to_owned(),
-            description: description.to_owned(),
-            required_config_keys: required.into_iter().map(str::to_owned).collect(),
-            secret_config_keys: secret.into_iter().map(str::to_owned).collect(),
-            supports_test_send: false,
-            plugin_provided: false,
-            template: serde_json::json!({}),
-        }
-    })
-    .collect()
-}
-
-async fn validate_channel_request(
-    state: &AppState,
-    scope_type: &str,
-    provider: &str,
-    name: &str,
-    config: &serde_json::Value,
-    secret_refs: &serde_json::Value,
-) -> Result<(), ApiError> {
-    if !matches!(scope_type, "global" | "namespace" | "app" | "worker_pool") {
-        return Err(ApiError::bad_request(
-            "scopeType must be global, namespace, app, or worker_pool",
-        ));
-    }
-    if name.trim().is_empty() {
-        return Err(ApiError::bad_request(
-            "notification channel name is required",
-        ));
-    }
-    if !valid_slug(provider) {
-        return Err(ApiError::bad_request("provider must be a lowercase slug"));
-    }
-    let provider_supported = builtin_channel_types()
-        .iter()
-        .any(|item| item.r#type == provider)
-        || state
-            .plugins
-            .resolve_alert_channel_type(provider)
-            .await
-            .map_err(|error| ApiError::storage(&error))?
-            .is_some();
-    if !provider_supported {
-        return Err(ApiError::bad_request(format!(
-            "notification provider is not registered: {provider}"
-        )));
-    }
-    if provider == "email" {
-        if !json_field_present(config, "to") && !json_field_present(config, "recipients") {
-            return Err(ApiError::bad_request(
-                "email channel requires to or recipients",
-            ));
-        }
-        if !json_field_present_any(config, &["smtpUrl", "smtp_url", "url"])
-            && !json_field_present_any(secret_refs, &["smtpUrl", "smtp_url", "url"])
-            && !json_field_present_any(config, &["smtpUrlSecretRef", "smtp_url_secret_ref"])
-            && !json_field_present_any(secret_refs, &["smtpUrlSecretRef", "smtp_url_secret_ref"])
-        {
-            return Err(ApiError::bad_request(
-                "email channel requires smtpUrl or smtpUrlSecretRef",
-            ));
-        }
-        return Ok(());
-    }
-    if matches!(provider, "pagerduty") {
-        if !json_field_present_any(
-            config,
-            &[
-                "routingKey",
-                "routing_key",
-                "integrationKey",
-                "integration_key",
-            ],
-        ) && !json_field_present_any(
-            secret_refs,
-            &[
-                "routingKey",
-                "routing_key",
-                "integrationKey",
-                "integration_key",
-            ],
-        ) {
-            return Err(ApiError::bad_request(
-                "pagerduty channel requires routingKey or integrationKey",
-            ));
-        }
-        return Ok(());
-    }
-    if !json_field_present_any(config, &["url", "webhookUrl", "webhook_url"])
-        && !json_field_present_any(secret_refs, &["url", "webhookUrl", "webhook_url"])
-    {
-        return Err(ApiError::bad_request("webhook-style channel requires url"));
-    }
-    Ok(())
-}
-
 fn validate_policy_request(
     owner_type: &str,
     name: &str,
@@ -1006,6 +877,88 @@ async fn validate_policy_channel_refs(
     Ok(())
 }
 
+async fn validate_policy_template_ref(
+    state: &AppState,
+    template_ref: Option<&str>,
+    channel_refs: &[serde_json::Value],
+) -> Result<(), ApiError> {
+    let Some(template_ref) = template_ref.filter(|value| !value.trim().is_empty()) else {
+        return Ok(());
+    };
+    let template = state
+        .notification_templates
+        .get_template(template_ref)
+        .await
+        .map_err(|error| ApiError::storage(&error))?
+        .ok_or_else(|| {
+            ApiError::bad_request(format!(
+                "notification policy template does not exist: {template_ref}"
+            ))
+        })?;
+    if !template.enabled {
+        return Err(ApiError::bad_request(format!(
+            "notification policy template is disabled: {template_ref}"
+        )));
+    }
+    let providers = policy_channel_providers(state, channel_refs).await?;
+    let mismatched: Vec<_> = providers
+        .into_iter()
+        .filter(|provider| provider != &template.provider)
+        .collect();
+    if !mismatched.is_empty() {
+        return Err(ApiError::bad_request(format!(
+            "notification policy template provider {} does not match channel provider(s): {}",
+            template.provider,
+            mismatched.join(", ")
+        )));
+    }
+    Ok(())
+}
+
+async fn policy_channel_providers(
+    state: &AppState,
+    channel_refs: &[serde_json::Value],
+) -> Result<Vec<String>, ApiError> {
+    let channel_ids = extract_channel_ref_ids(channel_refs);
+    let channels = state
+        .notification_channels
+        .list_channels(tikeo_storage::NotificationChannelFilters::default())
+        .await
+        .map_err(|error| ApiError::storage(&error))?;
+    Ok(channel_ids
+        .into_iter()
+        .filter_map(|channel_id| {
+            channels
+                .iter()
+                .find(|channel| channel.id == channel_id)
+                .map(|channel| channel.provider.clone())
+        })
+        .collect())
+}
+
+async fn append_template_validation_issues(
+    state: &AppState,
+    mut result: tikeo_storage::NotificationPolicyValidationSummary,
+) -> Result<tikeo_storage::NotificationPolicyValidationSummary, ApiError> {
+    let Some(policy) = state
+        .notification_policies
+        .get_policy(&result.policy_id)
+        .await
+        .map_err(|error| ApiError::storage(&error))?
+    else {
+        return Ok(result);
+    };
+    let channel_refs: Vec<serde_json::Value> =
+        serde_json::from_str(&policy.channel_refs_json).unwrap_or_default();
+    let template_result =
+        validate_policy_template_ref(state, policy.template_ref.as_deref(), &channel_refs).await;
+    if let Err(error) = template_result {
+        result.valid = false;
+        result.issues.push(error.message());
+    }
+    Ok(result)
+}
+
 fn extract_channel_ref_ids(channel_refs: &[serde_json::Value]) -> Vec<String> {
     channel_refs
         .iter()
@@ -1020,30 +973,6 @@ fn extract_channel_ref_ids(channel_refs: &[serde_json::Value]) -> Vec<String> {
         })
         .filter(|id| !id.trim().is_empty())
         .collect()
-}
-
-fn valid_slug(value: &str) -> bool {
-    !value.is_empty()
-        && value
-            .chars()
-            .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_' || ch == '-')
-}
-
-fn json_field_present(value: &serde_json::Value, key: &str) -> bool {
-    value.get(key).is_some_and(|field| match field {
-        serde_json::Value::String(item) => !item.trim().is_empty(),
-        serde_json::Value::Array(items) => !items.is_empty(),
-        serde_json::Value::Null => false,
-        _ => true,
-    })
-}
-
-fn json_field_present_any(value: &serde_json::Value, keys: &[&str]) -> bool {
-    keys.iter().any(|key| json_field_present(value, key))
-}
-
-fn json_to_string<T: serde::Serialize + ?Sized>(value: &T) -> String {
-    serde_json::to_string(value).unwrap_or_else(|_| "{}".to_owned())
 }
 
 const fn default_enabled() -> bool {

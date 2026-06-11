@@ -5,12 +5,14 @@ use sea_query::Index;
 
 use super::{
     NotificationChannels, NotificationDeliveryAttempts, NotificationMessages, NotificationPolicies,
-    Permissions, RoleMenuPermissions, big_integer_col, boolean_col, exec_seed_insert_if_missing,
-    integer_col, integer_null, now_rfc3339, seed_role_permissions, string_col, string_null,
-    string_pk, text_col, text_null,
+    NotificationTemplates, Permissions, RoleMenuPermissions, big_integer_col, boolean_col,
+    exec_seed_insert_if_missing, integer_col, integer_null, now_rfc3339, seed_role_permissions,
+    string_col, string_null, string_pk, text_col, text_null,
 };
 
 pub(super) struct NotificationCenterMigration;
+
+pub(super) struct NotificationTemplatesMigration;
 
 impl MigrationName for NotificationCenterMigration {
     fn name(&self) -> &'static str {
@@ -41,6 +43,31 @@ impl MigrationTrait for NotificationCenterMigration {
                 .await?;
         }
         Ok(())
+    }
+}
+
+impl MigrationName for NotificationTemplatesMigration {
+    fn name(&self) -> &'static str {
+        "m20260611_000002_notification_templates"
+    }
+}
+
+#[async_trait::async_trait]
+impl MigrationTrait for NotificationTemplatesMigration {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        create_notification_templates(manager).await?;
+        create_notification_template_indexes(manager).await
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(
+                Table::drop()
+                    .table(NotificationTemplates::Table)
+                    .if_exists()
+                    .to_owned(),
+            )
+            .await
     }
 }
 
@@ -95,6 +122,30 @@ async fn create_notification_policies(manager: &SchemaManager<'_>) -> Result<(),
                 .col(string_null(NotificationPolicies::UpdatedBy))
                 .col(string_col(NotificationPolicies::CreatedAt))
                 .col(string_col(NotificationPolicies::UpdatedAt))
+                .to_owned(),
+        )
+        .await
+}
+
+async fn create_notification_templates(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    manager
+        .create_table(
+            Table::create()
+                .table(NotificationTemplates::Table)
+                .if_not_exists()
+                .col(string_pk(NotificationTemplates::Id))
+                .col(string_col(NotificationTemplates::TemplateKey))
+                .col(string_col(NotificationTemplates::Name))
+                .col(text_null(NotificationTemplates::Description))
+                .col(string_col(NotificationTemplates::Provider))
+                .col(string_col(NotificationTemplates::MessageType))
+                .col(boolean_col(NotificationTemplates::Enabled))
+                .col(text_col(NotificationTemplates::BodyJson))
+                .col(text_col(NotificationTemplates::VariablesJson))
+                .col(string_null(NotificationTemplates::CreatedBy))
+                .col(string_null(NotificationTemplates::UpdatedBy))
+                .col(string_col(NotificationTemplates::CreatedAt))
+                .col(string_col(NotificationTemplates::UpdatedAt))
                 .to_owned(),
         )
         .await
@@ -196,6 +247,31 @@ async fn create_notification_indexes(manager: &SchemaManager<'_>) -> Result<(), 
                 .table(NotificationDeliveryAttempts::Table)
                 .col(NotificationDeliveryAttempts::RetryState)
                 .col(NotificationDeliveryAttempts::NextRetryAt)
+                .if_not_exists()
+                .to_owned(),
+        )
+        .await
+}
+
+async fn create_notification_template_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    manager
+        .create_index(
+            Index::create()
+                .name("idx_notification_templates_key")
+                .table(NotificationTemplates::Table)
+                .col(NotificationTemplates::TemplateKey)
+                .if_not_exists()
+                .unique()
+                .to_owned(),
+        )
+        .await?;
+    manager
+        .create_index(
+            Index::create()
+                .name("idx_notification_templates_provider")
+                .table(NotificationTemplates::Table)
+                .col(NotificationTemplates::Provider)
+                .col(NotificationTemplates::MessageType)
                 .if_not_exists()
                 .to_owned(),
         )

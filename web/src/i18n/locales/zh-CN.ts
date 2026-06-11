@@ -83,6 +83,7 @@ export const messages: Record<string, string> = {
     "事件过滤 JSON": "事件过滤 JSON",
     "请输入事件过滤 JSON": "请输入事件过滤 JSON",
     "模板引用": "模板引用",
+    "只能选择已启用且与所选渠道提供方匹配的存储模板。": "只能选择已启用且与所选渠道提供方匹配的存储模板。",
     "限流 JSON": "限流 JSON",
     "静默时段 JSON": "静默时段 JSON",
     "升级 JSON": "升级 JSON",
@@ -140,6 +141,7 @@ export const messages: Record<string, string> = {
     "签发": "签发",
     "明文 API-Key 创建后只显示一次；有效期留空则永久有效。": "明文接口密钥创建后只显示一次；有效期留空则永久有效。",
     "请输入名称": "请输入名称",
+    "计费任务失败": "计费任务失败",
     "请选择 Service Account": "请选择服务账号",
     "选择已有 Service Account": "选择已有服务账号",
     "权限 scopes": "权限 scopes",
@@ -1253,4 +1255,7 @@ export const messages: Record<string, string> = {
   '系统保留': '系统保留',
     "owner 或 owner@example.com": "owner 或 owner@example.com",
     "owner@example.com": "owner@example.com",
+    "开启替换渠道配置后才能修改消息类型和 inline 模板字段。": "开启替换渠道配置后才能修改消息类型和 inline 模板字段。",
+    "开启替换渠道配置后才能修改高级配置 JSON。": "开启替换渠道配置后才能修改高级配置 JSON。",
+    "开启替换密钥引用后才能修改高级密钥引用对象。": "开启替换密钥引用后才能修改高级密钥引用对象。",
 };

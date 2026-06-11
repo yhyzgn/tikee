@@ -17,6 +17,7 @@ mod job_repo;
 mod job_version;
 mod log;
 mod notification;
+mod notification_template;
 mod oidc;
 mod oidc_identity;
 mod plugin;
@@ -62,6 +63,10 @@ pub use notification::{
     NotificationPolicyFilters, NotificationPolicyRepository, NotificationPolicySummary,
     NotificationPolicyValidationSummary, RecordNotificationDeliveryAttempt,
     UpdateNotificationChannel, UpdateNotificationPolicy,
+};
+pub use notification_template::{
+    CreateNotificationTemplate, NotificationTemplateFilters, NotificationTemplateRepository,
+    NotificationTemplateSummary, UpdateNotificationTemplate,
 };
 pub use oidc::{CreateOidcAuthState, OidcAuthStateRepository, OidcAuthStateSummary};
 pub use oidc_identity::{OidcIdentityRepository, OidcIdentitySummary, UpsertOidcIdentity};

@@ -7,6 +7,7 @@ export interface NotificationChannelTypeSummary {
   targetKind: string;
   description: string;
   requiredConfigKeys: string[];
+  requiredTargetKeys: string[];
   secretConfigKeys: string[];
   supportsTestSend: boolean;
   pluginProvided: boolean;
@@ -116,6 +117,51 @@ export interface NotificationPolicyValidationSummary {
   missingChannelIds: string[];
   disabledChannelIds: string[];
   issues: string[];
+}
+
+
+export interface NotificationTemplateSummary {
+  id: string;
+  templateKey: string;
+  name: string;
+  description: string | null;
+  provider: string;
+  messageType: string;
+  enabled: boolean;
+  bodyJson: string;
+  variablesJson: string;
+  createdBy: string | null;
+  updatedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateNotificationTemplateRequest {
+  templateKey: string;
+  name: string;
+  description?: string | null;
+  provider: string;
+  messageType: string;
+  enabled?: boolean;
+  body?: Record<string, unknown>;
+  variables?: unknown;
+}
+
+export interface UpdateNotificationTemplateRequest {
+  templateKey?: string;
+  name?: string;
+  description?: string | null;
+  provider?: string;
+  messageType?: string;
+  enabled?: boolean;
+  body?: Record<string, unknown>;
+  variables?: unknown;
+}
+
+export interface RenderNotificationTemplateResult {
+  provider: string;
+  messageType: string;
+  rendered: Record<string, unknown> | unknown[] | string | number | boolean | null;
 }
 
 export interface NotificationMessageSummary {
@@ -231,6 +277,36 @@ export async function deleteNotificationPolicy(id: string): Promise<void> {
 export function validateNotificationPolicy(id: string): Promise<NotificationPolicyValidationSummary> {
   return request<NotificationPolicyValidationSummary>(`/api/v1/notification-policies/${encodeURIComponent(id)}:validate`, {
     method: 'POST',
+  });
+}
+
+
+export function listNotificationTemplates(params: { provider?: string; message_type?: string; enabled?: boolean } = {}): Promise<NotificationTemplateSummary[]> {
+  return request<NotificationTemplateSummary[]>(`/api/v1/notification-templates${queryString(params)}`);
+}
+
+export function createNotificationTemplate(payload: CreateNotificationTemplateRequest): Promise<NotificationTemplateSummary> {
+  return request<NotificationTemplateSummary>('/api/v1/notification-templates', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateNotificationTemplate(id: string, payload: UpdateNotificationTemplateRequest): Promise<NotificationTemplateSummary> {
+  return request<NotificationTemplateSummary>(`/api/v1/notification-templates/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteNotificationTemplate(id: string): Promise<void> {
+  await request<Record<string, never>>(`/api/v1/notification-templates/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export function renderNotificationTemplate(id: string, payload: { provider?: string; messageType?: string; template?: Record<string, unknown>; sample?: Record<string, unknown> } = {}): Promise<RenderNotificationTemplateResult> {
+  return request<RenderNotificationTemplateResult>(`/api/v1/notification-templates/${encodeURIComponent(id)}/render`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
   });
 }
 

@@ -391,6 +391,24 @@ pub(super) enum NotificationPolicies {
 }
 
 #[derive(DeriveIden)]
+pub(super) enum NotificationTemplates {
+    Table,
+    Id,
+    TemplateKey,
+    Name,
+    Description,
+    Provider,
+    MessageType,
+    Enabled,
+    BodyJson,
+    VariablesJson,
+    CreatedBy,
+    UpdatedBy,
+    CreatedAt,
+    UpdatedAt,
+}
+
+#[derive(DeriveIden)]
 pub(super) enum NotificationMessages {
     Table,
     Id,

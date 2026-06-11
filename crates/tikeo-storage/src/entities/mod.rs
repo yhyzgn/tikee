@@ -19,6 +19,7 @@ pub mod notification_channel;
 pub mod notification_delivery_attempt;
 pub mod notification_message;
 pub mod notification_policy;
+pub mod notification_template;
 pub mod oidc_auth_state;
 pub mod oidc_identity;
 pub mod permission;
