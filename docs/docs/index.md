@@ -7,7 +7,7 @@ keywords: [rust scheduler, workflow orchestration, worker tunnel, distributed jo
 
 # What is Tikeo?
 
-Tikeo is a Rust-native orchestration control plane for teams that need more than a timer. It combines scheduled jobs, API-triggered jobs, workflow DAGs, outbound-only Workers, SDK processors, governed scripts, Notification Center delivery, alerting boundaries, RBAC, audit evidence, Web operations, Docker/Helm/Terraform deployment assets, and source-backed SDK examples into one project.
+Tikeo is a Rust-native orchestration control plane for teams that need more than a timer. It combines scheduled jobs, API-triggered jobs, workflow DAGs, outbound-only Workers, SDK processors, governed scripts, Notification Center delivery, alerting boundaries, RBAC, audit evidence, Web operations, Docker/Helm/Terraform deployment assets, and operator-verified SDK examples into one project.
 
 The README is intentionally short: it explains why the project exists and how to evaluate it at a glance. This documentation site is the operating manual. A reader outcome for this site is concrete: after following the relevant pages, you should be able to install the toolchain, start the Server, bootstrap the first Owner, create namespace/app scope, create an app-scoped SDK API key, connect a Worker through the Worker Tunnel, create and trigger a job from an SDK, inspect instances/logs/audit evidence, deploy the Server/Web pair with Compose or Helm, and know which defaults changed when you moved from local SQLite to production PostgreSQL/MySQL.
 
@@ -23,7 +23,7 @@ Read these pages in order when you are new to the repository:
 | 4 | [Worker Tunnel](./concepts/worker-tunnel) | Why Workers dial out, what registration carries, and what must never become a business Worker inbound Service. |
 | 5 | SDK pages | Dependency coordinates, WorkerConfig defaults, minimal Worker examples, Management client credentials, live verification runbooks. |
 | 6 | Deployment pages | Single binary, Docker Compose, Kubernetes/Helm, controller-specific ingress guidance, and smoke scripts. |
-| 7 | Reference pages | Source-derived Management OpenAPI, Notification Center, and Worker Tunnel protobuf reference. |
+| 7 | Reference pages | Implementation-derived Management OpenAPI, Notification Center, and Worker Tunnel protobuf reference. |
 
 If you only want a proof that the whole local path still works, run the Management trigger smoke from the quickstart. If you are writing a production runbook, use the configuration and deployment references first, then select one SDK page for the Worker language used by your service team.
 
@@ -57,7 +57,7 @@ This site is written for four operators:
 1. **Platform evaluator**: needs to decide if Tikeo can replace a legacy scheduler where Workers cannot expose inbound ports.
 2. **Application engineer**: needs to add an SDK dependency, declare processors, connect to the Worker Tunnel, and trigger jobs from app-scoped credentials.
 3. **SRE/platform operator**: needs to deploy Server/Web, configure storage, TLS/mTLS, logging, OTel, ingress/gateway, backups, rollbacks, and smoke checks.
-4. **Contributor**: needs to run tests, keep docs source-backed, avoid hallucinated endpoints, and update memory/prompt handoff after work.
+4. **Maintainer**: needs to run tests, keep docs operator-verified, avoid invented endpoints, and update the related operator documentation after work.
 
 The docs therefore prefer tables, defaults, copy-paste commands, expected observations, and failure triage over marketing paragraphs.
 
@@ -75,7 +75,7 @@ TIKEO_MANAGEMENT_TRIGGER_REBUILD_SERVER=0 scripts/management-trigger-e2e-smoke.s
 
 The smoke is stronger than a screenshot because it starts an isolated Server, writes an isolated SQLite config and DB under `.dev/reports/management-trigger-e2e-*`, bootstraps scope, creates a service account and SDK API key, starts the Node.js Worker demo with `TIKEO_WORKER_CONNECT=1`, creates and triggers a job through the SDK Management client, then records instance result/log evidence.
 
-## Source-backed documentation rule
+## Implementation anchors
 
 This site should not invent API names, package coordinates, config keys, or deployment flags. The main sources are:
 
@@ -94,4 +94,23 @@ Notification Center and Alerts pages are additionally backed by `design/notifica
 - SDK adopter: read [Configuration reference](./reference/configuration) first, then the language SDK page.
 - Kubernetes operator: read [Kubernetes and Helm](./deployment/kubernetes) and [Kubernetes controller runbook](./deployment/kubernetes-controller-runbook).
 - Notification operator: read [Notifications](./user-guide/notifications), [Alerts](./user-guide/alerts), and [Notification Center reference](./reference/notification-center) to keep outbound delivery separate from incident semantics.
-- Troubleshooter: use [Troubleshooting](./reference/troubleshooting), the smoke report directory, and the source-derived references.
+- Troubleshooter: use [Troubleshooting](./reference/troubleshooting), the smoke report directory, and the operator-verified references.
+
+## Prerequisites
+
+Use the setup, authentication, and access requirements described in this page before running any command. For local examples, start the Server with `config/dev.toml`, use `127.0.0.1` as the client host, and keep tokens in shell variables rather than pasted into files.
+
+## Verify
+
+After following the page, verify the result with the documented API, UI, build, smoke, or deployment checks. A valid verification includes the command that was run, the route or file that was inspected, and the observed status or artifact.
+
+## Troubleshooting
+
+When a step fails, first capture the exact command, response status, and Server log window. Then check authentication, namespace/app scope, Worker eligibility, storage readiness, and proxy behavior before changing production configuration.
+
+## Production checklist
+
+- [ ] Secrets are referenced through environment or platform secret mechanisms and are not written into examples.
+- [ ] Commands have been adapted from local `127.0.0.1` to the real host, TLS, and authentication model.
+- [ ] Rollback and evidence collection are documented for the changed surface.
+- [ ] Operators can repeat the verification without private shell history or hidden state.

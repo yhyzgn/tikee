@@ -7,7 +7,7 @@ description: Complete Tikeo configuration defaults, environment override names, 
 
 Tikeo Server configuration is a typed TOML + environment overlay loaded by `crates/tikeo-config/src/lib.rs`. The binary reads a file from `tikeo serve --config <path>` or `TIKEO_CONFIG`, then applies environment overrides using prefix `TIKEO` and double underscore separators. For example, `storage.database_url` becomes `TIKEO__STORAGE__DATABASE_URL`.
 
-This page is source-backed. Do not add keys here unless they exist in `TikeoConfig`, a committed config example, Helm values, or an SDK config type.
+This page is operator-verified. Do not add keys here unless they exist in `TikeoConfig`, a committed config example, Helm values, or an SDK config type.
 
 ## Load order
 
@@ -128,7 +128,7 @@ API-key gotchas:
 
 - Human bearer tokens and SDK `x-tikeo-api-key` credentials are separate.
 - SDK API keys are created under `/api/v1/management/api-keys` and should be scoped to namespace/app/service-account permissions.
-- SDK clients should load keys from `TIKEO_MANAGEMENT_API_KEY` or platform Secrets, not source files.
+- SDK clients should load keys from `TIKEO_MANAGEMENT_API_KEY` or platform Secrets, not repository files.
 
 ## Transport security
 
@@ -282,3 +282,22 @@ cargo run --bin tikeo -- serve --config config/dev.toml
 ```
 
 Use `alert_retry` for compatibility alert delivery attempts and `notification_delivery` for Notification Center messages. Do not tune one queue expecting it to change the other. See [Notification Center reference](./notification-center) for channel, policy, retry, DLQ, and redaction behavior.
+
+## Prerequisites
+
+Use the setup, authentication, and access requirements described in this page before running any command. For local examples, start the Server with `config/dev.toml`, use `127.0.0.1` as the client host, and keep tokens in shell variables rather than pasted into files.
+
+## Verify
+
+After following the page, verify the result with the documented API, UI, build, smoke, or deployment checks. A valid verification includes the command that was run, the route or file that was inspected, and the observed status or artifact.
+
+## Troubleshooting
+
+When a step fails, first capture the exact command, response status, and Server log window. Then check authentication, namespace/app scope, Worker eligibility, storage readiness, and proxy behavior before changing production configuration.
+
+## Production checklist
+
+- [ ] Secrets are referenced through environment or platform secret mechanisms and are not written into examples.
+- [ ] Commands have been adapted from local `127.0.0.1` to the real host, TLS, and authentication model.
+- [ ] Rollback and evidence collection are documented for the changed surface.
+- [ ] Operators can repeat the verification without private shell history or hidden state.

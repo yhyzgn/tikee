@@ -1524,3 +1524,12 @@ Verification evidence: docs contract, workflow contract, management-smoke contra
 - First-class `notification_templates` are implemented with migration/entity/repository, API CRUD/list/get/delete/render preview, OpenAPI wiring, Web template drawer/preview, and policy template selector.
 - Runtime job notification materialization loads enabled stored templates by id or templateKey, performs safe token rendering, stores rendered output under `payload.template`, and provider delivery prefers stored template payloads over channel inline defaults.
 - Fresh verification passed: Rust fmt/clippy/test/build, Web lint/typecheck/test/build, docs typecheck/build, docs/workflow/management contracts, GitHub Actions Node runtime policy, source-size audit, and diff whitespace check.
+
+
+## 2026-06-12 — Docs human operator manual rewrite
+
+- Reworked the Docusaurus `docs/` site from AI/source-note style pages into human-readable operator manuals across English and zh-CN priority pages.
+- Strengthened install, quickstart, seed demo data, configuration, SDK integration, deployment, SSE realtime, integrations, troubleshooting, user guide, alerts, notifications, and Notification Center reference docs with step-by-step prerequisites, verification, troubleshooting, and production checklists.
+- Notification docs now document the real `channel → template → policy → event → delivery` chain with `CHANNEL_ID` / `TEMPLATE_ID` / `POLICY_ID`, `secretRefs`, `supportsTestSend=false`, retry/DLQ, and the Alerts-vs-Notifications boundary.
+- Added docs contract tests that reject public AI handoff wording, `0.0.0.0` client URLs, README-rehash depth, unchainable notification examples, and malformed Notification Center provider tables.
+- Final local evidence passed: docs contract/workflow/management smoke tests, source-size audit, whitespace check, `cd docs && bun run docs:typecheck && bun run docs:build`, `docker build -f docs/Dockerfile docs -t tikeo-docs:local`, and docs container smoke on `127.0.0.1:13036` for `/healthz`, `/docs/`, `/zh-CN/docs/`, notification reference, and search index.

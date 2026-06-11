@@ -1,6 +1,6 @@
 ---
 title: Management trigger smoke runbook
-description: Contributor runbook for the source-backed Management API create and trigger e2e smoke.
+description: Maintainer runbook for the operator-verified Management API create and trigger e2e smoke.
 ---
 
 # Management trigger smoke runbook
@@ -11,7 +11,7 @@ Use this runbook when changing Management API auth, SDK helper names, Worker Tun
 
 ## What the smoke proves
 
-The script is source-backed by `scripts/management-trigger-e2e-smoke.sh` and the shared helpers in `deploy/smoke/lib/tikeo-smoke-lib.sh`. It verifies these real paths instead of mocked HTTP calls:
+The script is operator-verified by `scripts/management-trigger-e2e-smoke.sh` and the shared helpers in `deploy/smoke/lib/tikeo-smoke-lib.sh`. It verifies these real paths instead of HTTP-only checks:
 
 - local server startup through `serve --config "$SERVER_CONFIG"` with an isolated SQLite database at `DB_PATH`;
 - readiness through `tikeo_smoke_wait_for_http server "$API_URL/readyz"`;

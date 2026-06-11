@@ -128,7 +128,7 @@ export default function Home(): ReactNode {
               <p>{localeCopy.quickBody}</p>
             </div>
             <pre><code>{`cargo run --bin tikeo -- serve --config config/dev.toml
-curl -fsS http://0.0.0.0:9090/healthz
+curl -fsS http://127.0.0.1:9090/healthz
 (cd examples/rust/worker-demo && cargo run)`}</code></pre>
           </div>
         </section>

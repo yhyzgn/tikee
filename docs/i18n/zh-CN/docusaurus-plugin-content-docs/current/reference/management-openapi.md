@@ -97,7 +97,7 @@ SDK 页面应把 helper 行为链接到上面的精确锚点：
 - 轮询实例 → [`GET /api/v1/instances/{instance}`](./management-openapi#get-api-v1-instances-instance)
 - 查看日志 → [`GET /api/v1/instances/{instance}/logs`](./management-openapi#get-api-v1-instances-instance-logs)
 
-这些链接必须保持 source-backed。如果要文档化新的 SDK helper，先确认它已在
+这些链接必须保持 operator-verified。如果要文档化新的 SDK helper，先确认它已在
 提交的 SDK 源码中存在，并且序列化 payload 与 OpenAPI 请求契约一致。
 
 ## 通知中心端点

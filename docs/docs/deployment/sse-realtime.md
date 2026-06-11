@@ -1,39 +1,61 @@
 ---
 title: SSE realtime deployment notes
-description: Proxy, load balancer, WAF, and Kubernetes Ingress requirements for Tikeo Server-Sent Events.
+description: Operator manual for proxy, load balancer, WAF, and Kubernetes Ingress settings required by Tikeo Server-Sent Events.
 ---
 
 # SSE realtime deployment notes
 
-Tikeo Web uses Server-Sent Events (SSE) for realtime console updates. The current streaming HTTP endpoints are:
+Tikeo Web uses Server-Sent Events (SSE) for realtime console updates. SSE is a long-lived HTTP `GET` response with `Content-Type: text/event-stream`. It is not WebSocket traffic, but it fails when proxies buffer responses, compress streams, cache API paths, or close idle requests too quickly.
 
-| UI area | Endpoint pattern | Stream behavior |
-|---|---|---|
-| Workflow instance timeline | `/api/v1/events/instances/{id}/stream` | Replays workflow events and keeps sending new timeline events. |
-| Job instance log drawer | `/api/v1/instances/{id}/logs/stream` | Sends instance snapshots and incremental `instance.log` events. |
-| Worker cluster page | `/api/v1/workers/stream` | Sends changed worker/lifecycle snapshots. |
-| Dispatch queue page | `/api/v1/dispatch-queue/stream` | Sends changed queue snapshots. |
+## Streaming routes
 
-Browsers use `EventSource`, which cannot attach an `Authorization` header. Tikeo therefore supports the same `?token=...` fallback used by the Web console. Always serve Web and API over HTTPS in shared environments and redact the `token` query parameter from access logs.
+| UI area | Route | Event examples | Permission |
+| --- | --- | --- | --- |
+| Workflow instance timeline | `/api/v1/events/instances/{id}/stream` | workflow event types from the instance event log | `workflows:read` |
+| Job instance log drawer | `/api/v1/instances/{id}/logs/stream` | `instance.snapshot`, `instance.log` | `instances:read` |
+| Instance list / dashboard refresh | `/api/v1/instances/stream` | `instances.snapshot` | `instances:read` |
+| Worker cluster page | `/api/v1/workers/stream` | `workers.snapshot` | `workers:read` |
+| Dispatch queue page | `/api/v1/dispatch-queue/stream` | `dispatchQueue.snapshot` | `workers:read` |
+
+Browsers use `EventSource`, which cannot attach an `Authorization` header. Tikeo therefore supports a `?token=...` query fallback for stream routes. Use HTTPS in shared environments and redact query strings, or at least the `token` parameter, from proxy, WAF, load balancer, and application access logs.
+
+## Prerequisites
+
+Before changing proxies, prove the Server stream works directly:
+
+```bash
+curl -fsS http://127.0.0.1:9090/readyz
+curl -N http://127.0.0.1:9090/api/v1/workers/stream \
+  -H "authorization: Bearer $TOKEN" \
+  -H 'Accept: text/event-stream'
+```
+
+Expected behavior:
+
+- the response stays open;
+- headers include `content-type: text/event-stream`;
+- a `workers.snapshot` event appears when the visible worker snapshot changes;
+- keep-alives are sent every 15 seconds.
+
+If direct access fails, fix auth, Server readiness, or route permissions before debugging nginx, load balancers, or Ingress.
 
 ## Network requirements
 
-SSE is a long-lived HTTP response with `Content-Type: text/event-stream`. It is not WebSocket, but it is still sensitive to proxy defaults that assume short JSON responses.
-
-Production network layers must allow:
+Every hop between browser and Server must allow:
 
 - long-lived `GET` responses without a fixed `Content-Length`;
-- response streaming without proxy buffering or CDN/WAF buffering;
-- idle/read timeouts longer than the application keep-alive cadence;
+- response streaming with buffering disabled;
+- idle/read timeouts longer than the 15-second keep-alive interval;
 - no gzip/compression buffering for `text/event-stream`;
 - no caching for `/api/v1/**/stream` responses;
-- enough per-client and per-origin connection capacity for multiple open console tabs.
+- enough per-client and per-origin connections for multiple open console tabs;
+- query-token fallback preserved when same-origin cookies or headers are unavailable.
 
-Tikeo emits SSE keep-alives every 15 seconds. Configure every proxy/LB/WAF hop with an idle timeout comfortably above that value; `60s` is a practical minimum and `300s` to `3600s` is safer for operator consoles.
+Use `60s` as a minimum idle timeout. For operator consoles, `300s` to `3600s` is safer.
 
 ## nginx reverse proxy
 
-Apply these settings to the API location that forwards Tikeo HTTP traffic, or to a narrower `/api/v1/` / `*stream` location if your nginx routing separates API and Web assets.
+Apply these settings to the Tikeo API location, or to a narrower stream location if your routing separates Web assets and API traffic.
 
 ```nginx
 location /api/v1/ {
@@ -44,71 +66,78 @@ location /api/v1/ {
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
 
-    # Required for SSE: do not buffer or cache streaming responses.
+    # Required for SSE: do not buffer, cache, or compress streaming responses.
     proxy_buffering off;
     proxy_cache off;
     gzip off;
 
-    # Keep the upstream stream open. Use values higher than every LB/WAF hop.
+    # Keep streams open longer than every LB/WAF hop.
     proxy_read_timeout 3600s;
     proxy_send_timeout 3600s;
 
-    # Avoid hop-by-hop connection header surprises when proxying to upstream HTTP/1.1.
+    # Avoid hop-by-hop connection header surprises with upstream HTTP/1.1.
     proxy_set_header Connection "";
 }
 ```
 
-Common nginx symptoms:
+Reload nginx only after validating the config:
 
-| Symptom | Likely cause | Fix |
-|---|---|---|
-| Events arrive in large batches instead of live | `proxy_buffering` or gzip buffering | Disable buffering/compression for SSE locations. |
-| Browser reconnects every 30-60 seconds | `proxy_read_timeout` or upstream LB idle timeout | Raise all idle/read timeouts above the keep-alive interval. |
-| `499`, `502`, `504` during live views | Proxy closes long responses or upstream timeout mismatch | Align nginx, LB, and ingress timeouts; check upstream pod/server health separately. |
-| Token appears in access logs | EventSource token query fallback | Redact `token` query parameters or use a same-origin deployment with controlled logs. |
+```bash
+nginx -t
+nginx -s reload
+```
+
+Verify through the proxy:
+
+```bash
+curl -N https://tikeo.example.com/api/v1/workers/stream \
+  -H "authorization: Bearer $TOKEN" \
+  -H 'Accept: text/event-stream'
+```
 
 ## Load balancers and CDNs
 
-For L4/L7 load balancers, keep the SSE path as plain HTTP streaming. Do not route it through products configured for static response caching or response aggregation.
-
 Recommended settings:
 
-- idle timeout: at least `60s`; prefer `300s+` for console sessions;
-- response buffering: disabled;
-- HTTP protocol: HTTP/1.1 upstream is the least surprising path; HTTP/2 is acceptable only if the proxy preserves streaming flushes;
-- health checks: use `/readyz` or `/healthz`, never a stream endpoint;
-- stickiness: not required for correctness, but avoid draining a backend while operators are watching active streams;
-- CDN cache: bypass `/api/v1/` and especially `/api/v1/**/stream`.
+| Setting | Required behavior |
+| --- | --- |
+| Idle timeout | At least `60s`; prefer `300s+` for consoles. |
+| Response buffering | Disabled for stream routes. |
+| Upstream protocol | HTTP/1.1 is the least surprising; HTTP/2 is acceptable only if streaming flushes are preserved. |
+| Health checks | Use `/readyz` or `/healthz`, never a stream route. |
+| Backend draining | Avoid draining a backend while operators are watching active streams. |
+| CDN cache | Bypass `/api/v1/` and all `/api/v1/**/stream` routes. |
 
-Cloud-specific examples:
+Examples:
 
-- AWS ALB: set `idle_timeout.timeout_seconds` to a value such as `300` or `3600`.
-- Cloudflare or WAF/CDN products: ensure the plan and rule set allow long-lived streaming HTTP responses; if not, bypass proxying for `/api/v1/**/stream`.
-- Envoy/HAProxy/Traefik: disable response buffering and raise stream/idle timeouts for the Tikeo API route.
+- AWS ALB: set `idle_timeout.timeout_seconds` to `300` or `3600`.
+- Cloudflare or WAF/CDN products: confirm long-lived streaming HTTP responses are allowed; otherwise bypass proxying for stream routes.
+- Envoy, HAProxy, and Traefik: disable response buffering and raise stream/idle timeouts for the Tikeo API route.
 
 ## WAF rules
 
-SSE endpoints look unusual to generic WAF profiles because they are long-lived authenticated `GET` requests with streaming JSON event frames. Make sure WAF rules do not:
+SSE endpoints are authenticated long-lived `GET` requests with streaming JSON event frames. WAF rules must not:
 
 - require `Content-Length` on responses;
 - block `text/event-stream`;
-- classify long-lived `GET` responses as slowloris or data exfiltration;
+- classify long-lived `GET` responses as slowloris or data exfiltration by default;
 - strip or rewrite the `token` query parameter;
 - buffer the response until a minimum body size is reached;
-- inject JavaScript/challenge pages into API responses.
+- inject JavaScript, CAPTCHA, or challenge pages into API responses.
 
-Security guidance:
+Security checklist:
 
-- prefer same-origin Web/API deployments where possible;
-- use HTTPS before exposing token query fallback across a network;
-- redact query strings or at least `token` in proxy, WAF, and LB logs;
-- keep stream endpoint permissions aligned with the matching REST endpoint.
+- Prefer same-origin Web/API deployments.
+- Use HTTPS before exposing query-token fallback on a network.
+- Redact query strings or `token` from access logs.
+- Keep stream permissions aligned with the matching REST views.
+- Rotate affected tokens if query strings were logged in a shared system.
 
 ## Kubernetes Ingress
 
 ### ingress-nginx
 
-Use annotations similar to the following on the Ingress serving the Tikeo API:
+Use annotations like these on the Ingress serving the Tikeo API:
 
 ```yaml
 metadata:
@@ -119,7 +148,7 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
 ```
 
-If your cluster disables annotation snippets, keep the configuration at the IngressClass/controller ConfigMap level instead of relying on per-Ingress snippets. Avoid rewrite rules that move `/api/v1/**/stream` away from the Tikeo server route.
+If your cluster blocks per-Ingress annotations, configure equivalent values at the IngressClass or controller ConfigMap level. Avoid rewrite rules that move `/api/v1/**/stream` away from the Tikeo Server.
 
 ### AWS ALB Ingress Controller
 
@@ -129,30 +158,73 @@ metadata:
     alb.ingress.kubernetes.io/load-balancer-attributes: idle_timeout.timeout_seconds=3600
 ```
 
-Also make sure target group health checks use `/readyz` and that any WAF attached to the ALB allows streaming `GET` responses.
+Set target group health checks to `/readyz`. If WAF is attached to the ALB, allow streaming `GET` responses for the Tikeo API stream routes.
 
 ### Other controllers
 
-- Traefik: set forwarding/response timeouts high enough and do not enable buffering middleware for `/api/v1/`.
-- Envoy/Gateway API: raise route/stream idle timeouts and disable filters that buffer full responses.
-- NGINX Inc. controller: use the equivalent `nginx.org/proxy-read-timeout`, `nginx.org/proxy-send-timeout`, and buffering controls for your controller version.
+| Controller | Setting to check |
+| --- | --- |
+| Traefik | Forwarding and response timeouts; no buffering middleware for `/api/v1/`. |
+| Envoy / Gateway API | Route timeout, stream idle timeout, and filters that buffer full responses. |
+| NGINX Inc. controller | Equivalent read/send timeout and buffering controls for your controller version. |
 
-## Troubleshooting checklist
+## Verification runbook
 
-1. Open browser DevTools and confirm the request stays pending with `Content-Type: text/event-stream`.
-2. Check that the response is not cached and is not served by a static CDN layer.
-3. Watch reconnect frequency. Reconnects at a fixed interval usually mean an idle timeout.
-4. Compare direct server access (`curl -N http://server:9090/.../stream`) with proxied access.
-5. Inspect proxy/WAF logs for `499`, `502`, `504`, `524`, `403`, or challenge-page responses.
-6. Verify that query tokens are accepted and not stripped by an ingress rewrite rule.
-7. Confirm frontend and API origin/CORS policy if Web is not served from the same origin as the API.
+1. Open browser DevTools and confirm the stream request stays pending.
+2. Confirm response headers include `Content-Type: text/event-stream`.
+3. Confirm the route is not cached and not served by a static CDN layer.
+4. Compare direct Server access with proxied access:
 
-Example smoke command:
+   ```bash
+   curl -N http://127.0.0.1:9090/api/v1/workers/stream \
+     -H "authorization: Bearer $TOKEN" \
+     -H 'Accept: text/event-stream'
 
-```bash
-curl -N \
-  -H 'Accept: text/event-stream' \
-  "https://tikeo.example.com/api/v1/workers/stream?token=${TIKEO_TOKEN}"
-```
+   curl -N https://tikeo.example.com/api/v1/workers/stream \
+     -H "authorization: Bearer $TOKEN" \
+     -H 'Accept: text/event-stream'
+   ```
 
-Use `/readyz` for liveness/readiness probes and monitoring. Do not use SSE endpoints for probes; each probe would open a long-lived stream by design.
+5. Watch reconnect frequency. Reconnects at a fixed interval usually mean an idle timeout.
+6. Inspect proxy/WAF/LB logs for `499`, `502`, `504`, `524`, `403`, or challenge-page responses.
+7. Verify that `?token=...` is accepted when the browser uses `EventSource` and no `Authorization` header can be sent.
+8. Confirm frontend and API origin/CORS policy if Web is not served from the same origin as the API.
+
+## Common symptoms
+
+| Symptom | Likely cause | Fix |
+| --- | --- | --- |
+| Events arrive in large batches | Proxy buffering or gzip buffering. | Disable buffering/compression for stream routes. |
+| Browser reconnects every 30-60 seconds | Proxy, LB, WAF, or upstream idle timeout. | Raise all idle/read timeouts above the keep-alive interval. |
+| Direct curl works, proxied curl hangs with no events | CDN or WAF response aggregation. | Bypass stream routes or disable aggregation. |
+| `499`, `502`, or `504` during live views | Proxy closes long responses or upstream timeout mismatch. | Align nginx, LB, and Ingress timeouts; check Server health separately. |
+| Browser gets HTML instead of event frames | WAF challenge, auth redirect, or frontend rewrite caught the API route. | Exclude `/api/v1/**/stream` from challenge/rewrite rules. |
+| Token appears in logs | Query fallback logged by a network hop. | Redact query strings, rotate exposed tokens, prefer same-origin controlled logging. |
+
+## Cleanup after testing
+
+- Stop manual `curl -N` sessions with `Ctrl-C`.
+- Close extra browser tabs that hold stream connections.
+- Remove temporary access logs that captured query tokens, or redact them according to your retention policy.
+- Revoke or rotate any token used in a shared proxy test if it may have been logged.
+
+## Production checklist
+
+Before exposing the Web console through a proxy or Ingress:
+
+- `/readyz` and direct local stream checks pass.
+- Stream routes bypass CDN/static caching.
+- Buffering and gzip are disabled for stream responses.
+- Idle/read timeouts are at least `60s`; `300s+` is preferred.
+- WAF allows `text/event-stream` and long-lived authenticated `GET` requests.
+- Query strings or `token` values are redacted from all access logs.
+- Health checks use `/readyz` or `/healthz` only.
+- Runbooks tell operators how to compare direct Server access with proxied access.
+
+## Verify
+
+After following the page, verify the result with the documented API, UI, build, smoke, or deployment checks. A valid verification includes the command that was run, the route or file that was inspected, and the observed status or artifact.
+
+## Troubleshooting
+
+When a step fails, first capture the exact command, response status, and Server log window. Then check authentication, namespace/app scope, Worker eligibility, storage readiness, and proxy behavior before changing production configuration.

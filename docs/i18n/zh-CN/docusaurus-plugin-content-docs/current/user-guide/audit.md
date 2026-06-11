@@ -1,24 +1,74 @@
-# Audit 用户指南
+# Audit 运维手册
 
-Audit 页面由 `web/src/pages/AuditLogsPage.tsx` 实现。它是平台写操作、认证事件、脚本治理动作、派发相关事件和 failure reason 的治理证据界面。
+## 概览
 
-## 源码对应的数据路径
+Audit 页面用于查看平台写操作、认证事件、脚本治理动作、派发相关事件和失败原因。它是事故复盘、权限核查、发布审阅和合规导出的主要入口。
 
-页面通过 `/api/v1/audit-logs` 按服务端过滤读取日志，并通过 `/api/v1/audit-logs:export` 导出 JSON。导出路径保留相同 filter，并采用有上限的治理导出，而不是任意倾倒数据库表。
+运维依据：页面由 `web/src/pages/AuditLogsPage.tsx` 提供；主要接口包括 `/api/v1/audit-logs` 和 `/api/v1/audit-logs:export`。导出格式为 JSON，并沿用当前筛选条件。
 
-## 过滤模型
+## 前置条件
 
-过滤条件包括 actor、action、resource type、resource id、failure reason 和 page size。URL query state 会持久化，所以复制 URL 可以保留当前审计调查视图。Result tag 区分成功与失败操作，失败行会在有数据时展示 failure reason。
+- 具备 `audit:read` 权限。
+- 已知道调查时间窗口、actor、resource type、resource id、action 或 trace ID 中至少一项。
+- 导出文件应按敏感运维记录保存，不放入公开聊天、公开仓库或未授权工单。
+- 浏览器允许下载 JSON 文件。
 
-## Before/after 与 trace 证据
+```bash
+curl -fsS 'http://127.0.0.1:9090/api/v1/audit-logs?pageSize=20' \
+  -H "authorization: Bearer $TIKEO_TOKEN" | jq '.data.items[] | {createdAt,actor,action,result}'
+```
 
-行可能包含 before/after snapshot、trace ID、IP address、user agent 和 request identifiers。用 trace ID 可关联 API 错误和服务端日志。用 before/after snapshot 可确认实际变更，尤其是 Job scope move、script publication、API-Key rotation 与 RBAC edits。
+## 打开页面
 
-## 导出使用
+1. 登录控制台。
+2. 在左侧菜单选择 **审计日志**，或打开 `/audit`。
+3. 设置 actor、action、resource type、resource id、failure reason 或 page size。
+4. 复制 URL 可保留当前筛选视图。
 
-需要和运维或 release reviewer 共享证据时，导出当前 filter。导出格式是 JSON，暂不提供 CSV，因为治理数据的 redaction 与 content-type policy 更严格。请把导出文件当作敏感运维记录处理。
+## 常见操作
 
+### 过滤成功写操作
 
-## 验收检查清单
+选择 resource type 和 action，确认 result 为 success。打开详情后记录 resource id、actor、trace ID、before/after snapshot 和 request identifiers。
 
-验收时应至少过滤一个成功写操作、一个失败操作和一个带 trace id 的请求，并导出相同过滤条件的 JSON。导出后核对 `exported` 数量、filter metadata、before/after 字段和 failure reason 是否保留。若审计证据缺失，不应只看 UI 表格通过，而要回到服务端审计写入路径和权限检查补测试。
+### 过滤失败操作
+
+设置 failure reason 或 result 过滤，查看失败行中的 reason。用 trace ID 去关联 API 错误、服务端日志和用户操作时间。
+
+### 核查敏感变更
+
+重点关注 Job scope move、script publication、API-Key rotation、RBAC edits、service-account 变更和 Worker 相关派发事件。使用 before/after snapshot 确认实际变更内容。
+
+### 导出证据
+
+1. 设置好当前筛选条件。
+2. 点击导出。
+3. 下载 JSON 文件。
+4. 核对导出内的 filter metadata 和 `exported` 数量。
+5. 按内部安全要求存放导出文件。
+
+## 验收
+
+- 可以过滤至少一个成功写操作。
+- 可以过滤至少一个失败操作，并看到 failure reason。
+- 带 trace ID 的行可用于关联服务端日志。
+- 导出的 JSON 保留当前筛选条件。
+- 导出内容包含数量、筛选元数据、before/after 字段和必要请求信息。
+
+## 故障排查
+
+| 现象 | 处理 |
+| --- | --- |
+| 页面无数据 | 放宽时间或筛选条件，确认当前账号有 `audit:read`。 |
+| 找不到失败原因 | 检查服务端是否在失败路径写入 failure reason。 |
+| trace ID 无法关联 | 对照 API 网关、应用日志和请求时间，确认日志采集链路。 |
+| 导出为空 | 确认导出前的筛选结果非空，并检查 page size 或权限。 |
+| before/after 缺失 | 回到对应写操作路径，确认审计写入是否覆盖该资源类型。 |
+
+## 生产检查清单
+
+- [ ] 生产变更至少能在 Audit 中查到 actor、action、resource 和时间。
+- [ ] 高风险失败操作必须记录 failure reason。
+- [ ] 导出文件只发给授权人员，并按敏感记录保存。
+- [ ] 审计调查记录 trace ID、resource ID 和时间窗口。
+- [ ] 不用截图替代 JSON 导出；截图只能作为辅助说明。

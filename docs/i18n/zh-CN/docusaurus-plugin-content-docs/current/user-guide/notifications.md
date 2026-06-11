@@ -44,24 +44,22 @@ Webhook-style provider 接受 `url`、`webhookUrl` 或 `webhook_url` 作为 targ
 
 Notification Center 当前运行时 secret 解析只支持 `env:` 引用或裸环境变量名，并从进程环境读取。不要在 `config` 或 `secretRefs` 中填写真实密钥值。
 
-## 设置流程
+## 快速路径：channel → template → policy → event → delivery
 
-1. **检查权限。** `/notifications` 需要 `notifications:read`；创建/更新渠道和策略需要 `notifications:manage`；手动扫描重试需要 `notifications:test`。
-2. **创建渠道。** 渠道是可复用目的地，scope 可以是 `global`、`namespace`、`app` 或 `worker_pool`。
-3. **创建策略。** 策略绑定 owner、event family、filter、severity、dedupe window 和有序渠道引用。
-4. **需要 provider-specific 消息体时创建可复用模板。** 模板按 provider 和 message type 管理，可用 sample JSON dry-run 渲染，且绝不存储渠道密钥。
-5. **验证策略。** validation 会检查引用渠道是否存在且启用。
-6. **等待或触发源事件。** 已实现的作业生命周期事件通过 `NotificationCenter::emit_job_instance_event()` 物化消息。
-7. **检查消息和投递尝试。** UI 展示近期消息与队列状态；API 支持过滤。
-8. **处理重试和 DLQ。** 后台 worker 会扫描 due attempts；也可以用 retry-due endpoint 做受控扫描。
+这条路径用于把一个 Job 失败策略投递到一个可复用出站渠道。命令可以串联执行：每一步都从上一步响应中取 ID。真实 webhook URL、authorization、SMTP password、PagerDuty routing key 等必须由 Server 进程环境提供，并通过 `secretRefs` 引用；不要写入 channel `config`、模板、截图、工单或示例。
 
-## 安全渠道创建示例
+前置条件：
 
-响应统一使用 `{code,message,data}` envelope。示例只使用占位 URL 和 secret ref；不要把真实 webhook token、SMTP password、routing key 或 authorization header 写入文档、截图、工单或聊天。
+- 当前 token 具备 `notifications:manage`；手动 retry scan 还需要 `notifications:test`。
+- Server 进程能读取 `env:TIKEO_NOTIFICATION_WEBHOOK_URL`，以及可选的 `env:TIKEO_NOTIFICATION_WEBHOOK_AUTH`。
+- 已确定要匹配的 namespace/app 或 job owner。
+- 当前 `supportsTestSend=false` 是预期行为；在真正持久化、脱敏的渠道 test endpoint 实现前，请用策略校验、消息、投递 attempts 和 retry/DLQ 状态验收。
 
 ```bash
-curl -fsS -X POST http://127.0.0.1:9090/api/v1/notification-channels \
-  -H 'Authorization: Bearer <operator-token>' \
+export TOKEN='<operator-bearer-token>'
+
+CHANNEL_ID="$(curl -fsS -X POST http://127.0.0.1:9090/api/v1/notification-channels \
+  -H "Authorization: Bearer ${TOKEN}" \
   -H 'Content-Type: application/json' \
   -d '{
     "scopeType": "app",
@@ -75,7 +73,97 @@ curl -fsS -X POST http://127.0.0.1:9090/api/v1/notification-channels \
       "url": "env:TIKEO_NOTIFICATION_WEBHOOK_URL",
       "authorization": "env:TIKEO_NOTIFICATION_WEBHOOK_AUTH"
     }
-  }'
+  }' | jq -r '.data.id')"
+
+test -n "${CHANNEL_ID}" && test "${CHANNEL_ID}" != "null"
+
+TEMPLATE_ID="$(curl -fsS -X POST http://127.0.0.1:9090/api/v1/notification-templates \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "templateKey": "ops.webhook.failure",
+    "name": "Ops webhook failure",
+    "provider": "webhook",
+    "messageType": "json",
+    "enabled": true,
+    "body": {
+      "subject": "[{{severity}}] {{subject}}",
+      "body": "{{body}}",
+      "eventType": "{{eventType}}",
+      "resourceId": "{{resourceId}}"
+    },
+    "variables": {"severity": "critical"}
+  }' | jq -r '.data.id')"
+
+test -n "${TEMPLATE_ID}" && test "${TEMPLATE_ID}" != "null"
+
+curl -fsS -X POST "http://127.0.0.1:9090/api/v1/notification-templates/${TEMPLATE_ID}/render" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H 'Content-Type: application/json' \
+  -d '{"sample":{"subject":"Nightly failed","body":"exit 2","eventType":"job_instance.failed","resourceId":"instance-demo","severity":"critical"}}' | jq .data
+
+POLICY_ID="$(curl -fsS -X POST http://127.0.0.1:9090/api/v1/notification-policies \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H 'Content-Type: application/json' \
+  -d "$(python3 - <<'PYJSON'
+import json, os
+print(json.dumps({
+  "ownerType": "app",
+  "ownerId": "prod/billing",
+  "name": "billing terminal failures",
+  "eventFamily": "job_instance",
+  "eventFilter": {
+    "eventTypes": ["job_instance.failed", "job_instance.retry_exhausted"],
+    "statuses": ["failed", "retry_exhausted"]
+  },
+  "channelRefs": [{"channelId": os.environ["CHANNEL_ID"]}],
+  "templateRef": os.environ["TEMPLATE_ID"],
+  "severity": "critical",
+  "enabled": True,
+  "dedupeSeconds": 300
+}, separators=(",", ":")))
+PYJSON
+)" | jq -r '.data.id')"
+
+test -n "${POLICY_ID}" && test "${POLICY_ID}" != "null"
+
+curl -fsS -X POST "http://127.0.0.1:9090/api/v1/notification-policies/${POLICY_ID}:validate" \
+  -H "Authorization: Bearer ${TOKEN}" | jq .data
+```
+
+随后触发一个同 owner scope 的 Job，使它进入 `failed` 或 `retry_exhausted`，再检查消息和投递：
+
+```bash
+curl -fsS 'http://127.0.0.1:9090/api/v1/notification-messages?eventFamily=job_instance' \
+  -H "Authorization: Bearer ${TOKEN}" | jq '.data.items[0]'
+
+curl -fsS http://127.0.0.1:9090/api/v1/notification-delivery-attempts \
+  -H "Authorization: Bearer ${TOKEN}" | jq '.data.items[0]'
+
+curl -fsS http://127.0.0.1:9090/api/v1/notification-delivery-attempts:queue-status \
+  -H "Authorization: Bearer ${TOKEN}" | jq .data
+```
+
+验收完成的标志：策略校验返回 `valid=true`，匹配事件生成标准化 message，delivery attempt 引用 `${CHANNEL_ID}`，attempt 状态进入 `delivered`、`retry_pending` 或 `dead_letter`，且目标信息保持脱敏。
+
+## 安全渠道创建示例
+
+响应统一使用 `{code,message,data}` envelope。上面的快速路径是推荐复制流程；下面只保留核心安全形状：凭据放在 `secretRefs`，不要写进 `config`。
+
+```json
+{
+  "scopeType": "app",
+  "namespace": "prod",
+  "app": "billing",
+  "name": "billing-ops-webhook",
+  "provider": "webhook",
+  "enabled": true,
+  "config": {"messageType": "json"},
+  "secretRefs": {
+    "url": "env:TIKEO_NOTIFICATION_WEBHOOK_URL",
+    "authorization": "env:TIKEO_NOTIFICATION_WEBHOOK_AUTH"
+  }
+}
 ```
 
 响应中的 `id` 由存储生成。`secretRefsJson` 不序列化返回，`configJson` 会被 `NotificationChannelSummary::from()` 脱敏。
@@ -143,7 +231,7 @@ curl -fsS -X POST http://127.0.0.1:9090/api/v1/notification-policies \
       "eventTypes": ["job_instance.failed", "job_instance.retry_exhausted"],
       "statuses": ["failed", "retry_exhausted"]
     },
-    "channelRefs": [{"channelId": "notification-channel-example"}],
+    "channelRefs": [{"channelId": "${CHANNEL_ID}"}],
     "templateRef": null,
     "severity": "critical",
     "enabled": true,
@@ -155,7 +243,7 @@ curl -fsS -X POST http://127.0.0.1:9090/api/v1/notification-policies \
 
 ```bash
 curl -fsS -X POST \
-  http://127.0.0.1:9090/api/v1/notification-policies/notification-policy-example:validate \
+  http://127.0.0.1:9090/api/v1/notification-policies/${POLICY_ID}:validate \
   -H 'Authorization: Bearer <operator-token>'
 ```
 
@@ -217,7 +305,7 @@ curl -fsS -X POST http://127.0.0.1:9090/api/v1/notification-delivery-attempts:re
 
 常规渠道和策略 CRUD/校验可直接使用 UI；自动化、批量变更或表单尚未优化的字段继续使用 Management API。
 
-## 排障 runbook
+## 故障排查
 
 | 症状 | 检查 | 修复 |
 | --- | --- | --- |
@@ -233,3 +321,13 @@ curl -fsS -X POST http://127.0.0.1:9090/api/v1/notification-delivery-attempts:re
 ## 告警边界清单
 
 普通生命周期消息使用通知中心；异常条件和 incident review 使用告警。可复用目的地放在 Notification Center channel 中，不要把同一个 token 复制到多个 alert rule。任何 secret 都应通过 secret refs 管理，不能出现在示例或 UI 截图中。
+
+
+## 生产检查清单
+
+- [ ] 所有 provider token、Webhook URL、签名密钥、routing key、SMTP URL、SMTP password、authorization header 和自定义 header secret 都通过 `secretRefs` 引用；原始 secret 不进入 channel `config`、模板、文档、截图或 shell 历史。
+- [ ] 渠道作用域与影响范围匹配：global channel 应很少使用，优先使用 namespace/app channel，高噪声 workload 使用 job 级策略。
+- [ ] 富消息模板为 provider 必填字段提供真实值；生产投递时不能由 Tikeo 合成占位链接、假 media id 或缺失 card 字段。
+- [ ] Job policy 明确区分 retry noise、终态失败、部分失败和无可用 Worker，避免把所有失败都投递给同一个高优先级渠道。
+- [ ] Operator 掌握 retry/DLQ runbook，包括 `notification_delivery.*` 默认值、bounded `retry-due` 扫描，以及在创建替代事件前检查 `dead_letter` 原因。
+- [ ] Alert rule 与 notification policy 的命名能清楚区分 incident 语义和普通生命周期消息。

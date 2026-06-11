@@ -1,6 +1,6 @@
 # Latest completed slice
 
-- 2026-06-11: Notification Center provider-schema and first-class template hardening is complete with an additional rich-provider fail-closed patch pending final replacement release verification in the current session. Reusable notification channels/policies/messages/delivery attempts, job lifecycle materialization, generic retry/DLQ, provider-specific message schema/rendering, `notification_templates` storage/API/render preview, Web template editor/preview, policy template selector, docs, and safety fixes are implemented and locally verified.
+- 2026-06-12: Human-oriented docs-site rewrite is complete locally. The `docs/` Docusaurus site now has operator-grade English and zh-CN manuals for install/config/SDK/deploy/troubleshooting/notifications, plus contracts against AI-handoff wording, shallow README rehashes, unchainable notification examples, public `0.0.0.0` client URLs, and malformed Notification Center provider tables. Local docs tests/build/Docker/container smoke passed; release push/tag/workflow monitoring is next.
 
 # Next Work
 
@@ -14,7 +14,7 @@
 2. Migrate workflow `notification` nodes from raw `channel/target/template` fields to registered Notification Center channel/template refs. Default must remain non-blocking unless explicitly configured otherwise.
 3. Add delivery lease/idempotency hardening so crash recovery avoids both lost notifications and duplicate provider calls. Current ordering is at-least-once: safer than loss, but may duplicate if crashing after result insert before old attempt consumption.
 4. Add real channel `:test` endpoint only when it persists attempts and redacts results; until then `supportsTestSend=false` is correct.
-5. After the current notification-center release, execute the user-requested docs-site rewrite: make the docs human-oriented, step-by-step deploy/config/integration documentation rather than AI-oriented source notes, then test, commit, build Docker image, push/tag release, and monitor GitHub Actions.
+5. Docs-site rewrite is complete locally; finish release publication by committing, pushing `main`, tagging `v0.2.6`, and monitoring GitHub Actions/Docker Hub.
 
 ## Current verified baseline
 
@@ -38,7 +38,6 @@
 
 ## Next after provider schema/template hardening
 
-1. Commit/push the rich-provider fail-closed patch and publish a replacement `v0.2.xxx` release tag superseding `v0.2.4`.
-2. Monitor remote CI and release/Docker workflows until green.
-3. Start the human-oriented docs-site rewrite as the next automatic task, then test, commit, build, tag, publish, and monitor its release.
-4. Continue alert-rule dual-write/migration and workflow notification node migration after the docs rewrite release unless the user reprioritizes.
+1. Commit and push the docs human-manual rewrite, then publish `v0.2.6`.
+2. Monitor main CI/Coverage and tag-triggered Release/Docker/SDK workflows until green, including `Publish / Docker docs` for `yhyzgn/tikeo-docs`.
+3. Continue alert-rule dual-write/migration and workflow notification node migration after the docs rewrite release unless the user reprioritizes.

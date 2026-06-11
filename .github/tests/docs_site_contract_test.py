@@ -177,6 +177,73 @@ USER_GUIDE_EXPECTATIONS = {
     "user-guide/settings.md": ["Settings", "web/src/routes.tsx", "API-Key", "RBAC"],
 }
 
+FORBIDDEN_PUBLIC_DOC_TERMS = [
+    "source-backed",
+    "source-derived",
+    "docs slice",
+    "hallucinated",
+    "memory/prompt",
+    "prompt handoff",
+    "Contributor",
+    "源码事实",
+]
+
+HUMAN_MANUAL_EN_DOCS = [
+    "index.md",
+    "getting-started/installation.md",
+    "getting-started/quickstart.md",
+    "getting-started/seed-demo-data.md",
+    "deployment/docker-compose.md",
+    "deployment/kubernetes.md",
+    "deployment/sse-realtime.md",
+    "reference/configuration.md",
+    "reference/troubleshooting.md",
+    "integrations/overview.md",
+    "user-guide/dashboard.md",
+    "user-guide/jobs.md",
+    "user-guide/instances.md",
+    "user-guide/workers.md",
+    "user-guide/workflows.md",
+    "user-guide/scripts.md",
+    "user-guide/audit.md",
+    "user-guide/settings.md",
+    "user-guide/notifications.md",
+    "user-guide/alerts.md",
+    "sdks/rust.md",
+    "sdks/go.md",
+    "sdks/java-spring-boot.md",
+    "sdks/python.md",
+    "sdks/nodejs.md",
+]
+
+HUMAN_MANUAL_ZH_DOCS = HUMAN_MANUAL_EN_DOCS
+
+HUMAN_MANUAL_EN_TOKENS = ["Prerequisites", "Verify", "Troubleshooting", "Production checklist"]
+HUMAN_MANUAL_ZH_TOKENS = ["前置条件", "验收", "故障排查", "生产检查清单"]
+
+BILINGUAL_MIN_SECTION_DOCS = [
+    "index.md",
+    "getting-started/installation.md",
+    "getting-started/quickstart.md",
+    "getting-started/seed-demo-data.md",
+    "deployment/docker-compose.md",
+    "deployment/kubernetes.md",
+    "deployment/sse-realtime.md",
+    "reference/configuration.md",
+    "reference/troubleshooting.md",
+    "integrations/overview.md",
+    "user-guide/jobs.md",
+    "user-guide/workers.md",
+    "user-guide/instances.md",
+    "user-guide/settings.md",
+    "user-guide/notifications.md",
+    "sdks/rust.md",
+    "sdks/go.md",
+    "sdks/java-spring-boot.md",
+    "sdks/python.md",
+    "sdks/nodejs.md",
+]
+
 NOTIFICATION_CENTER_DOC_TOKENS = [
     "crates/tikeo-server/src/http/routes/notifications.rs",
     "crates/tikeo-server/src/http/routes/notification_templates.rs",
@@ -542,6 +609,54 @@ class DocsSiteContractTest(unittest.TestCase):
                 for token in tokens:
                     self.assertIn(token, text, f"{root.relative_to(DOCS_SITE)} / {relative_path} missing {token!r}")
 
+    def test_public_docs_are_written_for_humans_not_ai_handoffs(self):
+        zh_root = DOCS_SITE / "i18n/zh-CN/docusaurus-plugin-content-docs/current"
+        for root in [DOCS_SITE / "docs", zh_root]:
+            for path in root.rglob("*.md"):
+                text = path.read_text()
+                for term in FORBIDDEN_PUBLIC_DOC_TERMS:
+                    self.assertNotIn(term, text, f"public doc {path.relative_to(root)} contains internal handoff term {term!r}")
+                self.assertNotIn("curl -fsS http://0.0.0.0", text, f"public doc must curl 127.0.0.1 or a real host: {path}")
+                self.assertNotIn("http://0.0.0.0", text, f"public doc must not use 0.0.0.0 as a client URL: {path}")
+
+    def test_priority_manual_docs_have_human_operational_sections(self):
+        zh_root = DOCS_SITE / "i18n/zh-CN/docusaurus-plugin-content-docs/current"
+        for relative_path in HUMAN_MANUAL_EN_DOCS:
+            text = (DOCS_SITE / "docs" / relative_path).read_text()
+            for token in HUMAN_MANUAL_EN_TOKENS:
+                self.assertIn(token, text, f"{relative_path} must read like an operator manual and include {token!r}")
+        for relative_path in HUMAN_MANUAL_ZH_DOCS:
+            text = (zh_root / relative_path).read_text()
+            for token in HUMAN_MANUAL_ZH_TOKENS:
+                self.assertIn(token, text, f"zh-CN {relative_path} must read like an operator manual and include {token!r}")
+
+    def test_priority_docs_have_bilingual_operational_depth(self):
+        zh_root = DOCS_SITE / "i18n/zh-CN/docusaurus-plugin-content-docs/current"
+        for relative_path in BILINGUAL_MIN_SECTION_DOCS:
+            en_text = (DOCS_SITE / "docs" / relative_path).read_text()
+            zh_text = (zh_root / relative_path).read_text()
+            en_h2 = [line for line in en_text.splitlines() if line.startswith("## ")]
+            zh_h2 = [line for line in zh_text.splitlines() if line.startswith("## ")]
+            self.assertGreaterEqual(len(en_h2), 6, f"{relative_path} needs enough English operator-manual sections")
+            self.assertGreaterEqual(len(zh_h2), 6, f"{relative_path} needs enough zh-CN operator-manual sections")
+
+    def test_notification_quick_path_examples_are_chainable(self):
+        zh_root = DOCS_SITE / "i18n/zh-CN/docusaurus-plugin-content-docs/current"
+        for root in [DOCS_SITE / "docs", zh_root]:
+            text = (root / "user-guide/notifications.md").read_text()
+            for token in [
+                "channel → template → policy → event → delivery",
+                "CHANNEL_ID=\"$(curl -fsS -X POST",
+                "TEMPLATE_ID=\"$(curl -fsS -X POST",
+                "POLICY_ID=\"$(curl -fsS -X POST",
+                "jq -r '.data.id'",
+                "secretRefs",
+                "supportsTestSend=false",
+            ]:
+                self.assertIn(token, text, f"{root.relative_to(DOCS_SITE)} notifications guide missing chainable quick-path token {token!r}")
+            self.assertNotIn("notification-channel-example", text)
+            self.assertNotIn("notification-policy-example", text)
+
     def test_notification_center_docs_are_template_and_provider_schema_backed(self):
         source_bundle = "\n".join(
             path.read_text()
@@ -570,6 +685,24 @@ class DocsSiteContractTest(unittest.TestCase):
                 self.assertIn(token, combined, f"{root.relative_to(DOCS_SITE)} notification docs missing {token!r}")
             self.assertNotIn("vault 路径", combined)
             self.assertNotIn("env 或 vault", combined)
+            reference_lines = (root / "reference/notification-center.md").read_text().splitlines()
+            table_start = next(
+                index
+                for index, line in enumerate(reference_lines)
+                if line.startswith("| Provider |")
+            )
+            table_rows = []
+            for line in reference_lines[table_start:]:
+                if table_rows and not line.strip():
+                    break
+                self.assertTrue(
+                    line.startswith("|"),
+                    f"{root.relative_to(DOCS_SITE)} notification provider table is interrupted before all provider rows: {line!r}",
+                )
+                table_rows.append(line)
+            rendered_rows = "\n".join(table_rows)
+            for provider in ["webhook", "slack", "dingtalk", "feishu", "wechat_work", "pagerduty", "email", "plugin webhook"]:
+                self.assertIn(f"| `{provider}` |" if provider != "plugin webhook" else "| plugin webhook |", rendered_rows)
 
 
     def test_quickstart_manual_path_uses_real_bootstrap_fields_and_runnable_sdk_script(self):
@@ -605,7 +738,7 @@ class DocsSiteContractTest(unittest.TestCase):
             self.assertNotIn("/tmp/tikeo-quickstart-trigger.ts", text)
 
     def test_operator_grade_docs_are_not_readme_rehash(self):
-        """Critical docs must be deep enough to install, configure, connect SDKs, deploy, and verify from source-backed instructions."""
+        """Critical docs must be deep enough to install, configure, connect SDKs, deploy, and verify from implementation-anchored instructions."""
         critical = {
             "index.md": {
                 "min_words": 900,
@@ -614,7 +747,7 @@ class DocsSiteContractTest(unittest.TestCase):
                     "Reader outcome",
                     "Architecture boundary",
                     "Evidence-first evaluation",
-                    "source-backed",
+                    "Implementation anchors",
                 ],
             },
             "getting-started/installation.md": {

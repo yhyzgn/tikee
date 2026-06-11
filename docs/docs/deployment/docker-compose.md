@@ -350,3 +350,22 @@ docker compose --env-file .env down --remove-orphans -v
 ```
 
 For PostgreSQL/MySQL stacks, include the same `-f` file you used for startup.
+
+## Prerequisites
+
+Use the setup, authentication, and access requirements described in this page before running any command. For local examples, start the Server with `config/dev.toml`, use `127.0.0.1` as the client host, and keep tokens in shell variables rather than pasted into files.
+
+## Verify
+
+After following the page, verify the result with the documented API, UI, build, smoke, or deployment checks. A valid verification includes the command that was run, the route or file that was inspected, and the observed status or artifact.
+
+## Troubleshooting
+
+When a step fails, first capture the exact command, response status, and Server log window. Then check authentication, namespace/app scope, Worker eligibility, storage readiness, and proxy behavior before changing production configuration.
+
+## Production checklist
+
+- [ ] Secrets are referenced through environment or platform secret mechanisms and are not written into examples.
+- [ ] Commands have been adapted from local `127.0.0.1` to the real host, TLS, and authentication model.
+- [ ] Rollback and evidence collection are documented for the changed surface.
+- [ ] Operators can repeat the verification without private shell history or hidden state.

@@ -143,3 +143,22 @@ curl -fsS http://127.0.0.1:9090/api-docs/openapi.json >/tmp/tikeo-openapi.json
 本地安装默认追求快速反馈：SQLite 文件在仓库目录，HTTP 和 Worker Tunnel 都是 plaintext，OIDC 关闭，日志主要走控制台，Worker endpoint 是 `127.0.0.1:9998`。生产或共享环境通常要改成外部 PostgreSQL/MySQL、Secret 注入 `TIKEO__STORAGE__DATABASE_URL`、Ingress 或进程内 TLS、Worker Tunnel TLS/mTLS、持久日志目录、OTel collector、明确的 service account 和短权限 SDK API Key。
 
 不要把本地 `bootstrap_admin` 示例密码、demo API key、或 demo namespace 当作生产约定。它们只是为了让读者在隔离 SQLite DB 上复现流程。生产 runbook 应该从配置参考和部署页面重新选择值，并保留 smoke/CI 证据。
+
+## 前置条件
+
+执行本页命令前，请先满足页面列出的安装、认证和权限要求。本地示例默认 Server 使用 `config/dev.toml`，客户端访问 `127.0.0.1`，令牌保存在 shell 变量中，不写入文件或截图。
+
+## 验收
+
+完成本页步骤后，用对应 API、UI、构建、smoke 或部署检查验证结果。有效验收至少包含执行的命令、检查的路由或文件，以及观察到的状态或产物。
+
+## 故障排查
+
+步骤失败时，先保留完整命令、响应状态和 Server 日志时间窗口，再检查认证、namespace/app scope、Worker 匹配、存储 readiness 和代理行为，不要直接修改生产配置。
+
+## 生产检查清单
+
+- [ ] 密钥通过环境变量或平台 Secret 引用管理，不写入示例。
+- [ ] 已把本地 `127.0.0.1` 命令替换成真实域名、TLS 和认证方式。
+- [ ] 已记录变更面的回滚和证据采集方式。
+- [ ] 运维人员可以在没有隐藏 shell 历史或隐式状态的情况下复现验收。

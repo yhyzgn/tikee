@@ -182,9 +182,9 @@ The common create+trigger default is:
 | Trigger execution mode | `executionMode=single` |
 | Broadcast | Opt-in only through explicit broadcast helper and `broadcastSelector` |
 
-## Source-backed reference links
+## Operator-verified reference links
 
-Keep SDK helper docs anchored to source-derived API and protocol references:
+Keep SDK helper docs anchored to operator-verified API and protocol references:
 
 - Create helper endpoint: [`POST /api/v1/jobs`](../reference/management-openapi#post-api-v1-jobs)
 - Trigger helper endpoint: [`POST /api/v1/jobs/{job}:trigger`](../reference/management-openapi#post-api-v1-jobs-job-trigger)
@@ -215,3 +215,22 @@ A Go service should usually construct `WorkerConfig` from its own application co
 The demo's `runWorkerSession` pattern intentionally reconnects after `Connect` or `ProcessNextWithScriptRunners` errors. Keep that behavior in production services unless your supervisor is responsible for restart policy. A Worker Tunnel can close during Server restarts, load balancer rotation, lease fencing, TLS certificate reloads, or network churn; treating every close as a permanent crash makes rollouts noisier than necessary.
 
 For script support, `examples/go/worker-demo/main.go` resolves SRT and ripgrep for native scripts and Deno for JavaScript/TypeScript when `TIKEO_WORKER_SCRIPT_SANDBOX=auto`. If those tools are missing, the demo skips advertising that script runner unless `TIKEO_ENABLE_UNAVAILABLE_SCRIPT_ADAPTERS` is enabled for explicit fail-closed demonstration. Production Workers should follow the same rule: no capability advertisement without a working runtime.
+
+## Prerequisites
+
+Use the setup, authentication, and access requirements described in this page before running any command. For local examples, start the Server with `config/dev.toml`, use `127.0.0.1` as the client host, and keep tokens in shell variables rather than pasted into files.
+
+## Verify
+
+After following the page, verify the result with the documented API, UI, build, smoke, or deployment checks. A valid verification includes the command that was run, the route or file that was inspected, and the observed status or artifact.
+
+## Troubleshooting
+
+When a step fails, first capture the exact command, response status, and Server log window. Then check authentication, namespace/app scope, Worker eligibility, storage readiness, and proxy behavior before changing production configuration.
+
+## Production checklist
+
+- [ ] Secrets are referenced through environment or platform secret mechanisms and are not written into examples.
+- [ ] Commands have been adapted from local `127.0.0.1` to the real host, TLS, and authentication model.
+- [ ] Rollback and evidence collection are documented for the changed surface.
+- [ ] Operators can repeat the verification without private shell history or hidden state.

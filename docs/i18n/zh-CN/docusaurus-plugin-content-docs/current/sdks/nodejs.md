@@ -101,7 +101,7 @@ await management.triggerJob(created.id, broadcastApiTrigger(selector));
 
 Node.js demo 脚本为 `bun src/main.ts`，测试为 `bun test`。`configureScripts(config)` 会按 `TIKEO_WORKER_SCRIPT_LANGUAGES` 默认尝试 `shell,python,javascript,typescript,powershell,php,groovy,rhai`。auto sandbox 下 JS/TS 使用 Deno，其它语言使用 SRT；也支持 Docker/Podman 与显式 local command。`TIKEO_SANDBOX_AUTO_INSTALL` 可关闭工具自动安装。验收时应比较启动日志、`client.registration()` JSON 和 Web 控制台，确保 structured capabilities 只包含实际注册成功的 runner。
 
-## 源码事实索引与排错边界
+## 运维依据与排错边界
 
 核对 Node.js 集成时，先读 `sdks/nodejs/tikeo/src/config.ts` 的 `WorkerConfig`、`validate()` 和 capability helper，再读 `client.ts` 中 `registerMessage`、`Session.startHeartbeat`、`processNext` 与 `taskResult` 写回。`task.ts` 规定 `TaskProcessor` 返回 `{ success, message }`，实例日志通过 `TaskContext.logInfo/logError` 进入 tunnel。demo 的 `configureScripts` 是脚本能力排错入口：auto 模式下 JS/TS 走 Deno，其它语言走 SRT，container 和 local command 都需要显式条件。现场出现“任务没有到 Node Worker”时，先比较 `client.registration()` JSON 与 job 绑定，而不是修改业务代码；重点核对 namespace/app、processor 名、plugin type、`worker_pool` label、tag `manual-demo` 和 `broadcastSelector`。Bun 是仓库默认命令入口，但发布包仍面向 Node.js ESM 消费者。
 
@@ -135,3 +135,22 @@ Node.js demo 脚本为 `bun src/main.ts`，测试为 `bun test`。`configureScri
 4. Management 验收：用 `ManagementClient` 创建 `apiJob("nodejs-echo-api", "demo.echo")` 并 `apiTrigger()`；确认请求携带 `x-tikeo-api-key`，密钥来自 `TIKEO_MANAGEMENT_API_KEY`，响应 `triggerType=api` 与 `executionMode=single`。
 5. 广播验收：只在明确需要扇出时调用 `broadcastApiTrigger`，用 `broadcastSelector` 限定 tag `manual-demo` 和 label `worker_pool=nodejs-blue`。
 6. 失败与边界：触发 `demo.fail`，确认 instance 日志和失败状态；移除 Deno/SRT 后重启，确认不可用脚本 runner 没有被错误广告。
+
+## 前置条件
+
+执行本页命令前，请先满足页面列出的安装、认证和权限要求。本地示例默认 Server 使用 `config/dev.toml`，客户端访问 `127.0.0.1`，令牌保存在 shell 变量中，不写入文件或截图。
+
+## 验收
+
+完成本页步骤后，用对应 API、UI、构建、smoke 或部署检查验证结果。有效验收至少包含执行的命令、检查的路由或文件，以及观察到的状态或产物。
+
+## 故障排查
+
+步骤失败时，先保留完整命令、响应状态和 Server 日志时间窗口，再检查认证、namespace/app scope、Worker 匹配、存储 readiness 和代理行为，不要直接修改生产配置。
+
+## 生产检查清单
+
+- [ ] 密钥通过环境变量或平台 Secret 引用管理，不写入示例。
+- [ ] 已把本地 `127.0.0.1` 命令替换成真实域名、TLS 和认证方式。
+- [ ] 已记录变更面的回滚和证据采集方式。
+- [ ] 运维人员可以在没有隐藏 shell 历史或隐式状态的情况下复现验收。

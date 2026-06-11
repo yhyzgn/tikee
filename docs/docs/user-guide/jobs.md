@@ -1,19 +1,70 @@
 # Jobs user guide
 
-The Jobs page is implemented by `web/src/pages/JobsPage.tsx`. It manages job definitions, schedule type, namespace/app scope, script/plugin/SDK processor bindings, version history, rollback, API-triggered execution, broadcast selector execution, and scheduling advice.
+## Overview
 
-## Source-backed data paths
+The Jobs page manages job definitions: schedule type, namespace/app ownership, SDK processor/script/plugin binding, retry policy, calendars, canary target, version history, rollback, single execution, broadcast execution, and scheduling advice. Treat a Job as the contract that tells Tikeo what should run and which Workers are eligible to run it.
 
-The page uses `/api/v1/jobs` to list and create jobs, `/api/v1/jobs/{job}` to update or delete a job, `/api/v1/jobs/{job}:trigger` to start an API-triggered instance, `/api/v1/jobs/{job}/versions` and `/api/v1/jobs/{job}/rollback` for version history, and `/api/v1/jobs/{job}/scheduling-advice` for capacity checks. Worker processor choices are refreshed from Worker Tunnel snapshots.
+Implementation anchors: `web/src/pages/JobsPage.tsx` uses `/api/v1/jobs`, `/api/v1/jobs/{job}`, `/api/v1/jobs/{job}:trigger`, `/api/v1/jobs/{job}/versions`, `/api/v1/jobs/{job}/rollback`, `/api/v1/jobs/{job}/scheduling-advice`, `/api/v1/jobs/topology`, and `/api/v1/jobs/{job}/impact`.
 
-## Creating and editing jobs
+## Prerequisites
 
-Choose namespace and app first because later routing, canary target validation, and service-account access depend on scope. The edit drawer allows scope moves only when the backend authorizes both the source and destination scope. Processor binding should be explicit: SDK processors come from Worker structured capabilities, scripts come from approved scripts, and plugins come from enabled plugin processor definitions.
+- `jobs:read` to view Jobs; `jobs:write` to create, edit, delete, or rollback.
+- `instances:execute` to trigger work.
+- Namespace, app, Worker pool, processor, script, plugin processor, and calendar are already prepared.
+- Workers advertise matching structured capabilities; job names are not routing rules.
 
-## Triggering and broadcast execution
+```bash
+curl -fsS http://127.0.0.1:9090/api/v1/jobs \
+  -H "authorization: Bearer $TIKEO_TOKEN" | jq '.data.items[] | {id,name,namespace,app,enabled}'
+```
 
-The default API trigger path uses `triggerType=api` and `executionMode=single`. Broadcast execution is opt-in through the page's broadcast drawer and the `broadcastSelector` payload. Use tags, region, cluster, or labels only when Workers actually advertise corresponding structured capabilities or labels; do not rely on job-name conventions.
+## Open the page
 
-## Validation and troubleshooting
+1. Log in to the console.
+2. Select **Jobs** or open `/jobs`.
+3. Filter by keyword, namespace, app, or schedule type.
+4. Use topology or impact views before changing high-fan-out jobs.
 
-Before saving, compare the selected schedule type, retry policy, calendar, canary target, and worker pool. Before triggering, open scheduling advice to verify eligible workers. After triggering, open Instances and use `/api/v1/instances/{instance}` plus `/api/v1/instances/{instance}/logs` to confirm result and log evidence.
+## Common tasks
+
+### Create a job
+
+Choose namespace/app first. Select API, cron, fixed rate, fixed delay, once, or daily time interval. Bind the executor: SDK processor, approved script, or enabled plugin processor. Configure retry policy, misfire policy, calendar, worker pool, and optional canary target. Save, then open scheduling advice.
+
+### Edit and version a job
+
+Changing scope, processor, script, calendar, or retry policy creates operational impact. Confirm authorization for both source and destination scope when moving a job. After saving, inspect versions and note the version number for rollback.
+
+### Trigger single execution
+
+API triggers use `triggerType=api` and `executionMode=single`. After triggering, open Instances and inspect `/api/v1/instances/{instance}` and `/api/v1/instances/{instance}/logs`.
+
+### Trigger broadcast execution
+
+Broadcast is opt-in and requires `broadcastSelector`. Use tags, region, cluster, or labels only if Workers actually advertise them. Inspect every execution node; one failed node can produce `partial_failed`.
+
+## Verify
+
+- You can create an API job and trigger it through `/api/v1/jobs/{job}:trigger`.
+- Versions show changes after edits and rollback restores a selected version.
+- Scheduling advice shows eligible Workers or explains why none match.
+- Instance logs prove processor execution after a trigger.
+- Broadcast selectors target only expected Workers.
+
+## Troubleshooting
+
+| Symptom | Action |
+| --- | --- |
+| Job remains pending | Compare processor, namespace/app, and selector with Workers. |
+| Trigger unauthorized | Check `instances:execute` and the credential type. |
+| Processor options are missing | Start a Worker that advertises the processor or plugin. |
+| Rollback changes too much | Re-open version history and compare created time/author before retrying. |
+| Broadcast hits wrong nodes | Tighten selector labels/region/cluster and verify Worker metadata. |
+
+## Production checklist
+
+- [ ] Every production Job has an owner namespace/app and a clear processor binding.
+- [ ] Retry and misfire policies are deliberate, not defaults copied blindly.
+- [ ] Broadcast selectors are tested against live Worker metadata.
+- [ ] Version history and rollback are part of release procedures.
+- [ ] Trigger evidence includes instance ID, logs, and audit entries.

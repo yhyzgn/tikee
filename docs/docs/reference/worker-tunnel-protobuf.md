@@ -1,6 +1,6 @@
 ---
 title: Worker Tunnel protobuf reference
-description: Source-backed reference for the outbound Worker Tunnel gRPC/protobuf contract used by SDKs and server dispatch.
+description: Implementation-anchored reference for the outbound Worker Tunnel gRPC/protobuf contract used by SDKs and server dispatch.
 ---
 
 # Worker Tunnel protobuf reference

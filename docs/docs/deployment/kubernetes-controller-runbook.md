@@ -1,15 +1,15 @@
 ---
 title: Kubernetes controller-specific runbook
-description: Source-backed Nginx, Envoy Gateway, Traefik, and Gateway API production runbook for Tikeo HTTP, Web, and Worker Tunnel exposure.
+description: Operator-verified Nginx, Envoy Gateway, Traefik, and Gateway API production runbook for Tikeo HTTP, Web, and Worker Tunnel exposure.
 ---
 
 # Kubernetes controller-specific runbook
 
-This page finishes the controller-specific production docs slice for the Helm chart. It is source-backed by `deploy/helm/tikeo/values.yaml`, `deploy/helm/tikeo/examples/values-ingress-tls.yaml`, `deploy/helm/tikeo/examples/values-gateway-api-worker-tunnel.yaml`, `deploy/helm/tikeo/templates/server.yaml`, `deploy/helm/tikeo/templates/gateway-api.yaml`, and `deploy/helm/tikeo/templates/networkpolicy.yaml`.
+This page finishes the controller-specific production operator runbook for the Helm chart. It is operator-verified by `deploy/helm/tikeo/values.yaml`, `deploy/helm/tikeo/examples/values-ingress-tls.yaml`, `deploy/helm/tikeo/examples/values-gateway-api-worker-tunnel.yaml`, `deploy/helm/tikeo/templates/server.yaml`, `deploy/helm/tikeo/templates/gateway-api.yaml`, and `deploy/helm/tikeo/templates/networkpolicy.yaml`.
 
 The non-negotiable Tikeo boundary remains unchanged: business Workers do not expose inbound Services. Operators may expose the Tikeo Server management API, Web console, and Worker Tunnel endpoint, but Workers still connect outbound to the server-side Worker Tunnel. The rendered Service and `GRPCRoute` carry `tikeo.yhyzgn.com/worker-networking: "workers-connect-outbound-only"` to make that boundary visible in cluster inventory.
 
-## Source-backed Helm knobs
+## Operator-verified Helm knobs
 
 Use these chart values rather than ad-hoc manifests:
 

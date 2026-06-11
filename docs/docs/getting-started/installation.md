@@ -102,7 +102,7 @@ SDK modules are independent package surfaces. Examples:
 
 ## First-time bootstrap
 
-Starting the Server only proves listeners and migrations. To operate the Web/API as an authenticated human, bootstrap the first Owner exactly once. The relevant HTTP endpoints are source-backed by `crates/tikeo-server/src/http/auth.rs` and routed under `/api/v1/auth/bootstrap`.
+Starting the Server only proves listeners and migrations. To operate the Web/API as an authenticated human, bootstrap the first Owner exactly once. The relevant HTTP endpoints are operator-verified by `crates/tikeo-server/src/http/auth.rs` and routed under `/api/v1/auth/bootstrap`.
 
 Check whether bootstrap is open:
 
@@ -161,7 +161,7 @@ cd ..
 docker build -f docs/Dockerfile docs -t tikeo-docs:local
 ```
 
-For source-backed docs contracts:
+For operator documentation contracts:
 
 ```bash
 python3 .github/tests/docs_site_contract_test.py
@@ -199,3 +199,18 @@ curl -fsS http://127.0.0.1:9090/api-docs/openapi.json >/tmp/tikeo-openapi.json
 ## Next step
 
 Continue to [Quickstart](./quickstart) for a step-by-step Server + Web + Worker + SDK Management API run. If you already know the runtime and only need a config key, jump to [Configuration reference](../reference/configuration).
+
+## Prerequisites
+
+Use the setup, authentication, and access requirements described in this page before running any command. For local examples, start the Server with `config/dev.toml`, use `127.0.0.1` as the client host, and keep tokens in shell variables rather than pasted into files.
+
+## Troubleshooting
+
+When a step fails, first capture the exact command, response status, and Server log window. Then check authentication, namespace/app scope, Worker eligibility, storage readiness, and proxy behavior before changing production configuration.
+
+## Production checklist
+
+- [ ] Secrets are referenced through environment or platform secret mechanisms and are not written into examples.
+- [ ] Commands have been adapted from local `127.0.0.1` to the real host, TLS, and authentication model.
+- [ ] Rollback and evidence collection are documented for the changed surface.
+- [ ] Operators can repeat the verification without private shell history or hidden state.

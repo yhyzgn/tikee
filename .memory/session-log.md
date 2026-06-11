@@ -2906,3 +2906,35 @@ Verification:
 
 Release note:
 - `v0.2.4` was pushed before this review feedback was integrated and is superseded by the next patch release for formal acceptance.
+
+
+## 2026-06-12 — Docs site human manual rewrite and acceptance
+
+Agent:
+- Codex, with writer/verifier subagents.
+
+Work:
+- Converted the docs site into an operator manual rather than a README rehash or AI handoff. Priority docs now explain what to do, what credentials/scope are required, what commands to run, what evidence to expect, how to troubleshoot, and what must be changed for production.
+- Expanded English and zh-CN manuals for getting started, seed demo data, deployment, integrations, configuration, troubleshooting, SDKs, user-guide pages, Alerts, and Notifications.
+- Kept Worker deployment docs aligned with the outbound-only Worker Tunnel model; no business Worker inbound Service pattern was introduced.
+- Hardened Notification Center docs around reusable channels/templates/policies/messages/delivery attempts, secretRefs, `supportsTestSend=false`, rich-provider fail-closed template requirements, and retry/DLQ operation.
+- Fixed final verifier finding where a paragraph interrupted the Notification Center provider table in English and zh-CN docs; added a contract test to prevent raw Markdown table rows from leaking into rendered HTML.
+
+Verification:
+- `python3 .github/tests/docs_site_contract_test.py` ✅ (28 tests)
+- `python3 .github/tests/workflow_contract_test.py` ✅ (15 tests)
+- `python3 .github/tests/management_smoke_contract_test.py` ✅
+- `python3 scripts/check-source-size.py` ✅
+- `git diff --check` ✅
+- Forbidden public docs grep for internal handoff terms, `http://0.0.0.0`, and placeholder notification IDs ✅ no matches in public docs/src scope
+- `cd docs && bun run docs:typecheck && bun run docs:build` ✅
+- `docker build -f docs/Dockerfile docs -t tikeo-docs:local` ✅
+- Docs container smoke on port 13036 ✅ `/healthz`, `/docs/`, `/zh-CN/docs/`, `/docs/reference/notification-center`, `/search-index.json`, and no raw `| pagerduty |` table leak.
+
+Release:
+- Pending in this session after commit: push `main`, create `v0.2.6`, push tag, then monitor CI/release/Docker workflows including `yhyzgn/tikeo-docs`.
+
+Constraints preserved:
+- Use bun/bunx for docs/frontend commands.
+- Do not overclaim live external SaaS notification smoke or a real channel test-send endpoint.
+- Keep `.memory`, `.prompt`, and project memory fresh after meaningful work.

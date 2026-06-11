@@ -1,46 +1,167 @@
 ---
 title: Seed demo data
-description: Safe demo-data paths for evaluating Tikeo without fake production claims.
+description: Step-by-step local demo data setup for Tikeo using supported API and script paths.
 ---
 
 # Seed demo data
 
-The public docs should only advertise demo paths that are backed by real commands, tests, or recorded browser evidence.
+Use this page when you need a local Tikeo environment with namespaces, apps, worker pools, jobs, and plugin metadata that operators can inspect. Prefer API-based setup because it exercises the same auth, scope, audit, and validation paths used by the product.
 
-## Current safe demo paths
+## Prerequisites
 
-- Use the local Server configuration in `config/dev.toml`.
-- Use verified Worker demos under `examples/rust`, `examples/go`, and `examples/java`.
-- Use the promotional browser walkthrough artifact only as visual marketing evidence, not as an automated acceptance test.
+Start from a repository checkout with the Server built and a local admin account available.
 
-## Create a simple job through HTTP
+Required tools:
 
-After authenticating in a local development session, create jobs through the typed API. The exact payload depends on the currently enabled auth and scope setup.
+- `cargo`
+- `curl`
+- `python3`
+- `jq` for the manual checks below
+- `sqlite3` only if you intentionally use the direct SQLite seed path
+
+Start the local Server in one terminal:
 
 ```bash
-curl -fsS http://0.0.0.0:9090/api/v1/jobs   -H 'content-type: application/json'   -d '{"namespace":"default","app":"demo","name":"manual-demo"}'
+cargo run --bin tikeo -- serve --config config/dev.toml
 ```
 
-If authorization is enabled, include the session or API-key header required by your local configuration.
+`config/dev.toml` starts the HTTP API on port `9090`, the Worker Tunnel on port `9998`, and SQLite at `tikeo-dev.db`.
 
-## What not to seed
+Verify the Server from another terminal:
 
-Do not insert database rows by hand for public docs. Prefer typed APIs or committed demo scripts so audit, RBAC, and migration boundaries stay visible.
+```bash
+curl -fsS http://127.0.0.1:9090/healthz
+curl -fsS http://127.0.0.1:9090/readyz
+```
 
-## Better demo-data strategy
+If this is a fresh database, bootstrap the first local Owner before seeding. Follow [Quickstart](./quickstart) for the full bootstrap flow.
 
-Use demo data to teach actual product strengths: scope isolation, worker capability matching, workflow replay, script governance, alert delivery, and auditability. A good demo should show a successful path and one intentional governed failure so evaluators can see how Tikeo behaves under real operational pressure.
+## Recommended path: seed through the API
 
-## Suggested demo narrative
+Use `scripts/dev-integration-seed.sh` for repeatable local demo data. The script authenticates, then creates this topology through HTTP API calls:
 
-1. Create a namespace/app pair for the demo.
-2. Connect one Rust or Go worker with a clear processor capability.
-3. Create an API-triggered job and run it.
-4. Inspect instance attempts and logs.
-5. Create a small workflow that references the job.
-6. Show worker session history and audit evidence.
-7. Trigger a policy-denied script release or missing capability case and show the visible failure reason.
+| Resource type | Values created |
+| --- | --- |
+| Namespaces | `dev-alpha`, `dev-beta`, `dev-ops` |
+| Apps | `dev-alpha/orders`, `dev-alpha/billing`, `dev-beta/analytics`, `dev-ops/automation` |
+| Worker pools | `boot2-blue`, `boot3-blue`, `boot4-green`, `boot3-batch`, `boot4-ops` |
+| Plugin processor | `sql` with processor name `billing.sql-sync` |
+| Jobs | `echo-api`, `context-api`, `bytes-api`, `report-api`, `sql-sync-api`, `workflow-step-api`, `heartbeat-api`, `fail-api` |
 
-## Data quality rule
+Run it after the Server is healthy:
 
-Do not seed random rows just to make dashboards look full. Use typed APIs or committed demo scripts so the resulting data has real relationships and audit evidence.
+```bash
+TIKEO_HTTP_URL=http://127.0.0.1:9090 \
+TIKEO_ADMIN_USERNAME=smoke_admin \
+TIKEO_ADMIN_PASSWORD='<local-admin-password>' \
+scripts/dev-integration-seed.sh
+```
+
+If you already have a valid bearer token, avoid putting a password in the shell command:
+
+```bash
+TIKEO_HTTP_URL=http://127.0.0.1:9090 \
+TIKEO_SMOKE_AUTH_TOKEN="$TOKEN" \
+scripts/dev-integration-seed.sh
+```
+
+Do not paste production passwords or long-lived tokens into shell history. Prefer `TIKEO_SMOKE_AUTH_TOKEN` for repeatable runs, or set `TIKEO_ADMIN_PASSWORD` only in a private shell session.
+
+## Verify the seeded data
+
+List the main objects with the same bearer token used by the seed script:
+
+```bash
+curl -fsS http://127.0.0.1:9090/api/v1/namespaces \
+  -H "authorization: Bearer $TOKEN" | jq '.data.items[].name'
+
+curl -fsS 'http://127.0.0.1:9090/api/v1/apps?namespace=dev-alpha' \
+  -H "authorization: Bearer $TOKEN" | jq '.data[].name'
+
+curl -fsS http://127.0.0.1:9090/api/v1/jobs \
+  -H "authorization: Bearer $TOKEN" \
+  | jq '.data.items[] | {namespace, app, name, processorName, processorType}'
+
+curl -fsS http://127.0.0.1:9090/api/v1/plugins \
+  -H "authorization: Bearer $TOKEN" \
+  | jq '.data[] | {name, processorTypes}'
+```
+
+Expected evidence:
+
+- `dev-alpha`, `dev-beta`, and `dev-ops` are present.
+- `dev-alpha/orders` contains API jobs such as `echo-api`, `context-api`, and `bytes-api`.
+- `dev-alpha/billing/sql-sync-api` uses `processorType=sql` and `processorName=billing.sql-sync`.
+- The plugin list includes a processor type `sql` with processor name `billing.sql-sync`.
+
+## Optional: start Java demo workers for the seeded topology
+
+The seed script is designed to pair with the Java demo worker launcher:
+
+```bash
+scripts/start-java-demo-workers.sh
+```
+
+Use this only after the Server is healthy and API seed data exists. The workers connect outbound to the Worker Tunnel at port `9998`; they do not require inbound worker ports.
+
+Verify workers:
+
+```bash
+curl -fsS http://127.0.0.1:9090/api/v1/workers \
+  -H "authorization: Bearer $TOKEN" \
+  | jq '.data.items[] | {clientInstanceId,status,namespace,app,workerPool,structuredCapabilities}'
+```
+
+## Optional: direct SQLite seed for local UI inspection
+
+`scripts/dev-seed.sh` applies `scripts/dev-seed.sql` directly to `tikeo-dev.db`. Use it only for disposable local UI inspection after migrations have created the schema:
+
+```bash
+scripts/dev-seed.sh tikeo-dev.db
+```
+
+The script checks that the database exists and that the `jobs` table is present before applying SQL. It then prints row counts for namespaces, apps, jobs, scripts, workflows, and dispatch queue records.
+
+Do not use direct SQL seeding for shared environments. It bypasses the HTTP API path and is not a substitute for validating auth, scopes, audit behavior, or runtime dispatch.
+
+## Database compatibility seed smoke
+
+To check the API seed path against PostgreSQL and MySQL compatibility environments, use:
+
+```bash
+scripts/db-seed-api-compat-smoke.sh
+```
+
+The smoke script starts isolated Server configs, runs `scripts/dev-integration-seed.sh`, and verifies expected jobs, worker pools, and plugin metadata. Reports are written under `.dev/reports/db-seed-compat-*`.
+
+## Troubleshooting
+
+| Symptom | Check |
+| --- | --- |
+| `healthz` or `readyz` fails | Server log, DB path permissions, occupied ports, invalid TOML or environment overrides. |
+| Seed script cannot authenticate | Bootstrap/login state for the current DB; `TIKEO_SMOKE_AUTH_TOKEN`, `TIKEO_ADMIN_USERNAME`, and `TIKEO_ADMIN_PASSWORD`. |
+| API returns permission errors | The token must have management permissions for namespaces, apps, worker pools, jobs, and plugins. |
+| Jobs exist but stay pending | Start a worker that advertises the matching namespace, app, worker pool, and processor name. |
+| `billing.sql-sync` job fails validation | Confirm the `sql` plugin processor exists in `/api/v1/plugins`. |
+| SQLite seed says tables are missing | Start the Server once so migrations create the schema, then rerun `scripts/dev-seed.sh`. |
+
+## Cleanup
+
+Stop demo workers and Server processes with `Ctrl-C`. For a clean local SQLite reset:
+
+```bash
+rm -f tikeo-dev.db tikeo-dev.db-shm tikeo-dev.db-wal
+```
+
+Only remove these files when you intentionally want to delete local state, including the bootstrapped Owner.
+
+## Production checklist
+
+Before using demo data in a shared environment:
+
+- Replace sample usernames and passwords with environment-specific credentials.
+- Use short-lived tokens or API keys with the minimum scope needed.
+- Prefer API seeding over direct SQL.
+- Record the seed command, Server config path, and verification output.
+- Confirm workers are connected through the Worker Tunnel and not through ad hoc inbound ports.
+- Remove demo namespaces, apps, jobs, plugins, and worker pools after the evaluation window.

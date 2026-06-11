@@ -8,7 +8,7 @@ keywords: [notification center, outbound notifications, webhook, slack, pagerdut
 
 Notification Center is the reusable outbound delivery layer in Tikeo. Use it when you need to send lifecycle or operational messages to Slack, DingTalk, Feishu/Lark, WeChat Work, PagerDuty, email, generic webhooks, or plugin-provided webhook-compatible providers.
 
-The source-backed boundary is important:
+The operator-verified boundary is important:
 
 - **Notification Center** owns reusable outbound channels, policies/subscriptions, normalized messages, delivery attempts, retry, and DLQ state. Current source: `crates/tikeo-server/src/notification.rs`, `crates/tikeo-server/src/http/routes/notification_providers.rs`, `crates/tikeo-storage/src/repository/notification.rs`, and `web/src/pages/NotificationCenterPage.tsx`.
 - **Alerts** own abnormal-condition rules, alert events, incident-like states, silence/recovery/suppression semantics, and the compatibility alert delivery ledger. See [Alerts](./alerts) before using an alert rule for a normal job-completion message.
@@ -47,24 +47,22 @@ Webhook-style providers accept `url`, `webhookUrl`, or `webhook_url` as target k
 
 Runtime secret resolution for Notification Center currently resolves `env:` references or bare environment variable names through the process environment. Do not enter raw secret values in `config` or `secretRefs`.
 
-## Setup flow
+## Quick path: channel → template → policy → event → delivery
 
-1. **Check access.** The route metadata in `web/src/routes.tsx` exposes `/notifications` to users with `notifications:read`. Creating/updating channels and policies requires `notifications:manage`. Retrying due delivery attempts requires `notifications:test`.
-2. **Create a channel.** A channel is a reusable outbound destination. Scope it as `global`, `namespace`, `app`, or `worker_pool`.
-3. **Create a policy.** A policy binds an owner, event family, event filter, severity, dedupe window, and ordered channel references.
-4. **Create a reusable template when a provider-specific message body is needed.** Templates are scoped by provider and message type, can be dry-run rendered with sample JSON, and never store channel secrets.
-5. **Validate the policy.** Validation checks that channel references exist and are enabled.
-6. **Trigger or wait for source events.** Implemented job lifecycle events materialize messages through `NotificationCenter::emit_job_instance_event()`.
-7. **Inspect messages and delivery attempts.** The UI shows recent messages and queue state; API endpoints expose filters.
-8. **Operate retry/DLQ.** Let the background worker scan due attempts, or use the retry-due endpoint for operator-driven retry scans.
+Use this path when you want one job failure policy to deliver through one reusable outbound channel. It is intentionally chainable: each command stores the ID returned by the previous command. Keep real URLs and auth values in environment variables referenced by `secretRefs`; do not put raw provider tokens in channel `config`, templates, tickets, screenshots, or examples.
 
-## Safe channel creation example
+Prerequisites:
 
-The API uses the shared `{code,message,data}` envelope. The examples below intentionally use placeholder URLs and secret references. Do not paste real webhook tokens, SMTP passwords, routing keys, or authorization headers into docs, screenshots, tickets, or chat.
+- You have a bearer token with `notifications:manage` and `notifications:test` when using retry scan.
+- The Server process can resolve `env:TIKEO_NOTIFICATION_WEBHOOK_URL` and any optional `env:TIKEO_NOTIFICATION_WEBHOOK_AUTH` value from its own environment.
+- You know the namespace/app or job owner that should emit the event.
+- `supportsTestSend=false` is expected today; use policy validation, generated messages, delivery attempts, and retry/DLQ state as the verification path until a persisted redacted channel test endpoint exists.
 
 ```bash
-curl -fsS -X POST http://127.0.0.1:9090/api/v1/notification-channels \
-  -H 'Authorization: Bearer <operator-token>' \
+export TOKEN='<operator-bearer-token>'
+
+CHANNEL_ID="$(curl -fsS -X POST http://127.0.0.1:9090/api/v1/notification-channels \
+  -H "Authorization: Bearer ${TOKEN}" \
   -H 'Content-Type: application/json' \
   -d '{
     "scopeType": "app",
@@ -73,29 +71,100 @@ curl -fsS -X POST http://127.0.0.1:9090/api/v1/notification-channels \
     "name": "billing-ops-webhook",
     "provider": "webhook",
     "enabled": true,
-    "config": {
-      "messageType": "json"
-    },
+    "config": {"messageType": "json"},
     "secretRefs": {
       "url": "env:TIKEO_NOTIFICATION_WEBHOOK_URL",
       "authorization": "env:TIKEO_NOTIFICATION_WEBHOOK_AUTH"
     }
-  }'
+  }' | jq -r '.data.id')"
+
+test -n "${CHANNEL_ID}" && test "${CHANNEL_ID}" != "null"
+
+TEMPLATE_ID="$(curl -fsS -X POST http://127.0.0.1:9090/api/v1/notification-templates \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "templateKey": "ops.webhook.failure",
+    "name": "Ops webhook failure",
+    "provider": "webhook",
+    "messageType": "json",
+    "enabled": true,
+    "body": {
+      "subject": "[{{severity}}] {{subject}}",
+      "body": "{{body}}",
+      "eventType": "{{eventType}}",
+      "resourceId": "{{resourceId}}"
+    },
+    "variables": {"severity": "critical"}
+  }' | jq -r '.data.id')"
+
+test -n "${TEMPLATE_ID}" && test "${TEMPLATE_ID}" != "null"
+
+curl -fsS -X POST "http://127.0.0.1:9090/api/v1/notification-templates/${TEMPLATE_ID}/render" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H 'Content-Type: application/json' \
+  -d '{"sample":{"subject":"Nightly failed","body":"exit 2","eventType":"job_instance.failed","resourceId":"instance-demo","severity":"critical"}}' | jq .data
+
+POLICY_ID="$(curl -fsS -X POST http://127.0.0.1:9090/api/v1/notification-policies \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H 'Content-Type: application/json' \
+  -d "$(python3 - <<'PYJSON'
+import json, os
+print(json.dumps({
+  "ownerType": "app",
+  "ownerId": "prod/billing",
+  "name": "billing terminal failures",
+  "eventFamily": "job_instance",
+  "eventFilter": {
+    "eventTypes": ["job_instance.failed", "job_instance.retry_exhausted"],
+    "statuses": ["failed", "retry_exhausted"]
+  },
+  "channelRefs": [{"channelId": os.environ["CHANNEL_ID"]}],
+  "templateRef": os.environ["TEMPLATE_ID"],
+  "severity": "critical",
+  "enabled": True,
+  "dedupeSeconds": 300
+}, separators=(",", ":")))
+PYJSON
+)" | jq -r '.data.id')"
+
+test -n "${POLICY_ID}" && test "${POLICY_ID}" != "null"
+
+curl -fsS -X POST "http://127.0.0.1:9090/api/v1/notification-policies/${POLICY_ID}:validate" \
+  -H "Authorization: Bearer ${TOKEN}" | jq .data
 ```
 
-Expected response shape:
+Trigger a matching job event by running a job in the same owner scope and letting it reach `failed` or `retry_exhausted`, then inspect delivery:
+
+```bash
+curl -fsS 'http://127.0.0.1:9090/api/v1/notification-messages?eventFamily=job_instance' \
+  -H "Authorization: Bearer ${TOKEN}" | jq '.data.items[0]'
+
+curl -fsS http://127.0.0.1:9090/api/v1/notification-delivery-attempts \
+  -H "Authorization: Bearer ${TOKEN}" | jq '.data.items[0]'
+
+curl -fsS http://127.0.0.1:9090/api/v1/notification-delivery-attempts:queue-status \
+  -H "Authorization: Bearer ${TOKEN}" | jq .data
+```
+
+Verification is complete when policy validation reports `valid=true`, a matching event creates a normalized message, the delivery attempt references `${CHANNEL_ID}`, and the attempt reaches `delivered`, `retry_pending`, or `dead_letter` with a redacted target.
+
+## Safe channel creation example
+
+The API uses the shared `{code,message,data}` envelope. The quick path above is the preferred copy-paste flow. This abbreviated body shows the important channel safety rule: credentials belong in `secretRefs`, not in `config`.
 
 ```json
 {
-  "code": 0,
-  "message": "success",
-  "data": {
-    "id": "notification-channel-example",
-    "scopeType": "app",
-    "provider": "webhook",
-    "targetRedacted": "webhook:secret-ref",
-    "targetConfigured": true,
-    "secretConfigured": true
+  "scopeType": "app",
+  "namespace": "prod",
+  "app": "billing",
+  "name": "billing-ops-webhook",
+  "provider": "webhook",
+  "enabled": true,
+  "config": {"messageType": "json"},
+  "secretRefs": {
+    "url": "env:TIKEO_NOTIFICATION_WEBHOOK_URL",
+    "authorization": "env:TIKEO_NOTIFICATION_WEBHOOK_AUTH"
   }
 }
 ```
@@ -166,7 +235,7 @@ curl -fsS -X POST http://127.0.0.1:9090/api/v1/notification-policies \
       "statuses": ["failed", "retry_exhausted"]
     },
     "channelRefs": [
-      {"channelId": "notification-channel-example"}
+      {"channelId": "${CHANNEL_ID}"}
     ],
     "templateRef": null,
     "severity": "critical",
@@ -179,7 +248,7 @@ Validate after creation:
 
 ```bash
 curl -fsS -X POST \
-  http://127.0.0.1:9090/api/v1/notification-policies/notification-policy-example:validate \
+  http://127.0.0.1:9090/api/v1/notification-policies/${POLICY_ID}:validate \
   -H 'Authorization: Bearer <operator-token>'
 ```
 
@@ -276,3 +345,26 @@ Before creating a notification policy, ask:
 - Is this an abnormal condition that needs incident semantics? Use Alerts, then let Alerting produce notification messages as the migration path matures.
 - Does the destination need to be reused across jobs, alerts, and workflows? Put it in Notification Center as a channel, not inline in an alert rule.
 - Does the message contain credentials or tokens? Put them in secret references; never show them in examples or UI captures.
+
+
+## Verify
+
+After creating or editing a notification flow, verify the full chain rather than only the form save:
+
+1. `GET /api/v1/notification-channels/${CHANNEL_ID}` returns the expected provider, scope, enabled state, and redacted target summary.
+2. `POST /api/v1/notification-policies/${POLICY_ID}:validate` returns `valid=true` and the expected `channelCount`.
+3. A matching job-instance event creates a normalized message with the expected `eventType`, `subject`, `body`, `severity`, and resource identifiers.
+4. The delivery attempt references the selected channel and reaches `delivered`, `retry_pending`, or `dead_letter` with an inspectable reason.
+5. UI tabs show the same channel, template, policy, message, and attempt state without exposing `secretRefs` values.
+
+Current `supportsTestSend=false` is expected. Until a persisted redacted channel test endpoint exists, use policy validation, real matching events, message rows, delivery attempts, and retry/DLQ status as the acceptance path.
+
+
+## Production checklist
+
+- [ ] Every provider token, webhook URL, signing key, routing key, SMTP URL, SMTP password, authorization header, and custom header secret is referenced through `secretRefs`; no raw secret is stored in channel `config`, templates, docs, screenshots, or shell history.
+- [ ] Channel scope matches the intended blast radius: global channels are rare, namespace/app channels are preferred, and job-specific policies are used for noisy workloads.
+- [ ] Message templates include real provider-required fields for rich message types; Tikeo must not invent placeholder links, fake media IDs, or missing card fields during production delivery.
+- [ ] Job policies filter terminal and retry events deliberately so retry noise does not page the same audience as terminal failure.
+- [ ] Operators know the retry/DLQ runbook, including `notification_delivery.*` defaults, bounded `retry-due` scans, and how to inspect `dead_letter` reasons before creating a replacement event.
+- [ ] Alert rules and notification policies are named so incident semantics remain separate from normal lifecycle delivery.

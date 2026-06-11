@@ -1,12 +1,12 @@
 ---
 title: Notification Center reference
-description: Source-backed API, configuration, storage, event, redaction, retry, DLQ, and UI reference for Tikeo Notification Center.
+description: Operator-verified API, configuration, storage, event, redaction, retry, DLQ, and UI reference for Tikeo Notification Center.
 keywords: [notification center reference, notification api, notification_delivery, notification policies, notification channels]
 ---
 
 # Notification Center reference
 
-This page is the source-backed reference for the generic Notification Center implementation. It complements the operator workflow in [Notifications](../user-guide/notifications) and the incident boundary in [Alerts](../user-guide/alerts).
+This page is the operator reference for the generic Notification Center implementation. It complements the operator workflow in [Notifications](../user-guide/notifications) and the incident boundary in [Alerts](../user-guide/alerts).
 
 Primary sources:
 
@@ -243,11 +243,11 @@ Official-document-backed built-in variants currently exposed by the drawer and d
 | `dingtalk` | `text`, `markdown`, `link`, `actionCard` with single-button or `btns` JSON, and `feedCard`; `atMobiles`, `atUserIds`, `isAtAll`. | Webhook URL as secret ref; optional `signingKey` signs URL with timestamp/HMAC. |
 | `feishu` | `text`, `post`, `image` (`image_key`), `share_chat` (`share_chat_id`), and `interactive` card. | Webhook URL as secret ref; optional `signingKey` adds body `timestamp`/`sign`. |
 | `wechat_work` | `text`, `markdown`, `markdown_v2`, `image`, `news`, `file`, `voice`, and `template_card`; mentions for text-compatible messages. | Webhook URL as secret ref. |
-
-Rich provider families that require URLs, media IDs, cards, links, or image/chat identifiers fail closed unless the delivery has a channel inline `config.template` or an enabled policy `templateRef` rendered into `payload.template`. This covers DingTalk `link`/`actionCard`/`feedCard`, Feishu `image`/`share_chat`, and WeCom `image`/`news`/`file`/`voice`/`template_card`; placeholder provider payloads are not generated.
 | `pagerduty` | Events API `trigger`, `acknowledge`, `resolve`; payload fields include `source`, `component`, `group`, `class`, `client`, `client_url`, `links`, `images`, and `custom_details`. | Routing/integration key must be supplied through `secretRefs.routingKey` / aliases. |
 | `email` | `plain` text and stored `html` template shape. Runtime still sends text/plain through the SMTP adapter. | SMTP URL/password should be secret refs. |
 | plugin webhook | Provider-neutral JSON unless plugin metadata supplies a custom template. | Plugin-defined. |
+
+Rich provider families that require URLs, media IDs, cards, links, or image/chat identifiers fail closed unless the delivery has a channel inline `config.template` or an enabled policy `templateRef` rendered into `payload.template`. This covers DingTalk `link`/`actionCard`/`feedCard`, Feishu `image`/`share_chat`, and WeCom `image`/`news`/`file`/`voice`/`template_card`; placeholder provider payloads are not generated.
 
 URL safety uses `alert::validate_webhook_url()`. Production targets should be HTTPS and publicly routable; `safetyPolicy.allowInsecureLoopback` is only for explicit local smoke tests.
 

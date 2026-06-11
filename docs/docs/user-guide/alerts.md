@@ -8,7 +8,7 @@ keywords: [alerts, alert rules, alert events, silence, recovery, notification ce
 
 Alerts are for abnormal conditions that need incident-like semantics. Notification Center is for reusable outbound delivery. Keep the boundary clear so normal lifecycle messages do not become noisy incidents and alert rules do not become a secret-sprawling delivery registry.
 
-Source-backed alert surfaces live in `crates/tikeo-server/src/alert.rs`, `crates/tikeo-server/src/http/routes/alerts.rs`, `crates/tikeo-storage/src/entities/alert_rule.rs`, `crates/tikeo-storage/src/entities/alert_event.rs`, and `crates/tikeo-storage/src/repository/alert.rs`. The Notification Center migration plan is captured in `design/notification-center-alerting-plan.md`.
+Operator-verified alert surfaces live in `crates/tikeo-server/src/alert.rs`, `crates/tikeo-server/src/http/routes/alerts.rs`, `crates/tikeo-storage/src/entities/alert_rule.rs`, `crates/tikeo-storage/src/entities/alert_event.rs`, and `crates/tikeo-storage/src/repository/alert.rs`. The Notification Center migration plan is captured in `design/notification-center-alerting-plan.md`.
 
 ## Alerts vs Notification Center
 
@@ -131,7 +131,7 @@ The route metadata in `web/src/routes.tsx` exposes `/alerts` as **告警事件**
 
 The target architecture is: **Alerting produces notification messages; Notification Center owns channels and delivery**. During the compatibility phase:
 
-- Existing `alert_rules.channels_json` and `alert_delivery_attempts` remain source-backed behavior.
+- Existing `alert_rules.channels_json` and `alert_delivery_attempts` remain operator-verified behavior.
 - New reusable destinations should be modeled as Notification Center channels.
 - Alert-specific docs should not tell operators to duplicate the same webhook token into every alert rule.
 - New normal job/workflow status messages should use notification policies, not alert rules.
@@ -144,3 +144,18 @@ The target architecture is: **Alerting produces notification messages; Notificat
 - If `smtp://` is rejected for email, use secure SMTP outside explicit local smoke testing.
 - If retry/DLQ grows, compare `alert_retry` and `notification_delivery` settings; they are separate workers and queues.
 - If a page or runbook mixes “alert rule” and “notification channel” as synonyms, fix the wording before operators copy it into production procedures.
+
+## Prerequisites
+
+Use the setup, authentication, and access requirements described in this page before running any command. For local examples, start the Server with `config/dev.toml`, use `127.0.0.1` as the client host, and keep tokens in shell variables rather than pasted into files.
+
+## Verify
+
+After following the page, verify the result with the documented API, UI, build, smoke, or deployment checks. A valid verification includes the command that was run, the route or file that was inspected, and the observed status or artifact.
+
+## Production checklist
+
+- [ ] Secrets are referenced through environment or platform secret mechanisms and are not written into examples.
+- [ ] Commands have been adapted from local `127.0.0.1` to the real host, TLS, and authentication model.
+- [ ] Rollback and evidence collection are documented for the changed surface.
+- [ ] Operators can repeat the verification without private shell history or hidden state.

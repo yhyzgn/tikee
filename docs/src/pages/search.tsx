@@ -57,7 +57,7 @@ export default function SearchPage() {
   }, [entries, locale, query]);
 
   return (
-    <Layout title="Search" description="Search source-backed Tikeo documentation entrypoints.">
+    <Layout title="Search" description="Search implementation-anchored Tikeo documentation entrypoints.">
       <main className={styles.mainShell}>
         <section className={styles.hero}>
           <p className={styles.eyebrow}>Local docs search</p>
@@ -107,7 +107,7 @@ export default function SearchPage() {
             <article className={styles.featureCard}>
               <span>No results</span>
               <h2>No indexed page matched.</h2>
-              <p>Try a source-backed term such as jobs, Worker Tunnel, audit, API-Key, or workflows.</p>
+              <p>Try an operator term such as jobs, Worker Tunnel, audit, API-Key, notifications, or workflows.</p>
             </article>
           ) : null}
         </section>

@@ -1,6 +1,6 @@
 ---
 title: Management OpenAPI reference
-description: Source-backed reference for the Tikeo HTTP management API, OpenAPI document route, app-scoped SDK API keys, and the job/instance endpoints used by SDK helpers.
+description: Operator-verified reference for the Tikeo HTTP management API, OpenAPI document route, app-scoped SDK API keys, and the job/instance endpoints used by SDK helpers.
 ---
 
 # Management OpenAPI reference
@@ -20,7 +20,7 @@ authenticate with app-scoped API keys through `x-tikeo-api-key`, typically
 loaded from `TIKEO_MANAGEMENT_API_KEY`. Do not reuse browser/OIDC sessions as
 machine SDK credentials.
 
-## Source files and runtime route
+## Operator contract and OpenAPI route
 
 | Contract | Source |
 | --- | --- |
@@ -67,9 +67,7 @@ rules; the helper does not bypass the scheduler state machine.
 ## Post api v1 jobs job trigger
 
 `POST /api/v1/jobs/{job}:trigger` creates a job instance for manual/API
-execution. The OpenAPI path is documented as `/api/v1/jobs/{job}:trigger` even
-though Axum internally parses the action suffix through a route-compatible
-handler. SDK default trigger helpers map here with `triggerType=api` and
+execution. The public route is `/api/v1/jobs/{job}:trigger`. SDK default trigger helpers map here with `triggerType=api` and
 `executionMode=single`.
 
 Use the broadcast helper only when the intended behavior is fan-out across all
@@ -110,7 +108,7 @@ SDK pages should link helper behavior to the exact reference anchors above:
 - Instance polling → [`GET /api/v1/instances/{instance}`](./management-openapi#get-api-v1-instances-instance)
 - Log inspection → [`GET /api/v1/instances/{instance}/logs`](./management-openapi#get-api-v1-instances-instance-logs)
 
-Keep those links source-backed. If a new SDK helper is documented, first verify
+Keep those links operator-verified. If a new SDK helper is documented, first verify
 that the helper exists in committed SDK source and that its serialized payload
 matches the OpenAPI request contract.
 

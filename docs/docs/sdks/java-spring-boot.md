@@ -54,7 +54,7 @@ Verify locally:
 | --- | --- | --- |
 | `tikeo.worker.enabled` | `true` | Enable Worker auto-configuration. |
 | `tikeo.worker.auto-startup` | `true` | Start with Spring lifecycle. |
-| `tikeo.worker.endpoint` | `http://0.0.0.0:9998` | Worker Tunnel endpoint. Demos override to `http://127.0.0.1:9998`. |
+| `tikeo.worker.endpoint` | all-interfaces host on port `9998` in the starter source | Worker Tunnel endpoint. Override to `http://127.0.0.1:9998` locally or to the reachable Worker Tunnel URL in deployments. |
 | `tikeo.worker.dry-run` | `false` | Avoid live tunnel when true. |
 | `tikeo.worker.heartbeat-interval-millis` | `10000` | Lease renewal cadence. |
 | `tikeo.worker.client-instance-id` | blank | If blank, SDK generates and persists one per scope/runtime identity. |
@@ -201,9 +201,9 @@ The common create+trigger default is:
 | Trigger execution mode | `executionMode=single` |
 | Broadcast | Opt-in only through explicit broadcast helper and `broadcastSelector` |
 
-## Source-backed reference links
+## Operator-verified reference links
 
-Keep SDK helper docs anchored to source-derived API and protocol references:
+Keep SDK helper docs anchored to operator-verified API and protocol references:
 
 - Create helper endpoint: [`POST /api/v1/jobs`](../reference/management-openapi#post-api-v1-jobs)
 - Trigger helper endpoint: [`POST /api/v1/jobs/{job}:trigger`](../reference/management-openapi#post-api-v1-jobs-job-trigger)
@@ -234,3 +234,22 @@ For a Spring Boot service, treat `tikeo.worker.*` as application infrastructure 
 The auto-configuration merges three capability sources: explicit `tikeo.worker.capabilities` tags, `@TikeoProcessor` registry entries, and available script/WASM runner registries. That means a processor method becomes dispatchable only after Spring creates the bean and the registry scans it. If a job remains pending, check the Worker DTO's structured capabilities first; do not assume the annotation was registered merely because the class compiled.
 
 The demo `DemoJobManagementController` is intentionally a local teaching surface. It shows `TikeoJobClient` creating, disabling, enabling, and triggering jobs, but a real production service should normally keep Management operations behind its own authorization boundary or run them from a control-plane service. The Worker itself still receives task execution over the outbound Worker Tunnel; any demo HTTP endpoint is not a scheduler callback endpoint.
+
+## Prerequisites
+
+Use the setup, authentication, and access requirements described in this page before running any command. For local examples, start the Server with `config/dev.toml`, use `127.0.0.1` as the client host, and keep tokens in shell variables rather than pasted into files.
+
+## Verify
+
+After following the page, verify the result with the documented API, UI, build, smoke, or deployment checks. A valid verification includes the command that was run, the route or file that was inspected, and the observed status or artifact.
+
+## Troubleshooting
+
+When a step fails, first capture the exact command, response status, and Server log window. Then check authentication, namespace/app scope, Worker eligibility, storage readiness, and proxy behavior before changing production configuration.
+
+## Production checklist
+
+- [ ] Secrets are referenced through environment or platform secret mechanisms and are not written into examples.
+- [ ] Commands have been adapted from local `127.0.0.1` to the real host, TLS, and authentication model.
+- [ ] Rollback and evidence collection are documented for the changed surface.
+- [ ] Operators can repeat the verification without private shell history or hidden state.

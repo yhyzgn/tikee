@@ -118,7 +118,7 @@ let _ = management
 
 Rust demo 默认配置 SDK processor、插件 SQL processor，以及可选脚本 runner。脚本 runner 的 sandbox 后端由 `TIKEO_WORKER_SCRIPT_SANDBOX` 控制；auto 模式会按语言选择 SRT、Deno、container 或 unavailable adapter。`TIKEO_SANDBOX_AUTO_INSTALL=0/false/no/off` 会关闭工具自动安装。`TIKEO_ENABLE_UNAVAILABLE_SCRIPT_ADAPTERS` 只有在显式打开时才注册不可用 adapter；正常验收应要求不可用运行时不被广告。`TIKEO_WORKER_DRY_RUN=1` 或关闭连接时，demo 只验证本地注册与 heartbeat，不会连 live tunnel。
 
-## 源码事实索引与排错边界
+## 运维依据与排错边界
 
 核对 Rust 集成时，先看 `sdks/rust/tikeo/src/config.rs` 中注册消息如何序列化，再看 `src/session.rs` 中 heartbeat、`process_next_with_script_runners`、assignment token 日志和 `TaskResult` 的发送顺序。`src/task.rs` 说明 `TaskOutcome::Succeeded`、`TaskOutcome::Success` 与 `TaskOutcome::Failed` 才是 Worker 结果边界；普通 stdout 只能辅助排错，不能替代实例日志。`examples/rust/worker-demo/src/main.rs` 是 operator demo，不是框架模板：它把 namespace、app、cluster、region、labels、plugin SQL 和脚本 runner 都放到环境变量后面，方便现场逐项开关。遇到任务未派发时，不要先修改业务 processor；先核对 Worker 是否注册到了同一 namespace/app，`structured_capabilities.sdk_processors` 是否包含目标 processor，label 和 `broadcastSelector` 是否收敛到预期池，脚本 runner 是否因为工具缺失而没有广告。
 
@@ -134,3 +134,22 @@ Rust demo 默认配置 SDK processor、插件 SQL processor，以及可选脚本
 4. 用 management helper 创建 `demo.echo` API job，确认请求携带 `x-tikeo-api-key`，密钥来自 `TIKEO_MANAGEMENT_API_KEY`，触发响应为 `triggerType=api` 与 `executionMode=single`。
 5. 只在需要 fan-out 时测试 `broadcastSelector`；选择 tag `manual-demo` 和 label `worker_pool=rust-blue`，确认只匹配预期 Worker。
 6. 查看实例日志和结果，确认 processor 日志通过 `TaskContext` 绑定到 instance；断开 Worker 后确认 Server stale worker fencing、重连、注销路径符合预期。
+
+## 前置条件
+
+执行本页命令前，请先满足页面列出的安装、认证和权限要求。本地示例默认 Server 使用 `config/dev.toml`，客户端访问 `127.0.0.1`，令牌保存在 shell 变量中，不写入文件或截图。
+
+## 验收
+
+完成本页步骤后，用对应 API、UI、构建、smoke 或部署检查验证结果。有效验收至少包含执行的命令、检查的路由或文件，以及观察到的状态或产物。
+
+## 故障排查
+
+步骤失败时，先保留完整命令、响应状态和 Server 日志时间窗口，再检查认证、namespace/app scope、Worker 匹配、存储 readiness 和代理行为，不要直接修改生产配置。
+
+## 生产检查清单
+
+- [ ] 密钥通过环境变量或平台 Secret 引用管理，不写入示例。
+- [ ] 已把本地 `127.0.0.1` 命令替换成真实域名、TLS 和认证方式。
+- [ ] 已记录变更面的回滚和证据采集方式。
+- [ ] 运维人员可以在没有隐藏 shell 历史或隐式状态的情况下复现验收。

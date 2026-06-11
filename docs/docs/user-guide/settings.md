@@ -1,19 +1,66 @@
 # Settings and governance guide
 
-The Settings-related console surfaces are defined by `web/src/routes.tsx` rather than one monolithic settings page. Current routes include users, roles, tenant scopes, API-Key management, calendars, GitOps/IaC, OIDC identities where enabled, and observability/governance entries.
+## Overview
 
-## Route and RBAC source
+Settings are distributed across governance pages instead of one monolithic screen. Operators manage users, roles, tenant scopes, API-Key/service-account access, calendars, GitOps/IaC, notification governance, alert review, and audit through route-specific pages.
 
-`web/src/routes.tsx` is the single route metadata source. Menu entries declare paths, labels, icon groups, and RBAC resource/action requirements. The same RBAC model hides unavailable actions and routes, so an operator should first check permissions when a settings page is missing.
+Implementation anchors: `web/src/routes.tsx` defines the menu and permission metadata. Current governance paths include `/users`, `/roles`, `/scopes`, `/api-keys`, `/calendars`, `/gitops`, `/notifications`, `/alerts`, and `/audit`. Menu visibility and actions are controlled by `RBAC` resource/action rules.
 
-## API-Key management
+## Prerequisites
 
-API-Key and service-account management is app-scoped machine-to-machine governance. SDK Management API calls use `x-tikeo-api-key`, not a human browser session. Rotate or revoke keys from the API-Key route when a credential is no longer needed or after exposure.
+- You are logged in.
+- Your role has read/manage/write permission for the page you need.
+- Namespace/app/service-account scope is known before changing API-Key access.
+- Newly created API-Key values are captured once into a secure system; they are not shown again.
 
-## Tenant scopes and roles
+```bash
+curl -fsS http://127.0.0.1:9090/api/v1/jobs \
+  -H "x-tikeo-api-key: $TIKEO_MANAGEMENT_API_KEY" | jq '.code'
+```
 
-Namespace/app scope controls job ownership, service accounts, Worker pools, secrets, and canary targets. RBAC roles control which users can read, write, execute, or manage each resource family. Avoid moving jobs across scopes unless the user is authorized for both the source and destination.
+## Open the page
 
-## Operational boundary
+1. Log in to the console.
+2. Open the **Governance** menu group.
+3. Select Users, Roles, Scopes, Calendars, API-Key, GitOps/IaC, Notifications, Alerts, or Audit.
+4. If a menu item or button is missing, inspect the route permission and role catalog before assuming the feature is absent.
 
-Settings routes are not placeholders for hidden features. If a route is disabled, it is not production-ready. If a page exists but an action is hidden, use the required `RBAC` resource/action from route metadata and permission catalog to decide whether to grant access or keep the action unavailable.
+## Common tasks
+
+### Manage users and roles
+
+Use Users for account assignment and Roles for permission matrices, menu permissions, and UI action permissions. Test changes with viewer, operator, and admin accounts.
+
+### Manage tenant scopes
+
+Use Scopes to manage namespace, app, worker pool, and related references. Jobs, service accounts, Worker pools, secret references, and canary targets depend on scope.
+
+### Manage API-Key access
+
+Create service accounts and app-scoped API keys in `/api-keys`. SDK Management API uses `x-tikeo-api-key`, not browser bearer tokens. Rotate or revoke keys after exposure, service retirement, or ownership transfer.
+
+## Verify
+
+- A viewer sees only authorized menus/actions.
+- Operators can perform daily tasks without high-risk manage permissions.
+- Admins can manage roles, scopes, and API-Key entries.
+- Full API-Key values are displayed only at creation time.
+- Revoked or rotated keys stop working for Management API calls.
+
+## Troubleshooting
+
+| Symptom | Action |
+| --- | --- |
+| Menu missing | Check `web/src/routes.tsx` permission and user role. |
+| Button hidden | Check UI action permission and backend catalog. |
+| API-Key unauthorized | Check key state, service-account scope, and `x-tikeo-api-key` header. |
+| Cross-scope operation fails | Confirm access to both source and destination scopes. |
+| User sees too much | Revert role change and audit permission catalog. |
+
+## Production checklist
+
+- [ ] Least privilege is enforced by roles and menu/action permissions.
+- [ ] Service accounts are app-scoped and owned by teams.
+- [ ] API keys are rotated and revoked on schedule.
+- [ ] Scope changes are reviewed for Job, Worker, and secret impact.
+- [ ] RBAC changes are validated with non-admin accounts and audit evidence.
