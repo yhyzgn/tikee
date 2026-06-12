@@ -3012,3 +3012,33 @@ Verification for fix so far:
 - `python3 -m pytest .github/tests -q` ✅ (49 passed, 8 subtests)
 - `python3 scripts/check-source-size.py` ✅
 - `git diff --check` ✅
+
+## 2026-06-13 — v0.2.9 formal release completed
+
+Final release commit and tag:
+- Feature commit: `0283ca562b7c8f90759618b9929d117110883f6c` (`Make job notifications traceable and release-versioned`).
+- Release lockfile follow-up commit: `cecec2aa2ec54750d2558c6e288ade9043802119` (`Keep release version sync locked and reproducible`).
+- Formal release tag: `v0.2.9` -> `cecec2aa2ec54750d2558c6e288ade9043802119`.
+- GitHub Release: https://github.com/yhyzgn/tikeo/releases/tag/v0.2.9 (published, not draft, not prerelease).
+- Note: `v0.2.8` was an attempted tag for the same feature but Docker server publish failed before image publication because manifest-only version sync left `Cargo.lock` local package versions at `0.2.0`; final accepted release is `v0.2.9`.
+
+GitHub Actions for `v0.2.9` / release commit all completed successfully:
+- CI: https://github.com/yhyzgn/tikeo/actions/runs/27432176236 ✅
+- Coverage: https://github.com/yhyzgn/tikeo/actions/runs/27432176205 ✅
+- Release / GitHub assets: https://github.com/yhyzgn/tikeo/actions/runs/27432190788 ✅
+- Publish / Docker server: https://github.com/yhyzgn/tikeo/actions/runs/27432190892 ✅
+- Publish / Docker web: https://github.com/yhyzgn/tikeo/actions/runs/27432190852 ✅
+- Publish / Docker docs: https://github.com/yhyzgn/tikeo/actions/runs/27432190883 ✅
+- Publish / Rust SDK: https://github.com/yhyzgn/tikeo/actions/runs/27432190789 ✅
+- Publish / Java SDK: https://github.com/yhyzgn/tikeo/actions/runs/27432190920 ✅
+- Publish / Python SDK: https://github.com/yhyzgn/tikeo/actions/runs/27432190763 ✅
+- Publish / Go SDK: https://github.com/yhyzgn/tikeo/actions/runs/27432190709 ✅
+- Publish / Node.js SDK: https://github.com/yhyzgn/tikeo/actions/runs/27432190867 ✅
+
+Docker Hub pull verification:
+- `docker pull yhyzgn/tikeo-server:v0.2.9` ✅ digest `sha256:19d6c4abced266f0824753578d86cf98406a8560b455d306235df455378f7c0a`, OCI revision `cecec2aa2ec54750d2558c6e288ade9043802119`.
+- `docker pull yhyzgn/tikeo-web:v0.2.9` ✅ digest `sha256:286ec2a311c1dcc65280e984e677e13a8a1e543e04987e04fe87db0aa59f28cb`, OCI revision `cecec2aa2ec54750d2558c6e288ade9043802119`.
+- `docker pull yhyzgn/tikeo-docs:v0.2.9` ✅ digest `sha256:7c7c4cdf6d2d88aa1430b5fb3fceb23b0a2b66fa74b557ce6d2bf9b0f2d113f8`, OCI revision `cecec2aa2ec54750d2558c6e288ade9043802119`.
+- `docker run --rm yhyzgn/tikeo-server:v0.2.9 --version` ✅ output `tikeo 0.2.9`; this verifies the server binary no longer stays at `0.2.0` after release tags.
+
+Release assets confirmed present on GitHub Release include server binaries for linux/macOS/windows, `tikeo-web-dist-0.2.9.tar.gz`, Helm chart `tikeo-0.2.9.tgz`, compose/k8s manifests, Terraform provider/operator binaries, and language SDK archives.
