@@ -72,12 +72,12 @@ export const DEFAULT_TEMPLATE_VARIABLES = [
 
 const webhookUrlField: ProviderFieldSchema = {
   key: 'url',
-  label: 'Webhook URL secret ref',
+  label: '机器人/Webhook 地址引用',
   type: 'string',
   required: true,
   secret: true,
   placeholder: 'env:TIKEO_NOTIFICATION_CHANNEL_<CHANNEL>_WEBHOOK_URL',
-  help: 'Prefer env: references. Do not paste the actual webhook URL into the drawer.',
+  help: '真实值放在部署环境变量或 Secret 中；这里填写本渠道自己的 env:NAME 或已登记 Secret 引用。',
 };
 
 const authorizationField: ProviderFieldSchema = {
@@ -350,12 +350,24 @@ function parseExamples(value: unknown): ProviderMessageTypeExample[] {
   return asArray(value).filter((item): item is ProviderMessageTypeExample => Boolean(item && typeof item === 'object' && 'name' in item));
 }
 
-export function channelExampleCount(schema: ProviderSchema): number {
-  return schema.messageTypes.reduce((total, item) => total + (item.examples?.length ?? 0), 0);
-}
-
 function parseFields(value: unknown): ProviderFieldSchema[] {
   return asArray(value).filter((item): item is ProviderFieldSchema => Boolean(item && typeof item === 'object' && 'key' in item && 'label' in item));
+}
+
+function normalizeProviderField(field: ProviderFieldSchema): ProviderFieldSchema {
+  if (field.secret && ['url', 'webhookUrl', 'webhook_url'].includes(field.key)) {
+    return {
+      ...field,
+      label: '机器人/Webhook 地址引用',
+      placeholder: field.placeholder ?? 'env:TIKEO_NOTIFICATION_CHANNEL_<CHANNEL>_WEBHOOK_URL',
+      help: field.help ?? '真实值放在部署环境变量或 Secret 中；这里填写本渠道自己的 env:NAME 或已登记 Secret 引用。',
+    };
+  }
+  return field;
+}
+
+function parseNormalizedFields(value: unknown): ProviderFieldSchema[] {
+  return parseFields(value).map(normalizeProviderField);
 }
 
 function parseMessageTypes(value: unknown): ProviderMessageTypeSchema[] {
@@ -374,7 +386,10 @@ export function providerSchemaFor(type?: NotificationChannelTypeSummary | null, 
   const key = type?.type ?? provider ?? 'webhook';
   const fallback = fallbackSchemas[key] ?? fallbackSchemas.webhook;
   const template = templateRecord(type ?? undefined);
-  const rawMessageTypes = parseMessageTypes(template.messageTypes).length > 0 ? parseMessageTypes(template.messageTypes) : fallback.messageTypes;
+  const parsedMessageTypes = parseMessageTypes(template.messageTypes);
+  const rawMessageTypes = parsedMessageTypes.length > 0 ? parsedMessageTypes : fallback.messageTypes;
+  const parsedConfigFields = parseNormalizedFields(template.configFields);
+  const parsedSecretFields = parseNormalizedFields(template.secretFields);
   const messageTypes = rawMessageTypes.map((item) => {
     const examples = parseExamples(item.examples);
     return { ...item, examples: examples.length > 0 ? examples : [generatedExample(key, item.id)] };
@@ -385,8 +400,8 @@ export function providerSchemaFor(type?: NotificationChannelTypeSummary | null, 
     label: type?.label ?? fallback.label,
     category: type?.category ?? fallback.category,
     description: type?.description ?? fallback.description,
-    configFields: parseFields(template.configFields).length > 0 ? parseFields(template.configFields) : fallback.configFields,
-    secretFields: parseFields(template.secretFields).length > 0 ? parseFields(template.secretFields) : fallback.secretFields,
+    configFields: parsedConfigFields.length > 0 ? parsedConfigFields : fallback.configFields,
+    secretFields: parsedSecretFields.length > 0 ? parsedSecretFields : fallback.secretFields,
     messageTypes,
     templateVariables: asArray(template.templateVariables).filter((item): item is string => typeof item === 'string').length > 0
       ? asArray(template.templateVariables).filter((item): item is string => typeof item === 'string')

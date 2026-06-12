@@ -24,7 +24,7 @@ import {
 import { PermissionGate } from '../../components/Permission';
 import { useI18n } from '../../i18n';
 import { assertNoRedactedMarker, blankToNull, compactObject, formatJson, parseJsonObject, parseMaybeJson } from './jsonUtils';
-import { channelExampleCount, findMessageType, providerSchemaFor, type ProviderFieldSchema, type ProviderMessageTypeExample, type ProviderSchema } from './providerSchema';
+import { findMessageType, providerSchemaFor, type ProviderFieldSchema, type ProviderSchema } from './providerSchema';
 
 const CHANNEL_SCOPE_OPTIONS = ['global', 'namespace', 'app', 'worker_pool'];
 
@@ -147,18 +147,6 @@ function buildTemplate(messageType: string, schema: ProviderSchema, values: Reco
   return compactObject({ ...fieldValues, messageType });
 }
 
-function exampleTemplateFieldValue(field: ProviderFieldSchema, template: Record<string, unknown>): unknown {
-  const value = template[field.key] ?? field.defaultValue;
-  if (field.type === 'textarea' && value !== undefined && typeof value !== 'string') {
-    return JSON.stringify(value, null, 2);
-  }
-  return value;
-}
-
-function exampleFieldValue(field: ProviderFieldSchema, example: ProviderMessageTypeExample): unknown {
-  return exampleTemplateFieldValue(field, example.template ?? {});
-}
-
 function applyDefaults(form: ReturnType<typeof Form.useForm<ChannelFormValues>>[0], schema: ProviderSchema, config: Record<string, unknown> = {}, secretRefs: Record<string, unknown> = {}, template: Record<string, unknown> = {}) {
   const messageType = valueAsString(config.messageType) ?? valueAsString(template.messageType) ?? schema.defaultMessageType;
   const selected = findMessageType(schema, messageType);
@@ -204,15 +192,12 @@ export function ChannelDrawer({ open, channelTypes, editingChannel, onClose, onS
   const [apps, setApps] = useState<AppScopeSummary[]>([]);
   const [workerPools, setWorkerPools] = useState<WorkerPoolSummary[]>([]);
   const [secrets, setSecrets] = useState<SecretSummary[]>([]);
-  const [selectedExampleName, setSelectedExampleName] = useState<string>();
   const [testingChannel, setTestingChannel] = useState(false);
   const [testResult, setTestResult] = useState<TestNotificationChannelResult | null>(null);
 
   const currentType = channelTypes.find((item) => item.type === provider) ?? (provider ? undefined : channelTypes[0]);
   const schema = useMemo(() => providerSchemaFor(currentType, provider), [currentType, provider]);
   const selectedMessageType = useMemo(() => findMessageType(schema, messageType), [messageType, schema]);
-  const selectedExamples = selectedMessageType?.examples ?? [];
-  const selectedExample = selectedExamples.find((item) => item.name === selectedExampleName) ?? selectedExamples[0];
 
   const loadScopeOptions = useCallback(async () => {
     const [namespaceData, appData, workerPoolData, secretData] = await Promise.all([
@@ -312,34 +297,12 @@ export function ChannelDrawer({ open, channelTypes, editingChannel, onClose, onS
     form.setFieldsValue({
       template: Object.fromEntries(selected.templateFields.map((field) => [field.key, existingTemplate[field.key] ?? field.defaultValue])),
     });
-    setSelectedExampleName(selected.examples?.[0]?.name);
   }, [form, messageType, open, schema]);
 
   const close = () => {
     form.resetFields();
     setTestResult(null);
-    setSelectedExampleName(undefined);
     onClose();
-  };
-
-  const applyExample = (example: ProviderMessageTypeExample | undefined) => {
-    if (!example) return;
-    const nextMessageType = valueAsString(example.template?.messageType) ?? valueAsString(example.config?.messageType) ?? selectedMessageType?.id ?? schema.defaultMessageType;
-    const nextSchema = findMessageType(schema, nextMessageType);
-    const currentConfig = form.getFieldValue('config') ?? {};
-    const currentSecretRefs = form.getFieldValue('secretRefs') ?? {};
-    const nextTemplate = Object.fromEntries(nextSchema.templateFields.map((field) => [field.key, exampleFieldValue(field, example)]));
-    form.setFieldsValue({
-      messageType: nextMessageType,
-      config: { ...currentConfig, ...example.config },
-      secretRefs: { ...currentSecretRefs, ...example.secretRefs },
-      template: nextTemplate,
-      useInlineTemplate: true,
-      replaceConfig: true,
-      replaceSecretRefs: true,
-    });
-    setSelectedExampleName(example.name);
-    message.success(t('示例已套用；发送前请确认 env: 密钥引用已经在部署环境中配置。'));
   };
 
   const sendTestNotification = async () => {
@@ -347,7 +310,7 @@ export function ChannelDrawer({ open, channelTypes, editingChannel, onClose, onS
     setTestingChannel(true);
     setTestResult(null);
     try {
-      const sample = selectedExample?.sample ?? {};
+      const sample = selectedMessageType?.examples?.[0]?.sample ?? {};
       const result = await testNotificationChannel(editingChannel.id, {
         subject: valueAsString(sample.subject) ?? 'Tikeo notification channel test',
         body: valueAsString(sample.body) ?? 'This is a test notification sent from the channel edit drawer.',
@@ -472,28 +435,9 @@ export function ChannelDrawer({ open, channelTypes, editingChannel, onClose, onS
         <Descriptions size="small" bordered column={1} style={{ marginBottom: 16 }} items={[
           { key: 'provider', label: t('提供方结构'), children: <Space wrap><Tag>{schema.category}</Tag><Typography.Text>{schema.description}</Typography.Text></Space> },
           { key: 'message', label: t('消息类型说明'), children: selectedMessageType?.description ?? '-' },
-          { key: 'examples', label: t('示例数量'), children: `${channelExampleCount(schema)} ${t('条')}` },
           { key: 'docs', label: t('官方文档'), children: <Space wrap>{schema.docs.map((doc) => <Typography.Link key={doc.url} href={doc.url} target="_blank" rel="noreferrer">{doc.label}</Typography.Link>)}</Space> },
           { key: 'vars', label: t('模板变量'), children: <Space wrap>{schema.templateVariables.map((variable) => <Tag key={variable}>{variable}</Tag>)}</Space> },
         ]} />
-
-        <Card
-          size="small"
-          title={t('示例配置')}
-          style={{ marginBottom: 16 }}
-          extra={<Button disabled={configControlsDisabled || !selectedExample} onClick={() => applyExample(selectedExample)}>{t('套用示例')}</Button>}
-        >
-          <Space direction="vertical" style={{ width: '100%' }}>
-            <Typography.Paragraph type="secondary">{t('每种渠道的每种消息类型都提供 1-2 条安全示例；示例只写入 channel-scoped env: 密钥引用，不包含真实 token。生产中请为每条渠道替换成自己的 env 名称。')}</Typography.Paragraph>
-            <Select
-              value={selectedExample?.name}
-              onChange={setSelectedExampleName}
-              options={selectedExamples.map((item) => ({ value: item.name, label: `${t('示例：')}${item.name}` }))}
-              style={{ width: '100%' }}
-            />
-            <Input.TextArea rows={6} readOnly value={formatJson(JSON.stringify(selectedExample ?? {}))} />
-          </Space>
-        </Card>
 
         <Typography.Title level={5}>{t('渠道配置')}</Typography.Title>
         {editingChannel ? <Form.Item name="replaceConfig" label={t('替换渠道配置')} valuePropName="checked"><Switch /></Form.Item> : null}
@@ -507,7 +451,14 @@ export function ChannelDrawer({ open, channelTypes, editingChannel, onClose, onS
           ))}
         </Row>
 
-        <Typography.Title level={5}>{t('密钥引用')}</Typography.Title>
+        <Typography.Title level={5}>{t('机器人地址 / 凭据引用')}</Typography.Title>
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={t('机器人/Webhook 地址引用')}
+          description={t('每条渠道都在这里配置自己的机器人/Webhook 地址、routing key、SMTP URL/password、签名密钥或 appId/appSecret 引用；真实值放在部署环境变量或 Secret 中，不是全局共享。')}
+        />
         {editingChannel ? <Form.Item name="replaceSecretRefs" label={t('替换密钥引用')} valuePropName="checked"><Switch /></Form.Item> : null}
         <Row gutter={16}>
           {schema.secretFields.map((field) => (

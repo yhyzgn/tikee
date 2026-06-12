@@ -91,13 +91,25 @@ describe('notification center console page', () => {
     expect(channelDrawerSource).toContain('clearScopeDependents');
   });
 
-  test('keeps channel examples as normal channel rows instead of a separate use-case data tab', () => {
+  test('keeps channel examples as normal channel rows and removes drawer example-apply UI', () => {
     expect(pageSource).toContain('通知渠道');
-    expect(pageSource + channelDrawerSource).not.toContain('用例数据');
-    expect(pageSource + channelDrawerSource).not.toContain('通知配置用例');
-    expect(pageSource + channelDrawerSource).not.toContain('套用为新渠道');
-    expect(pageSource + channelDrawerSource).not.toContain('channelExampleRows');
-    expect(pageSource + channelDrawerSource).not.toContain('selectedChannelExample');
+    expect(providerSchemaSource).toContain('examples');
+    for (const token of [
+      '用例数据',
+      '通知配置用例',
+      '套用为新渠道',
+      '示例配置',
+      '套用示例',
+      '示例数量',
+      'channelExampleRows',
+      'selectedChannelExample',
+      'selectedExampleName',
+      'applyExample',
+      'channelExampleCount',
+      'exampleFieldValue',
+    ]) {
+      expect(pageSource + channelDrawerSource).not.toContain(token);
+    }
   });
 
   test('has built-in provider schema fallbacks for rich message types and templates', () => {
@@ -110,9 +122,8 @@ describe('notification center console page', () => {
     for (const token of ['{{subject}}', '{{body}}', '{{eventType}}', '{{resourceId}}', '{{severity}}']) {
       expect(providerSchemaSource).toContain(token);
     }
-    for (const token of ['examples', 'channelExampleCount', 'applyExample', '套用示例', '示例：']) {
-      expect(providerSchemaSource + channelDrawerSource).toContain(token);
-    }
+    expect(providerSchemaSource).toContain('examples');
+    expect(channelDrawerSource).not.toContain('套用示例');
     const exampleSecretRefs = (provider: string, messageType: string) => {
       const schema = providerSchemaFor(null, provider);
       const selected = schema.messageTypes.find((item) => item.id === messageType);
@@ -157,9 +168,36 @@ describe('notification center console page', () => {
       expect(channelDrawerSource).toContain(token);
     }
     expect(channelDrawerSource).toContain('先选择 Namespace');
+    expect(channelDrawerSource).toContain('机器人地址 / 凭据引用');
+    expect(channelDrawerSource).toContain('机器人/Webhook 地址引用');
+    expect(channelDrawerSource).toContain('真实值放在部署环境变量或 Secret 中');
     expect(channelDrawerSource).toContain('按当前 scope 过滤 Secret 引用');
     expect(channelDrawerSource).toContain('保持现有渠道配置');
     expect(channelDrawerSource).toContain('保持现有密钥引用');
+
+    const metadataSchema = providerSchemaFor({
+      type: 'feishu',
+      label: 'Feishu/Lark Bot',
+      category: 'office_bot',
+      description: 'metadata fixture',
+      targetKind: 'webhook',
+      pluginProvided: false,
+      supportsTestSend: true,
+      requiredConfigKeys: [],
+      requiredTargetKeys: ['url'],
+      secretConfigKeys: ['url', 'signingKey'],
+      template: {
+        messageTypes: [{ id: 'interactive', label: 'Interactive', description: 'card', templateFields: [] }],
+        secretFields: [
+          { key: 'url', label: 'Webhook URL secret ref', type: 'string', required: true, secret: true },
+          { key: 'signingKey', label: 'Signing secret ref', type: 'string', secret: true },
+        ],
+      },
+    }, 'feishu');
+    const urlSecretField = metadataSchema.secretFields.find((item) => item.key === 'url');
+    expect(urlSecretField?.label).toBe('机器人/Webhook 地址引用');
+    expect(urlSecretField?.placeholder).toContain('TIKEO_NOTIFICATION_CHANNEL_<CHANNEL>_WEBHOOK_URL');
+    expect(urlSecretField?.help).toContain('真实值放在部署环境变量或 Secret 中');
   });
 
   test('allows metadata-only channel edits without re-entering preserved secrets', () => {
@@ -205,20 +243,17 @@ describe('notification center console page', () => {
       'currentType?.supportsTestSend === true',
       'disabled={!testSendSupported || testingChannel}',
       '该渠道类型不支持测试发送',
-      'selectedMessageType?.id',
+      'selectedMessageType?.examples?.[0]?.sample',
     ]) {
       expect(channelDrawerSource).toContain(token);
     }
   });
 
-  test('normalizes generated example textarea values into JSON strings before applying them', () => {
-    for (const token of [
-      'exampleFieldValue',
-      "field.type === 'textarea'",
-      'JSON.stringify(value, null, 2)',
-    ]) {
-      expect(channelDrawerSource).toContain(token);
+  test('keeps generated examples out of the channel drawer apply path', () => {
+    for (const token of ['selectedExampleName', 'applyExample', 'exampleFieldValue', '套用示例', '示例配置']) {
+      expect(channelDrawerSource).not.toContain(token);
     }
+    expect(channelDrawerSource).toContain('selectedMessageType?.examples?.[0]?.sample');
   });
 
   test('wires first-class notification template endpoints and page tab', () => {
