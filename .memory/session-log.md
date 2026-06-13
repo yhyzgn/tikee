@@ -3100,3 +3100,16 @@ Implemented:
 - i18n dictionaries gained zh-CN/en-US entries for all new operator-facing copy.
 
 Verification passed locally: targeted notification/i18n tests, full `bun test web/src`, Web typecheck/lint/build, source-size audit, and `git diff --check`.
+
+## 2026-06-13 — Variable catalog overflow and overlay polish
+
+User feedback: `可用模板变量` still did not show all variables and could not scroll; variable names in `变量映射表` wrapped; the mapping table had layering/coverage artifacts.
+
+Implemented:
+- Preview chips now render the complete variable set in a bounded scrollable container.
+- Removed `+N` truncation behavior from the variable preview.
+- Mapping-card placeholders now use a dedicated non-wrapping horizontal-scroll area.
+- Removed sticky toolbar from the variable map and raised Modal z-index to avoid drawer/modal layering artifacts.
+- Added source/style regression assertions for full preview rendering, scrollable preview/content, non-wrapping placeholders, and no variable-toolbar sticky behavior.
+
+Verification passed: targeted Notification Center tests, full Web tests, typecheck, lint, build, source-size audit, and diff whitespace check.

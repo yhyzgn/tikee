@@ -2990,8 +2990,25 @@ html[data-theme='dark'] .role-matrix-checkboxes .ant-checkbox-wrapper {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  max-height: 96px;
-  overflow: hidden;
+  max-height: 136px;
+  overflow: auto;
+  padding-right: 4px;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.template-variable-catalog__preview::-webkit-scrollbar,
+.template-variable-catalog__content::-webkit-scrollbar,
+.template-variable-card__placeholder::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.template-variable-catalog__preview::-webkit-scrollbar-thumb,
+.template-variable-catalog__content::-webkit-scrollbar-thumb,
+.template-variable-card__placeholder::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-border-strong) 72%, transparent);
 }
 
 .template-variable-catalog__chip {
@@ -3027,22 +3044,12 @@ html[data-theme='dark'] .role-matrix-checkboxes .ant-checkbox-wrapper {
   white-space: nowrap;
 }
 
-.template-variable-catalog__chip--more {
-  min-width: 42px;
-  justify-content: center;
-  color: var(--app-primary-color);
-  font-weight: 600;
-}
-
 .template-variable-catalog__modal {
   display: grid;
   gap: 14px;
 }
 
 .template-variable-catalog__toolbar {
-  position: sticky;
-  top: 0;
-  z-index: 1;
   display: grid;
   gap: 12px;
   padding-bottom: 12px;
@@ -3069,9 +3076,11 @@ html[data-theme='dark'] .role-matrix-checkboxes .ant-checkbox-wrapper {
 }
 
 .template-variable-catalog__content {
-  max-height: min(62vh, 640px);
+  max-height: min(58vh, 600px);
   overflow: auto;
   padding-right: 4px;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .template-variable-catalog__group {
@@ -3135,17 +3144,28 @@ html[data-theme='dark'] .role-matrix-checkboxes .ant-checkbox-wrapper {
   min-width: 0;
 }
 
-.template-variable-card__head .ant-typography {
+.template-variable-card__placeholder {
   min-width: 0;
   max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 2px;
+  scrollbar-gutter: stable;
+}
+
+.template-variable-card__placeholder .ant-typography {
+  display: inline-flex;
+  width: max-content;
+  max-width: none;
+  margin: 0;
   font-size: 12px;
   line-height: 1.4;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 
 .template-variable-card__head .ant-tag {
-  flex: 0 1 auto;
-  max-width: 46%;
+  flex: 0 0 auto;
+  max-width: 42%;
   margin-inline-end: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3192,5 +3212,9 @@ html[data-theme='dark'] .role-matrix-checkboxes .ant-checkbox-wrapper {
 
   .template-variable-catalog__grid {
     grid-template-columns: 1fr;
+  }
+
+  .template-variable-catalog__preview {
+    max-height: 160px;
   }
 }

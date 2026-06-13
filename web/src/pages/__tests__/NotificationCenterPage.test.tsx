@@ -12,6 +12,7 @@ const providerSchemaSource = readFileSync(new URL('../notifications/providerSche
 const templateDrawerSource = readFileSync(new URL('../notifications/TemplateDrawer.tsx', import.meta.url), 'utf8');
 const templateCatalogSource = readFileSync(new URL('../notifications/templateCatalog.ts', import.meta.url), 'utf8');
 const messageDetailDrawerSource = readFileSync(new URL('../notifications/NotificationMessageDetailDrawer.tsx', import.meta.url), 'utf8');
+const stylesSource = readFileSync(new URL('../../styles.css', import.meta.url), 'utf8');
 
 describe('notification center console page', () => {
   test('wires Notification Center as a first-class observability menu route', () => {
@@ -178,6 +179,16 @@ describe('notification center console page', () => {
     expect(variableCatalogSource).toContain('标准字段');
     expect(variableCatalogSource).toContain('任务上下文');
     expect(variableCatalogSource).toContain('template-variable-catalog__grid');
+    expect(variableCatalogSource).toContain('template-variable-card__placeholder');
+    expect(variableCatalogSource).toContain('zIndex={1400}');
+    expect(variableCatalogSource).toContain('const previewRows = rows');
+    expect(variableCatalogSource).not.toContain('slice(0, 6)');
+    expect(variableCatalogSource).not.toContain('template-variable-catalog__chip--more');
+    expect(stylesSource).toContain('template-variable-catalog__preview');
+    expect(stylesSource).toContain('overflow: auto;');
+    expect(stylesSource).toContain('template-variable-card__placeholder');
+    expect(stylesSource).toContain('white-space: nowrap;');
+    expect(stylesSource).not.toContain('.template-variable-catalog__toolbar {\n  position: sticky;');
     expect(variableCatalogSource).toContain('变量由消息标准字段与事件 payload 顶层字段共同提供');
     expect(variableCatalogSource).not.toContain('<Table');
     expect(providerSchemaSource).toContain('{{jobId}}');

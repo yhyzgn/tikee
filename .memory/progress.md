@@ -1585,3 +1585,18 @@ Verification:
 - `bun run --cwd web build` ✅ (existing Vite chunk-size warning only)
 - `python3 scripts/check-source-size.py` ✅
 - `git diff --check` ✅
+
+## 2026-06-13 — Notification variable catalog overflow polish
+
+- Fixed the variable preview area so `可用模板变量` renders all variables in a bounded scrollable chip container instead of truncating the list behind a `+N` affordance.
+- Fixed variable-map card placeholders so long `{{...}}` names stay on one line and scroll horizontally inside the placeholder area instead of wrapping and breaking card rhythm.
+- Removed the variable-map toolbar sticky behavior and raised the Modal z-index to avoid layering/overlap artifacts inside the drawer context.
+
+Verification:
+- `bun test web/src/pages/__tests__/NotificationCenterPage.test.tsx web/src/pages/notifications/templateCatalog.test.ts` ✅
+- `bun test web/src` ✅ (159 passed)
+- `bun run --cwd web typecheck` ✅
+- `bun run --cwd web lint` ✅
+- `bun run --cwd web build` ✅ (existing Vite chunk-size warning only)
+- `python3 scripts/check-source-size.py` ✅
+- `git diff --check` ✅

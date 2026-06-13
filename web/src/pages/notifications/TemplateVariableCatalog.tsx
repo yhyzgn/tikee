@@ -72,7 +72,7 @@ function VariableCard({ row, t }: { row: TemplateVariableRow; t: (value: string)
   return (
     <article className={`template-variable-card template-variable-card--${row.group}`}>
       <div className="template-variable-card__head">
-        <Typography.Text code copyable>{row.placeholder}</Typography.Text>
+        <div className="template-variable-card__placeholder"><Typography.Text code copyable>{row.placeholder}</Typography.Text></div>
         <Tag>{row.source}</Tag>
       </div>
       <div className="template-variable-card__body">
@@ -92,8 +92,7 @@ export function TemplateVariableCatalog({ variables, title = '可用模板变量
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [activeGroup, setActiveGroup] = useState<TemplateVariableFilter>('all');
-  const previewRows = compact ? rows.slice(0, 6) : rows;
-  const hiddenCount = Math.max(rows.length - previewRows.length, 0);
+  const previewRows = rows;
   const groupCounts = useMemo(() => ({
     all: rows.length,
     standard: rows.filter((row) => row.group === 'standard').length,
@@ -137,7 +136,6 @@ export function TemplateVariableCatalog({ variables, title = '可用模板变量
               <Typography.Text>{item.label}</Typography.Text>
             </button>
           ))}
-          {hiddenCount > 0 ? <button type="button" className="template-variable-catalog__chip template-variable-catalog__chip--more" onClick={() => setOpen(true)} aria-label={t('查看全部变量')}>+{hiddenCount}</button> : null}
         </div>
       </Space>
       <Modal
@@ -147,6 +145,7 @@ export function TemplateVariableCatalog({ variables, title = '可用模板变量
         width="min(920px, calc(100vw - 32px))"
         onCancel={() => setOpen(false)}
         destroyOnClose
+        zIndex={1400}
       >
         <div className="template-variable-catalog__modal">
           <div className="template-variable-catalog__toolbar">
