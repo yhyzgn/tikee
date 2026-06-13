@@ -180,6 +180,7 @@ describe('notification center console page', () => {
     expect(variableCatalogSource).toContain('任务上下文');
     expect(variableCatalogSource).toContain('template-variable-catalog__grid');
     expect(variableCatalogSource).toContain('template-variable-card__placeholder');
+    expect(variableCatalogSource).toContain('width="min(1120px, calc(100vw - 32px))"');
     expect(variableCatalogSource).toContain('zIndex={1400}');
     expect(variableCatalogSource).toContain('const previewRows = rows');
     expect(variableCatalogSource).not.toContain('slice(0, 6)');
@@ -187,7 +188,9 @@ describe('notification center console page', () => {
     expect(stylesSource).toContain('template-variable-catalog__preview');
     expect(stylesSource).toContain('overflow: auto;');
     expect(stylesSource).toContain('template-variable-card__placeholder');
+    expect(stylesSource).toContain('grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));');
     expect(stylesSource).toContain('white-space: nowrap;');
+    expect(stylesSource).toContain('white-space: normal;');
     expect(stylesSource).not.toContain('.template-variable-catalog__toolbar {\n  position: sticky;');
     expect(variableCatalogSource).toContain('变量由消息标准字段与事件 payload 顶层字段共同提供');
     expect(variableCatalogSource).not.toContain('<Table');

@@ -3112,7 +3112,7 @@ html[data-theme='dark'] .role-matrix-checkboxes .ant-checkbox-wrapper {
 
 .template-variable-catalog__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 10px;
 }
 
@@ -3137,10 +3137,9 @@ html[data-theme='dark'] .role-matrix-checkboxes .ant-checkbox-wrapper {
 }
 
 .template-variable-card__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 7px;
   min-width: 0;
 }
 
@@ -3164,12 +3163,12 @@ html[data-theme='dark'] .role-matrix-checkboxes .ant-checkbox-wrapper {
 }
 
 .template-variable-card__head .ant-tag {
-  flex: 0 0 auto;
-  max-width: 42%;
+  justify-self: start;
+  max-width: 100%;
+  height: auto;
   margin-inline-end: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: visible;
+  white-space: normal;
 }
 
 .template-variable-card__body {

@@ -142,7 +142,7 @@ export function TemplateVariableCatalog({ variables, title = '可用模板变量
         open={open}
         title={t('变量映射表')}
         footer={null}
-        width="min(920px, calc(100vw - 32px))"
+        width="min(1120px, calc(100vw - 32px))"
         onCancel={() => setOpen(false)}
         destroyOnClose
         zIndex={1400}
