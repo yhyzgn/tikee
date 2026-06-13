@@ -1,8 +1,8 @@
 .tikeo-logo {
-  --app-primary-color: var(--ifm-color-primary);
-  --app-info-color: var(--ifm-color-primary-light);
+  --app-primary-color: var(--tikeo-docs-logo-primary, #2563eb);
+  --app-info-color: var(--tikeo-docs-logo-info, #0ea5e9);
   --app-text-strong: var(--ifm-font-color-base);
-  --tikeo-logo-accent: color-mix(in srgb, var(--app-primary-color) 55%, #7c3aed);
+  --tikeo-logo-accent: var(--tikeo-docs-logo-accent, #7c3aed);
   --tikeo-logo-node-fill: #ffffff;
   --tikeo-logo-line-start: color-mix(in srgb, var(--app-primary-color) 18%, #dbeafe);
   --tikeo-logo-line-end: color-mix(in srgb, var(--app-info-color) 20%, #e0f2fe);
@@ -76,8 +76,9 @@
 }
 
 html[data-theme='dark'] .tikeo-logo {
-  --app-info-color: var(--ifm-color-primary-lightest);
-  --tikeo-logo-accent: color-mix(in srgb, var(--app-primary-color) 50%, #a78bfa);
+  --app-primary-color: var(--tikeo-docs-logo-primary, #2563eb);
+  --app-info-color: var(--tikeo-docs-logo-info, #0ea5e9);
+  --tikeo-logo-accent: var(--tikeo-docs-logo-accent, color-mix(in srgb, var(--app-primary-color) 50%, #a78bfa));
   --tikeo-logo-node-fill: #f8fafc;
   --tikeo-logo-line-start: color-mix(in srgb, var(--app-primary-color) 28%, #dbeafe);
   --tikeo-logo-line-end: color-mix(in srgb, var(--app-info-color) 38%, #e0f2fe);

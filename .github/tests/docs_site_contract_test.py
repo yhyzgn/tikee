@@ -384,6 +384,9 @@ class DocsSiteContractTest(unittest.TestCase):
         ]:
             self.assertIn(token, logo_component)
         for token in [
+            "--app-primary-color: var(--tikeo-docs-logo-primary, #2563eb)",
+            "--app-info-color: var(--tikeo-docs-logo-info, #0ea5e9)",
+            "--tikeo-logo-accent: var(--tikeo-docs-logo-accent, #7c3aed)",
             "tikeo-logo-flow 2s cubic-bezier(0.45, 0, 0.2, 1) infinite",
             "tikeo-logo-node-pulse 2s ease-in-out infinite",
             "tikeo-logo-arrow 2s cubic-bezier(0.45, 0, 0.2, 1) infinite",
