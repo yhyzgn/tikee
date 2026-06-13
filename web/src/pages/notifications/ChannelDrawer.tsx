@@ -194,13 +194,61 @@ function DrawerMetric({ label, value, tone = 'default' }: { label: string; value
   );
 }
 
-function ScopeStep({ active, label, value }: { active: boolean; label: string; value?: string }) {
+export type ChannelScopeStepStatus = 'done' | 'current' | 'pending' | 'skipped';
+
+const SCOPE_STEP_CLASS_BY_STATUS: Record<ChannelScopeStepStatus, string> = {
+  done: 'channel-scope-step--done',
+  current: 'channel-scope-step--current',
+  pending: 'channel-scope-step--pending',
+  skipped: 'channel-scope-step--skipped',
+};
+
+const SCOPE_STEP_LABEL_BY_STATUS: Record<ChannelScopeStepStatus, string> = {
+  done: '已完成',
+  current: '当前',
+  pending: '待选择',
+  skipped: '不适用',
+};
+
+export interface ChannelScopeStepModel {
+  key: 'global' | 'namespace' | 'app' | 'workerPool';
+  label: string;
+  value?: string;
+  status: ChannelScopeStepStatus;
+}
+
+export function channelScopeSteps(scopeType: string | undefined, namespace?: string, app?: string, workerPool?: string): ChannelScopeStepModel[] {
+  const ordered: ChannelScopeStepModel[] = [
+    { key: 'global', label: 'Global', value: 'global', status: 'done' },
+    { key: 'namespace', label: 'Namespace', value: namespace, status: 'pending' },
+    { key: 'app', label: 'App', value: app, status: 'pending' },
+    { key: 'workerPool', label: 'Worker Pool', value: workerPool, status: 'pending' },
+  ];
+  const requiredUntil = scopeType === 'worker_pool' ? 3 : scopeType === 'app' ? 2 : scopeType === 'namespace' ? 1 : 0;
+  let currentAssigned = false;
+  return ordered.map((step, index) => {
+    if (index > requiredUntil) return { ...step, status: 'skipped' };
+    if (index === 0 || step.value) return { ...step, status: 'done' };
+    if (!currentAssigned) {
+      currentAssigned = true;
+      return { ...step, status: 'current' };
+    }
+    return { ...step, status: 'pending' };
+  });
+}
+
+function ScopeStep({ label, status, t, value }: Omit<ChannelScopeStepModel, 'key'> & { t: (value: string) => string }) {
+  const statusLabel = SCOPE_STEP_LABEL_BY_STATUS[status];
+  const displayValue = value || t(status === 'skipped' ? '不适用' : '待选择');
   return (
-    <div className={`channel-scope-step ${active ? 'channel-scope-step--active' : ''}`}>
-      <span className="channel-scope-step__dot" />
-      <div>
-        <Typography.Text type="secondary">{label}</Typography.Text>
-        <Typography.Text strong>{value || '—'}</Typography.Text>
+    <div className={`channel-scope-step ${SCOPE_STEP_CLASS_BY_STATUS[status]}`} aria-current={status === 'current' ? 'step' : undefined}>
+      <span className="channel-scope-step__dot" aria-hidden="true" />
+      <div className="channel-scope-step__content">
+        <span className="channel-scope-step__label-row">
+          <Typography.Text type="secondary">{label}</Typography.Text>
+          <Tag>{t(statusLabel)}</Tag>
+        </span>
+        <Typography.Text strong>{displayValue}</Typography.Text>
       </div>
     </div>
   );
@@ -361,6 +409,7 @@ export function ChannelDrawer({ open, channelTypes, editingChannel, onClose, onS
   const secretControlsDisabled = Boolean(editingChannel && !replaceSecretRefs);
   const testSendSupported = currentType?.supportsTestSend === true;
   const testDisabledReason = channelTestDisabledReason(provider, messageType, editingChannel, testSendSupported);
+  const scopeSteps = channelScopeSteps(scopeType, namespace, app, workerPool);
 
   const clearScopeDependents = (nextScopeType: string) => {
     if (nextScopeType === 'global') form.setFieldsValue({ namespace: undefined, app: undefined, workerPool: undefined, secretRefs: undefined });
@@ -542,10 +591,7 @@ export function ChannelDrawer({ open, channelTypes, editingChannel, onClose, onS
               <Typography.Text strong>{t('作用域路径')}</Typography.Text>
               <Typography.Paragraph type="secondary">{t(scopeHelp(scopeType))}</Typography.Paragraph>
               <div className="channel-scope-ladder">
-                <ScopeStep active label="Global" value="global" />
-                <ScopeStep active={scopeType !== 'global'} label="Namespace" value={namespace} />
-                <ScopeStep active={scopeType === 'app' || scopeType === 'worker_pool'} label="App" value={app} />
-                <ScopeStep active={scopeType === 'worker_pool'} label="Worker Pool" value={workerPool} />
+                {scopeSteps.map(({ key, ...step }) => <ScopeStep key={key} {...step} t={t} />)}
               </div>
             </div>
 

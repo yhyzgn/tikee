@@ -85,6 +85,19 @@ describe('notification center console page', () => {
     expect(channelDrawerSource).not.toContain('密钥引用 JSON');
   });
 
+
+  test('keeps the left scope path synchronized with right-side cascade progress', () => {
+    expect(channelDrawerSource).toContain('channelScopeSteps');
+    expect(channelDrawerSource).toContain('channel-scope-step--current');
+    expect(channelDrawerSource).toContain('channel-scope-step--done');
+    expect(channelDrawerSource).toContain('channel-scope-step--pending');
+    expect(channelDrawerSource).toContain('channel-scope-step--skipped');
+    expect(channelDrawerSource).toContain('待选择');
+    expect(channelDrawerSource).toContain('当前');
+    expect(channelDrawerSource).toContain('已完成');
+    expect(channelDrawerSource).toContain('不适用');
+  });
+
   test('links channel scope, tenant resources, and secret reference choices', () => {
     for (const token of ['listNamespaces', 'listAppScopes', 'listWorkerPools', 'listSecrets']) {
       expect(channelDrawerSource).toContain(token);
@@ -159,13 +172,14 @@ describe('notification center console page', () => {
     expect(channelDrawerSource).toContain('TemplateVariableCatalog');
     expect(templateDrawerSource).toContain('TemplateVariableCatalog');
     expect(variableCatalogSource).toContain('QuestionCircleOutlined');
+    expect(variableCatalogSource).toContain('Modal');
     expect(variableCatalogSource).toContain('变量映射表');
-    expect(variableCatalogSource).toContain('占位符');
-    expect(variableCatalogSource).toContain('中文含义');
-    expect(variableCatalogSource).toContain('示例值');
-    expect(variableCatalogSource).toContain('来源/备注');
-    expect(variableCatalogSource).toContain('available-template-variables');
+    expect(variableCatalogSource).toContain('搜索变量');
+    expect(variableCatalogSource).toContain('标准字段');
+    expect(variableCatalogSource).toContain('任务上下文');
+    expect(variableCatalogSource).toContain('template-variable-catalog__grid');
     expect(variableCatalogSource).toContain('变量由消息标准字段与事件 payload 顶层字段共同提供');
+    expect(variableCatalogSource).not.toContain('<Table');
     expect(providerSchemaSource).toContain('{{jobId}}');
     expect(providerSchemaSource).toContain('{{instanceId}}');
     expect(providerSchemaSource).toContain('{{operatorName}}');

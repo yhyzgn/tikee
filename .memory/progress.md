@@ -1569,3 +1569,19 @@ Code review follow-up completed for the drawer redesign: i18n gaps closed, Advan
 - 2026-06-13: Refined notification channel drawer typography rhythm and copy density; reduced repeated explanations, normalized scoped text sizes/line heights, and kept changes limited to notification drawer UI.
 
 - 2026-06-13: Completed Notification Center template variable catalog/i18n hardening. Channel and template drawers now provide localized variable labels plus a `?` mapping table, built-in provider metadata exposes all currently supported job/payload variables, and stored template rendering now resolves payload variables like `jobId`, `instanceId`, `operatorName`, `logsUrl`, and `templateKey` against real event context. Local Rust/Web verification passed.
+
+## 2026-06-13 — Notification variable catalog and scope progress UX polish
+
+- Improved the Notification Center channel drawer variable UX for normal laptop resolutions: compact preview chips now open a searchable, segmented, grouped variable map modal with bounded scrolling and card-based placeholder/meaning/example/source presentation.
+- Replaced the old left-rail scope ladder boolean active state with a deterministic `channelScopeSteps` progress model: done/current/pending/skipped states now track the right-side Global → Namespace → App → Worker Pool cascade and show localized status labels.
+- Added zh-CN/en-US translations for the new variable map filters, empty state, group descriptions, and scope progress labels.
+- Added regression coverage for variable catalog Modal/search/group behavior and for the scope progress model.
+
+Verification:
+- `bun test web/src/pages/__tests__/NotificationCenterPage.test.tsx web/src/pages/notifications/ChannelDrawerPayload.test.ts web/src/pages/notifications/templateCatalog.test.ts web/src/i18n/i18n.test.ts` ✅ (41 passed)
+- `bun test web/src` ✅ (159 passed)
+- `bun run --cwd web typecheck` ✅
+- `bun run --cwd web lint` ✅
+- `bun run --cwd web build` ✅ (existing Vite chunk-size warning only)
+- `python3 scripts/check-source-size.py` ✅
+- `git diff --check` ✅

@@ -3088,3 +3088,15 @@ Verification:
 - Notification Center i18n audit passed: 239 keys, 0 missing zh-CN, 0 missing en-US, no suspicious English Chinese residue.
 - `python3 scripts/check-source-size.py` passed.
 - `git diff --check` passed.
+
+## 2026-06-13 — Notification drawer variable map UX follow-up
+
+User feedback: available template variables and the variable mapping table were not friendly on normal resolution, and the left-side scope path did not follow the right-side cascade progress.
+
+Implemented:
+- `TemplateVariableCatalog` now uses compact chips plus a searchable Modal with segmented filters (`all/standard/payload/custom`), grouped scrollable cards, copyable placeholders, examples, and localized group descriptions.
+- `ChannelDrawer` now exports `channelScopeSteps` and renders the left rail with explicit done/current/pending/skipped state classes and labels, synchronized with selected scope type and cascade field completion.
+- CSS now covers the new modal/grid/card density, responsive fallback, focus/hover states, and four distinct scope ladder states.
+- i18n dictionaries gained zh-CN/en-US entries for all new operator-facing copy.
+
+Verification passed locally: targeted notification/i18n tests, full `bun test web/src`, Web typecheck/lint/build, source-size audit, and `git diff --check`.

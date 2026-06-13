@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import type { NotificationChannelSummary } from '../../api/notifications';
-import { buildChannelSubmitPayload, type ChannelFormValues } from './ChannelDrawer';
+import { buildChannelSubmitPayload, channelScopeSteps, type ChannelFormValues } from './ChannelDrawer';
 import { providerSchemaFor } from './providerSchema';
 
 const editingChannel = {
@@ -95,5 +95,26 @@ describe('channel drawer submit payload builder', () => {
       schema,
       values: baseValues({ replaceSecretRefs: true, secretRefs: { url: 'https://hooks.example.com/...' } }),
     })).toThrow('脱敏占位符');
+  });
+});
+
+
+describe('channel drawer scope progress model', () => {
+  test('marks the next missing scoped field as current instead of blindly activating every requested level', () => {
+    expect(channelScopeSteps('worker_pool', 'prod', undefined, undefined).map((step) => [step.key, step.status])).toEqual([
+      ['global', 'done'],
+      ['namespace', 'done'],
+      ['app', 'current'],
+      ['workerPool', 'pending'],
+    ]);
+  });
+
+  test('marks irrelevant lower levels as skipped for namespace scoped channels', () => {
+    expect(channelScopeSteps('namespace', 'prod', undefined, undefined).map((step) => [step.key, step.status])).toEqual([
+      ['global', 'done'],
+      ['namespace', 'done'],
+      ['app', 'skipped'],
+      ['workerPool', 'skipped'],
+    ]);
   });
 });
