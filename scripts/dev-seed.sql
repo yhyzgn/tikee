@@ -311,6 +311,164 @@ ON CONFLICT(id) DO UPDATE SET
   condition = excluded.condition,
   created_at = excluded.created_at;
 
+
+-- Notification Center failure/success/status demo data for card rendering and public console passthrough.
+-- These rows are intentionally persisted seed data, not provider metadata: after applying the seed,
+-- the Notification Center page and /public/instances/{id}/console can be opened immediately.
+INSERT INTO jobs (id, namespace_id, app_id, name, schedule_type, schedule_expr, processor_name, misfire_policy, enabled, canary_percent, retry_policy_json, created_at, updated_at)
+VALUES
+  ('job-dev-notify-exception', 'ns-dev-default', 'app-dev-observability', 'AutoGenerateStockPdfRecordAfterDateTask', 'api', NULL, 'demo.exception', 'ignore', 1, 0, '{"enabled":true,"maxAttempts":3,"initialDelaySeconds":5,"backoffMultiplier":2,"maxDelaySeconds":60}', '2026-06-11T17:35:17+08:00', '2026-06-11T17:35:57+08:00'),
+  ('job-dev-notify-success', 'ns-dev-default', 'app-dev-observability', 'RebuildCustomerStatementTask', 'api', NULL, 'demo.echo', 'ignore', 1, 0, '{"enabled":true,"maxAttempts":3,"initialDelaySeconds":5,"backoffMultiplier":2,"maxDelaySeconds":60}', '2026-06-11T17:40:00+08:00', '2026-06-11T17:40:12+08:00')
+ON CONFLICT(id) DO UPDATE SET
+  namespace_id = excluded.namespace_id,
+  app_id = excluded.app_id,
+  name = excluded.name,
+  schedule_type = excluded.schedule_type,
+  schedule_expr = excluded.schedule_expr,
+  processor_name = excluded.processor_name,
+  misfire_policy = excluded.misfire_policy,
+  enabled = excluded.enabled,
+  canary_percent = excluded.canary_percent,
+  retry_policy_json = excluded.retry_policy_json,
+  updated_at = excluded.updated_at;
+
+INSERT INTO job_instances (id, job_id, status, trigger_type, execution_mode, result_worker_id, result_success, result_message, result_completed_at, created_at, updated_at)
+VALUES
+  ('inst-dev-notify-feishu-failed', 'job-dev-notify-exception', 'failed', 'api', 'single', '172.16.103.25:9999', 0, '参数不能为空 should not be empty', '2026-06-11T17:35:57+08:00', '2026-06-11T17:35:17+08:00', '2026-06-11T17:35:57+08:00'),
+  ('inst-dev-notify-feishu-succeeded', 'job-dev-notify-success', 'succeeded', 'api', 'single', '172.16.103.26:9999', 1, 'statement rebuilt successfully', '2026-06-11T17:40:12+08:00', '2026-06-11T17:40:00+08:00', '2026-06-11T17:40:12+08:00'),
+  ('inst-dev-notify-feishu-running', 'job-dev-notify-success', 'running', 'api', 'single', '172.16.103.27:9999', NULL, NULL, NULL, '2026-06-11T17:45:00+08:00', '2026-06-11T17:45:05+08:00')
+ON CONFLICT(id) DO UPDATE SET
+  job_id = excluded.job_id,
+  status = excluded.status,
+  trigger_type = excluded.trigger_type,
+  execution_mode = excluded.execution_mode,
+  result_worker_id = excluded.result_worker_id,
+  result_success = excluded.result_success,
+  result_message = excluded.result_message,
+  result_completed_at = excluded.result_completed_at,
+  created_at = excluded.created_at,
+  updated_at = excluded.updated_at;
+
+INSERT INTO job_instance_attempts (id, instance_id, worker_id, status, created_at, updated_at)
+VALUES
+  ('attempt-dev-notify-feishu-failed-1', 'inst-dev-notify-feishu-failed', '172.16.103.25:9999', 'failed', '2026-06-11T17:35:17+08:00', '2026-06-11T17:35:57+08:00'),
+  ('attempt-dev-notify-feishu-succeeded-1', 'inst-dev-notify-feishu-succeeded', '172.16.103.26:9999', 'succeeded', '2026-06-11T17:40:00+08:00', '2026-06-11T17:40:12+08:00'),
+  ('attempt-dev-notify-feishu-running-1', 'inst-dev-notify-feishu-running', '172.16.103.27:9999', 'running', '2026-06-11T17:45:00+08:00', '2026-06-11T17:45:05+08:00')
+ON CONFLICT(id) DO UPDATE SET
+  instance_id = excluded.instance_id,
+  worker_id = excluded.worker_id,
+  status = excluded.status,
+  created_at = excluded.created_at,
+  updated_at = excluded.updated_at;
+
+INSERT INTO job_instance_logs (id, instance_id, worker_id, level, message, sequence, created_at)
+VALUES
+  ('log-dev-notify-feishu-failed-1', 'inst-dev-notify-feishu-failed', '172.16.103.25:9999', 'info', '[demo.exception] accepted payload={"date":"2026-06-11","warehouse":"SH-A"}', 1, '2026-06-11T17:35:18+08:00'),
+  ('log-dev-notify-feishu-failed-2', 'inst-dev-notify-feishu-failed', '172.16.103.25:9999', 'error', 'java.lang.IllegalArgumentException: 参数不能为空 should not be empty\n\tat net.tikeo.examples.worker.processor.FailingTaskProcessor.exception(FailingTaskProcessor.java:27)\n\tat net.tikeo.spring.processor.TikeoProcessorAdapter.handle(TikeoProcessorAdapter.java:37)', 2, '2026-06-11T17:35:57+08:00'),
+  ('log-dev-notify-feishu-failed-3', 'inst-dev-notify-feishu-failed', '172.16.103.25:9999', 'error', 'authorization=Bearer demo-token-will-be-redacted routingKey:demo-routing-key signingKey=demo-signing-key', 3, '2026-06-11T17:35:58+08:00'),
+  ('log-dev-notify-feishu-succeeded-1', 'inst-dev-notify-feishu-succeeded', '172.16.103.26:9999', 'info', '[demo.echo] rebuilt 128 customer statements', 1, '2026-06-11T17:40:10+08:00'),
+  ('log-dev-notify-feishu-running-1', 'inst-dev-notify-feishu-running', '172.16.103.27:9999', 'info', '[demo.heartbeat] worker still processing shard 2/4', 1, '2026-06-11T17:45:05+08:00')
+ON CONFLICT(id) DO UPDATE SET
+  instance_id = excluded.instance_id,
+  worker_id = excluded.worker_id,
+  level = excluded.level,
+  message = excluded.message,
+  sequence = excluded.sequence,
+  created_at = excluded.created_at;
+
+INSERT INTO notification_channels (id, scope_type, namespace, app, worker_pool, name, provider, enabled, config_json, secret_refs_json, target_redacted, safety_policy_json, created_by, updated_by, created_at, updated_at)
+VALUES
+  ('notif-channel-dev-feishu-interactive', 'app', 'default', 'observability-demo', NULL, 'Dev Feishu Job Card', 'feishu', 1, '{"messageType":"interactive","template":{"messageType":"interactive","card":{"config":{"wide_screen_mode":true},"header":{"template":"red","title":{"tag":"plain_text","content":"存证系统 - Tikeo Job 任务通知"}},"elements":[{"tag":"div","text":{"tag":"lark_md","content":"**报警类型**：{{subject}}\n**运行环境**：{{namespace}}\n**应用**：{{app}}\n**任务Handler**：{{jobId}}\n**任务名称**：{{jobName}}\n**触发时间**：{{startedAt}}\n**运行机器**：{{workerId}}\n**执行结果**：{{status}}\n**失败原因**：{{reason}}"}},{"tag":"hr"},{"tag":"action","actions":[{"tag":"button","text":{"tag":"plain_text","content":"查看控制台"},"type":"danger","url":"{{consoleUrl}}"}]}]}}}', '{"url":"https://open.feishu.cn/open-apis/bot/v2/hook/dev-seed-token","signingKey":"dev-seed-signing-key"}', 'https://open.feishu.cn/open-apis/bot/v2/hook/***', NULL, 'dev-seed', 'dev-seed', '2026-06-11T17:35:00+08:00', '2026-06-11T17:35:00+08:00')
+ON CONFLICT(id) DO UPDATE SET
+  scope_type = excluded.scope_type,
+  namespace = excluded.namespace,
+  app = excluded.app,
+  worker_pool = excluded.worker_pool,
+  name = excluded.name,
+  provider = excluded.provider,
+  enabled = excluded.enabled,
+  config_json = excluded.config_json,
+  secret_refs_json = excluded.secret_refs_json,
+  target_redacted = excluded.target_redacted,
+  safety_policy_json = excluded.safety_policy_json,
+  updated_by = excluded.updated_by,
+  updated_at = excluded.updated_at;
+
+INSERT INTO notification_templates (id, template_key, name, description, provider, message_type, enabled, body_json, variables_json, created_by, updated_by, created_at, updated_at)
+VALUES
+  ('notif-template-dev-feishu-job-card', 'dev.feishu.job-card', 'Dev Feishu job card', 'Failure/success/status card persisted by scripts/dev-seed.sql for manual Notification Center acceptance.', 'feishu', 'interactive', 1, '{"messageType":"interactive","card":{"config":{"wide_screen_mode":true},"header":{"template":"red","title":{"tag":"plain_text","content":"存证系统 - Tikeo Job 任务通知"}},"elements":[{"tag":"div","text":{"tag":"lark_md","content":"**报警类型**：{{subject}}\n**运行环境**：{{namespace}}\n**应用**：{{app}}\n**任务Handler**：{{jobId}}\n**任务名称**：{{jobName}}\n**触发时间**：{{startedAt}}\n**运行机器**：{{workerId}}\n**执行结果**：{{status}}\n**失败原因**：{{reason}}"}},{"tag":"hr"},{"tag":"action","actions":[{"tag":"button","text":{"tag":"plain_text","content":"查看控制台"},"type":"danger","url":"{{consoleUrl}}"}]}]}}', '{"required":["subject","namespace","app","jobId","jobName","startedAt","workerId","status","reason","consoleUrl"]}', 'dev-seed', 'dev-seed', '2026-06-11T17:35:00+08:00', '2026-06-11T17:35:00+08:00')
+ON CONFLICT(id) DO UPDATE SET
+  template_key = excluded.template_key,
+  name = excluded.name,
+  description = excluded.description,
+  provider = excluded.provider,
+  message_type = excluded.message_type,
+  enabled = excluded.enabled,
+  body_json = excluded.body_json,
+  variables_json = excluded.variables_json,
+  updated_by = excluded.updated_by,
+  updated_at = excluded.updated_at;
+
+INSERT INTO notification_policies (id, name, enabled, owner_type, owner_id, event_family, event_filter_json, channel_refs_json, template_ref, severity, dedupe_seconds, throttle_json, quiet_hours_json, escalation_json, created_by, updated_by, created_at, updated_at)
+VALUES
+  ('notif-policy-dev-feishu-job-card', 'Dev Feishu job card acceptance policy', 1, 'job', 'job-dev-notify-exception', 'job_instance', '{"statuses":["failed","succeeded","running"],"eventTypes":["job_instance.failed","job_instance.succeeded","job_instance.running"]}', '[{"channelId":"notif-channel-dev-feishu-interactive"}]', 'dev.feishu.job-card', 'critical', 300, NULL, NULL, NULL, 'dev-seed', 'dev-seed', '2026-06-11T17:35:00+08:00', '2026-06-11T17:35:00+08:00')
+ON CONFLICT(id) DO UPDATE SET
+  name = excluded.name,
+  enabled = excluded.enabled,
+  owner_type = excluded.owner_type,
+  owner_id = excluded.owner_id,
+  event_family = excluded.event_family,
+  event_filter_json = excluded.event_filter_json,
+  channel_refs_json = excluded.channel_refs_json,
+  template_ref = excluded.template_ref,
+  severity = excluded.severity,
+  dedupe_seconds = excluded.dedupe_seconds,
+  throttle_json = excluded.throttle_json,
+  quiet_hours_json = excluded.quiet_hours_json,
+  escalation_json = excluded.escalation_json,
+  updated_by = excluded.updated_by,
+  updated_at = excluded.updated_at;
+
+INSERT INTO notification_messages (id, source_type, source_id, policy_id, event_type, resource_type, resource_id, severity, subject, body, payload_json, dedupe_key, trace_id, status, created_at, updated_at)
+VALUES
+  ('notif-msg-dev-feishu-failed', 'job_instance', 'inst-dev-notify-feishu-failed', 'notif-policy-dev-feishu-job-card', 'job_instance.failed', 'job', 'job-dev-notify-exception', 'critical', '任务执行失败报警', 'Job AutoGenerateStockPdfRecordAfterDateTask instance inst-dev-notify-feishu-failed emitted job_instance.failed: 参数不能为空 should not be empty', '{"eventType":"job_instance.failed","jobId":"job-dev-notify-exception","jobName":"AutoGenerateStockPdfRecordAfterDateTask","resourceType":"job","resourceId":"job-dev-notify-exception","namespace":"default","app":"observability-demo","instanceId":"inst-dev-notify-feishu-failed","status":"failed","triggerType":"api","executionMode":"single","startedAt":"2026-06-11T17:35:17+08:00","finishedAt":"2026-06-11T17:35:57+08:00","workerId":"172.16.103.25:9999","operatorType":"system","operatorName":"tikeo","logsUrl":"/public/instances/inst-dev-notify-feishu-failed/console","consoleUrl":"/public/instances/inst-dev-notify-feishu-failed/console","reason":"参数不能为空 should not be empty","severity":"critical","policyId":"notif-policy-dev-feishu-job-card","dedupeKey":"notif-policy-dev-feishu-job-card:inst-dev-notify-feishu-failed:job_instance.failed","job":{"id":"job-dev-notify-exception","name":"AutoGenerateStockPdfRecordAfterDateTask","namespace":"default","app":"observability-demo","executionMode":"single"},"instance":{"id":"inst-dev-notify-feishu-failed","status":"failed","triggerType":"api","executionMode":"single","startedAt":"2026-06-11T17:35:17+08:00","finishedAt":"2026-06-11T17:35:57+08:00","workerId":"172.16.103.25:9999"},"operator":{"type":"system","name":"tikeo"},"console":{"url":"/public/instances/inst-dev-notify-feishu-failed/console"},"logs":{"url":"/public/instances/inst-dev-notify-feishu-failed/console","excerpt":null}}', 'notif-policy-dev-feishu-job-card:inst-dev-notify-feishu-failed:job_instance.failed', 'trace-dev-feishu-failed', 'delivered', '2026-06-11T17:35:58+08:00', '2026-06-11T17:35:59+08:00'),
+  ('notif-msg-dev-feishu-succeeded', 'job_instance', 'inst-dev-notify-feishu-succeeded', 'notif-policy-dev-feishu-job-card', 'job_instance.succeeded', 'job', 'job-dev-notify-success', 'info', '任务执行成功通知', 'Job RebuildCustomerStatementTask instance inst-dev-notify-feishu-succeeded emitted job_instance.succeeded', '{"eventType":"job_instance.succeeded","jobId":"job-dev-notify-success","jobName":"RebuildCustomerStatementTask","resourceType":"job","resourceId":"job-dev-notify-success","namespace":"default","app":"observability-demo","instanceId":"inst-dev-notify-feishu-succeeded","status":"succeeded","triggerType":"api","executionMode":"single","startedAt":"2026-06-11T17:40:00+08:00","finishedAt":"2026-06-11T17:40:12+08:00","workerId":"172.16.103.26:9999","operatorType":"system","operatorName":"tikeo","logsUrl":"/public/instances/inst-dev-notify-feishu-succeeded/console","consoleUrl":"/public/instances/inst-dev-notify-feishu-succeeded/console","reason":"-","severity":"info","policyId":"notif-policy-dev-feishu-job-card","dedupeKey":"notif-policy-dev-feishu-job-card:inst-dev-notify-feishu-succeeded:job_instance.succeeded","job":{"id":"job-dev-notify-success","name":"RebuildCustomerStatementTask","namespace":"default","app":"observability-demo","executionMode":"single"},"instance":{"id":"inst-dev-notify-feishu-succeeded","status":"succeeded","triggerType":"api","executionMode":"single","startedAt":"2026-06-11T17:40:00+08:00","finishedAt":"2026-06-11T17:40:12+08:00","workerId":"172.16.103.26:9999"},"operator":{"type":"system","name":"tikeo"},"console":{"url":"/public/instances/inst-dev-notify-feishu-succeeded/console"},"logs":{"url":"/public/instances/inst-dev-notify-feishu-succeeded/console","excerpt":null}}', 'notif-policy-dev-feishu-job-card:inst-dev-notify-feishu-succeeded:job_instance.succeeded', 'trace-dev-feishu-succeeded', 'delivered', '2026-06-11T17:40:13+08:00', '2026-06-11T17:40:14+08:00'),
+  ('notif-msg-dev-feishu-running', 'job_instance', 'inst-dev-notify-feishu-running', 'notif-policy-dev-feishu-job-card', 'job_instance.running', 'job', 'job-dev-notify-success', 'info', '任务执行状态通知', 'Job RebuildCustomerStatementTask instance inst-dev-notify-feishu-running emitted job_instance.running', '{"eventType":"job_instance.running","jobId":"job-dev-notify-success","jobName":"RebuildCustomerStatementTask","resourceType":"job","resourceId":"job-dev-notify-success","namespace":"default","app":"observability-demo","instanceId":"inst-dev-notify-feishu-running","status":"running","triggerType":"api","executionMode":"single","startedAt":"2026-06-11T17:45:00+08:00","finishedAt":"2026-06-11T17:45:05+08:00","workerId":"172.16.103.27:9999","operatorType":"system","operatorName":"tikeo","logsUrl":"/public/instances/inst-dev-notify-feishu-running/console","consoleUrl":"/public/instances/inst-dev-notify-feishu-running/console","reason":"-","severity":"info","policyId":"notif-policy-dev-feishu-job-card","dedupeKey":"notif-policy-dev-feishu-job-card:inst-dev-notify-feishu-running:job_instance.running","job":{"id":"job-dev-notify-success","name":"RebuildCustomerStatementTask","namespace":"default","app":"observability-demo","executionMode":"single"},"instance":{"id":"inst-dev-notify-feishu-running","status":"running","triggerType":"api","executionMode":"single","startedAt":"2026-06-11T17:45:00+08:00","finishedAt":"2026-06-11T17:45:05+08:00","workerId":"172.16.103.27:9999"},"operator":{"type":"system","name":"tikeo"},"console":{"url":"/public/instances/inst-dev-notify-feishu-running/console"},"logs":{"url":"/public/instances/inst-dev-notify-feishu-running/console","excerpt":null}}', 'notif-policy-dev-feishu-job-card:inst-dev-notify-feishu-running:job_instance.running', 'trace-dev-feishu-running', 'pending', '2026-06-11T17:45:06+08:00', '2026-06-11T17:45:06+08:00')
+ON CONFLICT(id) DO UPDATE SET
+  source_type = excluded.source_type,
+  source_id = excluded.source_id,
+  policy_id = excluded.policy_id,
+  event_type = excluded.event_type,
+  resource_type = excluded.resource_type,
+  resource_id = excluded.resource_id,
+  severity = excluded.severity,
+  subject = excluded.subject,
+  body = excluded.body,
+  payload_json = excluded.payload_json,
+  dedupe_key = excluded.dedupe_key,
+  trace_id = excluded.trace_id,
+  status = excluded.status,
+  updated_at = excluded.updated_at;
+
+INSERT INTO notification_delivery_attempts (id, message_id, policy_id, channel_id, provider, target_redacted, attempt, delivered, status_code, error, retry_state, next_retry_at, created_at)
+VALUES
+  ('notif-attempt-dev-feishu-failed-1', 'notif-msg-dev-feishu-failed', 'notif-policy-dev-feishu-job-card', 'notif-channel-dev-feishu-interactive', 'feishu', 'https://open.feishu.cn/open-apis/bot/v2/hook/***', 1, 1, 200, NULL, 'delivered', NULL, '2026-06-11T17:35:59+08:00'),
+  ('notif-attempt-dev-feishu-succeeded-1', 'notif-msg-dev-feishu-succeeded', 'notif-policy-dev-feishu-job-card', 'notif-channel-dev-feishu-interactive', 'feishu', 'https://open.feishu.cn/open-apis/bot/v2/hook/***', 1, 1, 200, NULL, 'delivered', NULL, '2026-06-11T17:40:14+08:00'),
+  ('notif-attempt-dev-feishu-running-1', 'notif-msg-dev-feishu-running', 'notif-policy-dev-feishu-job-card', 'notif-channel-dev-feishu-interactive', 'feishu', 'https://open.feishu.cn/open-apis/bot/v2/hook/***', 1, 0, NULL, 'demo seed keeps running/status card pending for retry inspection', 'retry_pending', '2026-06-11T17:50:06+08:00', '2026-06-11T17:45:06+08:00')
+ON CONFLICT(id) DO UPDATE SET
+  message_id = excluded.message_id,
+  policy_id = excluded.policy_id,
+  channel_id = excluded.channel_id,
+  provider = excluded.provider,
+  target_redacted = excluded.target_redacted,
+  attempt = excluded.attempt,
+  delivered = excluded.delivered,
+  status_code = excluded.status_code,
+  error = excluded.error,
+  retry_state = excluded.retry_state,
+  next_retry_at = excluded.next_retry_at,
+  created_at = excluded.created_at;
+
 INSERT INTO audit_logs (id, actor, action, resource_type, resource_id, detail, before, after, trace_id, result, failure_reason, ip_address, created_at)
 VALUES
   ('audit-dev-seed-jobs', 'dev-seed', 'seed', 'jobs', 'job-dev-api-hello', 'Inserted development jobs and pending queue sample', NULL, NULL, 'trace-dev-seed', 'success', NULL, '127.0.0.1', '2026-01-01T00:00:00Z'),

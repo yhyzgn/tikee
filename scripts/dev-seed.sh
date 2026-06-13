@@ -34,5 +34,10 @@ UNION ALL SELECT 'scripts', COUNT(*) FROM scripts WHERE id LIKE 'script-dev-%'
 UNION ALL SELECT 'script_language_examples', COUNT(*) FROM scripts WHERE id LIKE 'script-dev-%-example'
 UNION ALL SELECT 'script_jobs', COUNT(*) FROM jobs WHERE id LIKE 'job-dev-script-%-example'
 UNION ALL SELECT 'workflows', COUNT(*) FROM workflows WHERE id LIKE 'wf-dev-%'
+UNION ALL SELECT 'notification_channels', COUNT(*) FROM notification_channels WHERE id LIKE 'notif-channel-dev-%'
+UNION ALL SELECT 'notification_templates', COUNT(*) FROM notification_templates WHERE id LIKE 'notif-template-dev-%'
+UNION ALL SELECT 'notification_policies', COUNT(*) FROM notification_policies WHERE id LIKE 'notif-policy-dev-%'
+UNION ALL SELECT 'notification_messages', COUNT(*) FROM notification_messages WHERE id LIKE 'notif-msg-dev-%'
+UNION ALL SELECT 'notification_attempts', COUNT(*) FROM notification_delivery_attempts WHERE id LIKE 'notif-attempt-dev-%'
 UNION ALL SELECT 'queue', COUNT(*) FROM dispatch_queue WHERE id LIKE 'queue-dev-%';
 SQL
