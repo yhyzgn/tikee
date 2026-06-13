@@ -3,6 +3,7 @@ import Link from '@docusaurus/Link';
 import Layout from '@theme/Layout';
 import Heading from '@theme/Heading';
 import useBaseUrl from '@docusaurus/useBaseUrl';
+import TikeoLogoMark from '@site/src/components/TikeoLogoMark';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 
 import styles from './index.module.css';
@@ -36,26 +37,26 @@ const copy: Record<'en' | 'zh-CN', LocaleCopy> = {
     title: 'Tikeo operator manual',
     description: 'Human-readable Tikeo manuals for deployment, SDK integration, configuration, development, and operations.',
     eyebrow: 'Tikeo documentation',
-    headline: 'Deploy it, connect Workers, configure it, and prove it works.',
-    subtitle: 'A human operator manual for Tikeo: local quickstart, production deployment, SDK/API integration, Notification Center, configuration recipes, and development boundaries.',
-    primaryCta: 'Run the quickstart',
-    deployCta: 'Deploy production',
-    integrateCta: 'Integrate an app',
-    logoAlt: 'Tikeo breathing task-flow logo',
-    logoCaption: 'Server · Worker Tunnel · SDKs · Notifications · Audit',
-    pathTitle: 'Choose the path that matches your job',
-    pathBody: 'The docs are organized by what you need to accomplish, not by source-code directory. Start with the closest role, then use the reference pages only when you need exact defaults or API details.',
+    headline: 'A control plane for scheduled work, workflow execution, and outbound Workers.',
+    subtitle: 'Use these docs to evaluate Tikeo locally, deploy a production topology, connect SDK Workers, configure notifications, and operate with auditable execution evidence.',
+    primaryCta: 'Start locally',
+    deployCta: 'Plan production',
+    integrateCta: 'Connect SDKs',
+    logoAlt: 'Tikeo animated orbital control-plane logo',
+    logoCaption: 'Server · Worker Tunnel · SDKs · Notifications · Audit trail',
+    pathTitle: 'Start from the work you need to complete',
+    pathBody: 'The documentation is organized around operational outcomes: evaluating the platform, deploying it, integrating Workers, and tuning configuration with exact defaults when needed.',
     architectureAlt: 'Tikeo architecture diagram',
-    quickTitle: 'A real first proof should produce evidence, not only a running process.',
-    quickBody: 'Start Server, bootstrap Owner, create app-scoped credentials, connect a Worker outbound, trigger a job through the SDK Management API, and inspect instance logs.',
-    quickEyebrow: 'Evidence path',
-    manualsTitle: 'Manuals',
-    manualsBody: 'Common deep manuals.',
+    quickTitle: 'Bring up a local control plane and collect execution evidence.',
+    quickBody: 'Start the Server and Web console, bootstrap the Owner account, issue app-scoped credentials, connect a Worker through the outbound tunnel, trigger a job, and review the resulting instance logs.',
+    quickEyebrow: 'Verification path',
+    manualsTitle: 'Reference manuals',
+    manualsBody: 'Detailed guides for capabilities that usually need policy, integration, or production-readiness decisions.',
     paths: [
-      {title: 'Evaluate locally', body: 'Install tools, start Server/Web, connect one Worker, and run the management trigger smoke.', to: '/docs/getting-started/quickstart'},
-      {title: 'Deploy and operate', body: 'Choose Compose, single binary, or Helm; configure database, TLS, Worker Tunnel, backups, and rollout checks.', to: '/docs/deployment/production'},
-      {title: 'Integrate an application', body: 'Use SDK Worker clients and app-scoped Management API keys to create and trigger jobs safely.', to: '/docs/integrations/sdk-and-api'},
-      {title: 'Configure by scenario', body: 'Copy recipes for local dev, PostgreSQL, MySQL, TLS/mTLS, OIDC, observability, notifications, and Worker defaults.', to: '/docs/reference/configuration-cookbook'},
+      {title: 'Evaluate locally', body: 'Install the toolchain, start Server and Web, connect one outbound Worker, and run the Management API trigger smoke.', to: '/docs/getting-started/quickstart'},
+      {title: 'Deploy and operate', body: 'Choose a binary, Compose, or Kubernetes path; configure storage, TLS, Worker Tunnel networking, backups, and rollout checks.', to: '/docs/deployment/production'},
+      {title: 'Integrate applications', body: 'Connect Rust, Go, Java, Python, or Node.js Workers and use app-scoped Management API keys for controlled job creation and triggering.', to: '/docs/integrations/sdk-and-api'},
+      {title: 'Tune configuration', body: 'Use scenario recipes for local development, databases, TLS/mTLS, OIDC, observability, notifications, and Worker defaults.', to: '/docs/reference/configuration-cookbook'},
     ],
     manuals: [
       {title: 'Notification Center', body: 'Channels, templates, policies, task-status bindings, delivery attempts, message trace, and provider redaction.', to: '/docs/user-guide/notifications'},
@@ -68,26 +69,26 @@ const copy: Record<'en' | 'zh-CN', LocaleCopy> = {
     title: 'Tikeo 运维手册',
     description: '面向人的 Tikeo 文档：部署、SDK 集成、配置、开发扩展与运维验收。',
     eyebrow: 'Tikeo 文档',
-    headline: '照着部署、接入 Worker、配置系统，并证明它真的可用。',
-    subtitle: '这是 Tikeo 的人类运维手册：本地快速开始、生产部署、SDK/API 集成、通知中心、配置 recipe 和开发边界。',
-    primaryCta: '运行快速开始',
-    deployCta: '生产部署',
-    integrateCta: '接入应用',
-    logoAlt: 'Tikeo 呼吸式任务流标志',
-    logoCaption: 'Server · Worker Tunnel · SDK · 通知 · 审计',
-    pathTitle: '按你的任务选择阅读路径',
-    pathBody: '文档按“你要完成什么”组织，而不是按源码目录堆叠。先选择最接近的角色路径，需要精确默认值或 API 细节时再进入参考页。',
+    headline: '面向计划任务、工作流与出站 Worker 的执行控制平面。',
+    subtitle: '从本地评估到生产部署，系统说明如何接入 SDK Worker、配置通知与权限、治理脚本执行，并基于实例日志和审计记录完成验收。',
+    primaryCta: '本地启动',
+    deployCta: '规划生产部署',
+    integrateCta: '接入 SDK',
+    logoAlt: 'Tikeo 动画轨道控制平面标志',
+    logoCaption: 'Server · Worker Tunnel · SDK · 通知 · 审计链路',
+    pathTitle: '按交付目标选择阅读路径',
+    pathBody: '文档围绕实际运维结果组织：评估平台、完成部署、接入 Worker、调优配置，并在需要时进入参考页核对默认值与 API 细节。',
     architectureAlt: 'Tikeo 架构图',
-    quickTitle: '第一次验收应该产出证据，而不只是一个进程。',
-    quickBody: '启动 Server，初始化 Owner，创建应用级凭证，让 Worker 主动出站连接，通过 SDK Management API 触发任务，并检查实例日志。',
-    quickEyebrow: '证据路径',
-    manualsTitle: '深入手册',
-    manualsBody: '常用深入手册。',
+    quickTitle: '启动本地控制平面，并产出可核验的执行记录。',
+    quickBody: '启动 Server 与 Web 控制台，初始化 Owner，签发应用级凭证，让 Worker 通过出站隧道连接，触发任务后检查实例日志与状态流转。',
+    quickEyebrow: '验收路径',
+    manualsTitle: '能力手册',
+    manualsBody: '面向策略、集成和生产可用性决策的详细说明。',
     paths: [
-      {title: '本地评估', body: '安装工具、启动 Server/Web、连接一个 Worker，并运行 management trigger smoke。', to: '/docs/getting-started/quickstart'},
-      {title: '部署与运维', body: '选择 Compose、单二进制或 Helm；配置数据库、TLS、Worker Tunnel、备份和发布检查。', to: '/docs/deployment/production'},
-      {title: '接入应用', body: '用 SDK Worker 客户端和应用级 Management API Key 安全创建与触发任务。', to: '/docs/integrations/sdk-and-api'},
-      {title: '按场景配置', body: '复制本地开发、PostgreSQL、MySQL、TLS/mTLS、OIDC、观测、通知和 Worker 默认值 recipe。', to: '/docs/reference/configuration-cookbook'},
+      {title: '本地评估', body: '安装工具链，启动 Server 与 Web，连接一个出站 Worker，并运行 Management API 触发链路 smoke。', to: '/docs/getting-started/quickstart'},
+      {title: '部署与运维', body: '选择单二进制、Compose 或 Kubernetes 路径；配置存储、TLS、Worker Tunnel 网络、备份和发布检查。', to: '/docs/deployment/production'},
+      {title: '接入应用', body: '接入 Rust、Go、Java、Python 或 Node.js Worker，并用应用级 Management API Key 控制作业创建与触发。', to: '/docs/integrations/sdk-and-api'},
+      {title: '调优配置', body: '按场景核对本地开发、数据库、TLS/mTLS、OIDC、观测、通知和 Worker 默认值。', to: '/docs/reference/configuration-cookbook'},
     ],
     manuals: [
       {title: '通知中心', body: '渠道、模板、策略、任务状态绑定、投递 attempt、消息 trace 和 provider 脱敏。', to: '/docs/user-guide/notifications'},
@@ -117,7 +118,6 @@ export default function Home(): ReactNode {
   const {i18n} = useDocusaurusContext();
   const localeCopy = i18n.currentLocale === 'zh-CN' ? copy['zh-CN'] : copy.en;
   const localeSuffix = i18n.currentLocale === 'zh-CN' ? 'zh-CN' : 'en';
-  const logoUrl = useBaseUrl('/img/tikeo-logo-breathe.gif');
   const architectureUrl = useBaseUrl(`/img/tikeo-architecture.${localeSuffix}.svg`);
 
   return (
@@ -145,7 +145,7 @@ export default function Home(): ReactNode {
                 </div>
               </div>
               <div className={styles.logoCard} aria-label={localeCopy.logoAlt}>
-                <img src={logoUrl} alt={localeCopy.logoAlt} />
+                <TikeoLogoMark className={styles.heroLogo} title={localeCopy.logoAlt} size={220} />
                 <span>{localeCopy.logoCaption}</span>
               </div>
             </div>

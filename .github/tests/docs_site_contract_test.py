@@ -285,7 +285,7 @@ class DocsSiteContractTest(unittest.TestCase):
         self.assertFalse(LEGACY_WEBSITE.exists(), "legacy website/ module must be removed after migration to docs/")
         self.assertFalse((DOCS_SITE / "assets").exists(), "legacy docs/assets must move out before docs/ becomes the docs site")
         for asset in [
-            "tikeo-logo-breathe.gif",
+            "tikeo-logo-orbit.svg",
             "tikeo-console-tour.gif",
             "tikeo-architecture.en.svg",
             "tikeo-architecture.zh-CN.svg",
@@ -355,7 +355,25 @@ class DocsSiteContractTest(unittest.TestCase):
         self.assertIn("TIKEO_DOCS_BASE_URL", config)
         self.assertIn("?? '/'", config)
         self.assertIn("useBaseUrl", homepage)
+        self.assertIn("TikeoLogoMark", homepage)
         self.assertIn("i18n.currentLocale === 'zh-CN'", homepage)
+        self.assertNotIn("tikeo-logo-breathe.gif", config + homepage)
+        self.assertNotIn("照着部署、接入 Worker、配置系统", homepage)
+
+    def test_docs_logo_uses_theme_driven_animated_svg(self):
+        config = (DOCS_SITE / "docusaurus.config.ts").read_text()
+        homepage = (DOCS_SITE / "src/pages/index.tsx").read_text()
+        logo_component = (DOCS_SITE / "src/components/TikeoLogoMark/index.tsx").read_text()
+        logo_styles = (DOCS_SITE / "src/components/TikeoLogoMark/styles.module.css").read_text()
+        readme = (ROOT / "README.md").read_text() + (ROOT / "README.zh-CN.md").read_text()
+        self.assertIn("img/tikeo-logo-orbit.svg", config)
+        self.assertIn("TikeoLogoMark", homepage)
+        self.assertIn("useId", logo_component)
+        self.assertIn("--ifm-color-primary", logo_styles)
+        self.assertIn("html[data-theme='dark']", logo_styles)
+        self.assertIn("prefers-reduced-motion", logo_styles)
+        self.assertIn("assets/docs/tikeo-logo-orbit.svg", readme)
+        self.assertNotIn("tikeo-logo-breathe.gif", config + homepage + logo_component + logo_styles + readme)
 
     def test_zh_navigation_sidebar_footer_are_localized(self):
         files = {

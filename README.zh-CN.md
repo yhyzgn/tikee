@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/docs/tikeo-logo-breathe.gif" alt="Tikeo animated logo" width="148" height="148" />
+  <img src="assets/docs/tikeo-logo-orbit.svg" alt="Tikeo animated orbital logo" width="148" height="148" />
 </p>
 
 <h1 align="center">Tikeo</h1>
