@@ -10,9 +10,9 @@
 
 ## Immediate next slice
 
-1. Commit and push the docs human operator manual rebuild.
-2. If a formal release is requested for docs-only changes, create the next available `v0.2.x` tag after v0.2.9 and monitor GitHub Actions for CI/Coverage/Release/Docker/SDK workflows, including `yhyzgn/tikeo-docs` publish.
-3. Continue acceptance hardening items that are still not complete: alert-rule dual-write/backfill to Notification Center policies, delivery lease/idempotency hardening, and any missing UI/docs/test coverage found during module acceptance.
+1. v0.2.10 docs manual release is complete: remote main/tag, GitHub Release, CI/Coverage, Docker server/web/docs, and SDK publish workflows all passed.
+2. Continue acceptance hardening items that are still not complete: alert-rule dual-write/backfill to Notification Center policies, delivery lease/idempotency hardening, and any missing UI/docs/test coverage found during module acceptance.
+3. For the next code change, first reconcile local git with remote commit `c3f957ff50f51405e761c7d8fa75cc7c3bed6bf1` if normal git fetch is available; this release used GitHub REST API because local git smart protocol was blocked.
 
 ## Current verified baseline
 

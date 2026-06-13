@@ -3146,3 +3146,31 @@ Verification:
 - `git diff --check` ✅
 - `docker build -f docs/Dockerfile docs -t tikeo-docs:local-human-manual` ✅
 - Docs container smoke: `/healthz`, `/docs/`, `/zh-CN/docs/` ✅
+
+## 2026-06-13 — v0.2.10 docs manual release completed
+
+Final docs release:
+- Local implementation commit before API push: `f1d2d65826675e7838040be0a178d9df1d590403` (`Make docs usable as an operator manual`).
+- Normal SSH/HTTPS git smart protocol push was blocked by the local network/proxy (`Connection closed` on SSH 22/443 and HTTPS git transport hangs), so the same tree/message was published through GitHub REST Git Data API.
+- Remote `main` commit: `c3f957ff50f51405e761c7d8fa75cc7c3bed6bf1`.
+- Formal release tag: `v0.2.10` -> `c3f957ff50f51405e761c7d8fa75cc7c3bed6bf1`.
+- GitHub Release: https://github.com/yhyzgn/tikeo/releases/tag/v0.2.10 (published, not draft, not prerelease; 27 assets observed).
+
+GitHub Actions for `v0.2.10` / remote docs commit all completed successfully:
+- CI: https://github.com/yhyzgn/tikeo/actions/runs/27459973332 ✅
+- Coverage: https://github.com/yhyzgn/tikeo/actions/runs/27459973341 ✅
+- Release / GitHub assets: https://github.com/yhyzgn/tikeo/actions/runs/27459974043 ✅
+- Publish / Docker server: https://github.com/yhyzgn/tikeo/actions/runs/27459974073 ✅
+- Publish / Docker web: https://github.com/yhyzgn/tikeo/actions/runs/27459974083 ✅
+- Publish / Docker docs: https://github.com/yhyzgn/tikeo/actions/runs/27459974051 ✅
+- Publish / Rust SDK: https://github.com/yhyzgn/tikeo/actions/runs/27459974044 ✅
+- Publish / Java SDK: https://github.com/yhyzgn/tikeo/actions/runs/27459974078 ✅
+- Publish / Python SDK: https://github.com/yhyzgn/tikeo/actions/runs/27459974072 ✅
+- Publish / Go SDK: https://github.com/yhyzgn/tikeo/actions/runs/27459974049 ✅
+- Publish / Node.js SDK: https://github.com/yhyzgn/tikeo/actions/runs/27459974052 ✅
+
+Docker Hub pull verification:
+- `docker pull yhyzgn/tikeo-server:v0.2.10` ✅ digest `sha256:f06dc770ee492f8625a516e824aa68c9368c6ceb9649e4754701da2e9b6605bd`, OCI revision `c3f957ff50f51405e761c7d8fa75cc7c3bed6bf1`.
+- `docker run --rm yhyzgn/tikeo-server:v0.2.10 --version` ✅ output `tikeo 0.2.10`.
+- `docker pull yhyzgn/tikeo-web:v0.2.10` ✅ after retry; digest `sha256:4171c51a88d00c8b4cd4df6e6a1903c24c3f491a94af76098ea52e2f3788d66c`, OCI revision `c3f957ff50f51405e761c7d8fa75cc7c3bed6bf1`.
+- `docker pull yhyzgn/tikeo-docs:v0.2.10` ✅ digest `sha256:529ab0a43f2dc4f335b9e87d7aeb42d7322914d91cdb721f7e9ac42c352f1e7f`, OCI revision `c3f957ff50f51405e761c7d8fa75cc7c3bed6bf1`.
