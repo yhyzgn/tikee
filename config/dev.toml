@@ -53,8 +53,8 @@ backoff_seconds = 300
 
 [notification_delivery]
 enabled = true
-# Set to your externally reachable Web URL so Feishu/Lark card buttons can open directly.
-# Example: public_console_base_url = "https://tikeo.example.com"
+# Development default used by Feishu/Lark card buttons.
+public_console_base_url = "http://localhost:5173"
 interval_seconds = 60
 batch_size = 50
 max_attempts = 3

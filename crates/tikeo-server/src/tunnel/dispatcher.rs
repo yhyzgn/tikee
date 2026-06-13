@@ -202,14 +202,17 @@ async fn dispatch_single_instances(
             warn!(queue_id = %claim.item.id, %instance_id, "closed dispatch queue item for missing job instance");
             continue;
         };
-        if instance.status != InstanceStatus::Pending {
+        let retrying_running_instance =
+            instance.status == InstanceStatus::Running && claim.item.attempt > 1;
+        if instance.status != InstanceStatus::Pending && !retrying_running_instance {
             let _ = workflows
                 .mark_dispatch_queue_done_by_instance(&instance.id)
                 .await?;
             debug!(instance_id = %instance.id, status = %instance.status, "closed dispatch queue item for non-pending instance");
             continue;
         }
-        if !instances.claim_pending_for_dispatch(&instance.id).await? {
+        if !retrying_running_instance && !instances.claim_pending_for_dispatch(&instance.id).await?
+        {
             let _ = workflows
                 .release_dispatch_queue_item(&claim.item.id, DISPATCHER_LEASE_OWNER)
                 .await?;

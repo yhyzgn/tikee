@@ -618,6 +618,22 @@ mod tests {
     }
 
     #[test]
+    fn dev_config_sets_public_console_base_url_for_local_notification_cards() {
+        let dev_config =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../config/dev.toml");
+        let config = load_config(Some(&dev_config))
+            .unwrap_or_else(|error| panic!("dev config should load: {error}"));
+
+        assert_eq!(
+            config
+                .notification_delivery
+                .public_console_base_url
+                .as_deref(),
+            Some("http://localhost:5173")
+        );
+    }
+
+    #[test]
     fn default_alert_retry_config_enables_bounded_background_scheduler() {
         let config =
             load_config(None).unwrap_or_else(|error| panic!("default config should load: {error}"));

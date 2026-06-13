@@ -1083,6 +1083,12 @@
             .unwrap_or_else(|error| panic!("queue should requeue: {error}"))
             .unwrap_or_else(|| panic!("queue should be requeued"));
         assert_eq!(requeued.status, "pending");
+        let retrying_instance = instances
+            .get(&instance.id)
+            .await
+            .unwrap_or_else(|error| panic!("instance should reload: {error}"))
+            .unwrap_or_else(|| panic!("instance should exist"));
+        assert_eq!(retrying_instance.status, InstanceStatus::Running);
         assert_eq!(requeued.attempt, 1);
         assert!(requeued.run_after > claim.item.run_after);
 

@@ -32,7 +32,7 @@ env_prefix = "TIKEO_ALERT_SECRET_"
 
 [notification_delivery]
 enabled = true
-# Set to your externally reachable Web URL so Feishu/Lark card buttons can open directly.
+# REQUIRED in Docker/production: set to the externally reachable Web URL so Feishu/Lark card buttons can open directly.
 # Example: public_console_base_url = "https://tikeo.example.com"
 interval_seconds = 60
 batch_size = 50
