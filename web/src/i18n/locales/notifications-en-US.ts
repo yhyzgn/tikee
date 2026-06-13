@@ -1,6 +1,10 @@
 // Notification Center template-variable and template-editor en-US messages.
 
 export const notificationMessages: Record<string, string> = {
+  '投递状态': 'Delivery status',
+  '请求摘要': 'Request summary',
+  '错误信息': 'Error details',
+  '渲染 Payload': 'Rendered payload',
   '变量映射表': 'Variable map',
   '占位符': 'Placeholder',
   '中文含义': 'Meaning',

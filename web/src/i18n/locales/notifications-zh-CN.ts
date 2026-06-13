@@ -1,6 +1,10 @@
 // Notification Center template-variable and template-editor zh-CN messages.
 
 export const notificationMessages: Record<string, string> = {
+  '投递状态': '投递状态',
+  '请求摘要': '请求摘要',
+  '错误信息': '错误信息',
+  '渲染 Payload': '渲染 Payload',
   '变量映射表': '变量映射表',
   '占位符': '占位符',
   '中文含义': '中文含义',

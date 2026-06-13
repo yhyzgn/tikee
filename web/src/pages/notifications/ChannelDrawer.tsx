@@ -616,20 +616,35 @@ export function ChannelDrawer({ open, channelTypes, editingChannel, onClose, onS
                 <Typography.Paragraph type="secondary">{t('测试只使用服务端已保存配置；如果刚修改了表单，请先保存渠道再测试。返回结果只展示脱敏目标和脱敏后的渲染 payload。')}</Typography.Paragraph>
                 {testDisabledReason ? <Alert type="warning" showIcon style={{ marginBottom: 12 }} message={t(testDisabledReason)} /> : null}
                 {testResult ? (
-                  <Space direction="vertical" style={{ width: '100%' }}>
-                    <Descriptions size="small" bordered column={1} title={t('测试结果')} items={[
-                      { key: 'delivered', label: t('delivered'), children: String(testResult.delivered) },
-                      { key: 'provider', label: t('provider'), children: testResult.provider },
-                      { key: 'targetRedacted', label: t('targetRedacted'), children: testResult.targetRedacted },
-                      { key: 'statusCode', label: t('statusCode'), children: testResult.statusCode ?? '-' },
-                      { key: 'retryState', label: t('retryState'), children: testResult.retryState },
-                      { key: 'messageId', label: t('messageId'), children: testResult.messageId },
-                      { key: 'attemptId', label: t('attemptId'), children: testResult.attemptId },
-                      { key: 'createdAt', label: t('createdAt'), children: testResult.createdAt },
-                      { key: 'error', label: t('error'), children: testResult.error ?? '-' },
-                    ]} />
-                    <Input.TextArea rows={8} readOnly value={previewValue({ renderedPayload: testResult.renderedPayload })} />
-                  </Space>
+                  <section className="channel-test-result" aria-label={t('测试结果')}>
+                    <div className="channel-test-result__header">
+                      <div>
+                        <Typography.Text strong>{t('测试结果')}</Typography.Text>
+                        <Typography.Text type="secondary">{testResult.createdAt}</Typography.Text>
+                      </div>
+                      <Tag color={testResult.delivered ? 'green' : 'red'}>{t('投递状态')} · {String(testResult.delivered)}</Tag>
+                    </div>
+                    <div className="channel-test-result__grid" aria-label={t('请求摘要')}>
+                      {[
+                        ['provider', testResult.provider],
+                        ['targetRedacted', testResult.targetRedacted],
+                        ['statusCode', testResult.statusCode ?? '-'],
+                        ['retryState', testResult.retryState],
+                        ['messageId', testResult.messageId],
+                        ['attemptId', testResult.attemptId],
+                      ].map(([label, value]) => (
+                        <div className="channel-test-result__field" key={label}>
+                          <Typography.Text type="secondary">{t(String(label))}</Typography.Text>
+                          <Typography.Text code>{String(value)}</Typography.Text>
+                        </div>
+                      ))}
+                    </div>
+                    {testResult.error ? <Alert type="error" showIcon message={t('错误信息')} description={testResult.error} /> : null}
+                    <div className="channel-test-result__payload">
+                      <Typography.Text strong>{t('渲染 Payload')}</Typography.Text>
+                      <Input.TextArea rows={7} readOnly value={previewValue({ renderedPayload: testResult.renderedPayload })} />
+                    </div>
+                  </section>
                 ) : null}
               </div>
             ) : null}

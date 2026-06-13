@@ -305,6 +305,11 @@ describe('notification center console page', () => {
       'messageId',
       'attemptId',
       'renderedPayload',
+      'channel-test-result',
+      'channel-test-result__grid',
+      '投递状态',
+      '请求摘要',
+      '渲染 Payload',
       'error',
     ]) {
       expect(clientSource + channelDrawerSource).toContain(token);

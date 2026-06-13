@@ -2895,6 +2895,77 @@ html[data-theme='dark'] .role-matrix-checkboxes .ant-checkbox-wrapper {
   padding: 0 16px 16px !important;
 }
 
+
+.channel-test-result {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--app-border);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--app-primary-color) 5%, var(--app-surface-solid));
+}
+
+.channel-test-result__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.channel-test-result__header > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.channel-test-result__header .ant-tag {
+  flex: 0 0 auto;
+  margin-inline-end: 0;
+}
+
+.channel-test-result__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 8px;
+}
+
+.channel-test-result__field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  background: var(--app-surface-solid);
+}
+
+.channel-test-result__field .ant-typography-secondary {
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.channel-test-result__field .ant-typography code,
+.channel-test-result__field code.ant-typography {
+  min-width: 0;
+  max-width: 100%;
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.channel-test-result__payload {
+  display: grid;
+  gap: 8px;
+}
+
+.channel-test-result__payload textarea.ant-input {
+  min-height: 142px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
 .channel-drawer-footer {
   width: 100%;
   min-width: 0;

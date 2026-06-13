@@ -3113,3 +3113,15 @@ Implemented:
 - Added source/style regression assertions for full preview rendering, scrollable preview/content, non-wrapping placeholders, and no variable-toolbar sticky behavior.
 
 Verification passed: targeted Notification Center tests, full Web tests, typecheck, lint, build, source-size audit, and diff whitespace check.
+
+## 2026-06-13 — Channel drawer test-result density fix
+
+User feedback: the `测试` module result area in the notification channel drawer was too crowded.
+
+Implemented:
+- Replaced the one-column bordered `Descriptions` table with `channel-test-result` card sections.
+- Added a status header, responsive summary grid, optional error alert, and dedicated rendered-payload preview area.
+- Added i18n entries for delivery status, request summary, error details, and rendered payload.
+- Kept `testNotificationChannel` behavior unchanged; this is a UI layout/readability change only.
+
+Verification passed: targeted Notification Center + i18n tests, full Web tests, typecheck, lint, production build, source-size audit, and diff whitespace check.
