@@ -44,6 +44,12 @@ class NoHardcodedRuntimeContractTest(unittest.TestCase):
         self.assertIn("registration_open", helper)
         self.assertIn("tikeo_smoke_random_password", helper)
         self.assertIn("missing smoke authentication credentials", helper)
+        self.assertIn('[[ -n "$TIKEO_SMOKE_AUTH_TOKEN" ]]', helper)
+        self.assertLess(
+            helper.index('[[ -n "$TIKEO_SMOKE_AUTH_TOKEN" ]]'),
+            helper.index('registration_open="$(curl'),
+            "smoke login must reuse an existing bearer token before checking bootstrap/admin credentials",
+        )
 
     def test_tracked_text_does_not_reintroduce_retired_default_admin_credentials(self):
         forbidden = ["smoke" + "_admin", "Tikeo" + "@2026!"]

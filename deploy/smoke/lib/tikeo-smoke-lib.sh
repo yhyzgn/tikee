@@ -120,6 +120,15 @@ PY_JSON_OBJECT
 
 tikeo_smoke_login() {
   local api_url="$1"
+  if [[ -n "$TIKEO_SMOKE_AUTH_TOKEN" ]]; then
+    export TIKEO_SMOKE_AUTH_TOKEN
+    return 0
+  fi
+  if [[ -n "${TIKEO_ADMIN_TOKEN:-}" ]]; then
+    TIKEO_SMOKE_AUTH_TOKEN="$TIKEO_ADMIN_TOKEN"
+    export TIKEO_SMOKE_AUTH_TOKEN
+    return 0
+  fi
   local username="${2:-${TIKEO_SMOKE_ADMIN_USERNAME:-${TIKEO_ADMIN_USERNAME:-}}}"
   local password="${3:-${TIKEO_SMOKE_ADMIN_PASSWORD:-${TIKEO_ADMIN_PASSWORD:-}}}"
   local email="${TIKEO_SMOKE_ADMIN_EMAIL:-smoke.admin@example.com}"
