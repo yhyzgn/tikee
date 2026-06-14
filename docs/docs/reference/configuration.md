@@ -32,7 +32,7 @@ Use TOML for non-secret defaults and environment/Secret injection for secrets, D
 
 | File | Purpose | Notable values |
 | --- | --- | --- |
-| `config/dev.toml` | Local source evaluation | HTTP `0.0.0.0:9090`, Worker Tunnel `0.0.0.0:9998`, SQLite `sqlite://tikeo-dev.db?mode=rwc`, `timestamp_offset="+08:00"`, OIDC off, TLS off. |
+| `config/dev.toml` | Local source evaluation | HTTP `0.0.0.0:9090`, Worker Tunnel `0.0.0.0:9998`, SQLite `sqlite://.dev/tikeo-dev.db?mode=rwc`, `timestamp_offset="+08:00"`, OIDC off, TLS off. |
 | `config/container.toml` | Container default used by root `Dockerfile` | SQLite `sqlite:///data/tikeo.db?mode=rwc`, logging `info`, alert retry on, alert env refs enabled. |
 | `config/postgres.toml` | PostgreSQL/CockroachDB example | `postgres://tikeo:tikeo@postgres:5432/tikeo`, comment for `TIKEO__STORAGE__DATABASE_URL`. |
 | `config/mysql.toml` | MySQL example | `mysql://tikeo:tikeo@mysql:3306/tikeo`, `timestamp_offset="+08:00"`, `utf8mb4` reminder. |
@@ -46,7 +46,7 @@ These defaults come from `crates/tikeo-config/src/lib.rs` unless a committed exa
 | --- | --- | --- | --- |
 | `server.listen_addr` | `0.0.0.0:9090` | `TIKEO__SERVER__LISTEN_ADDR` | HTTP API, health, readiness, metrics, OpenAPI, and gateway surface. |
 | `server.worker_tunnel_addr` | `0.0.0.0:9998` | `TIKEO__SERVER__WORKER_TUNNEL_ADDR` | gRPC/HTTP2 Worker Tunnel. Workers dial this endpoint outbound. |
-| `storage.database_url` | `sqlite://tikeo-dev.db?mode=rwc` | `TIKEO__STORAGE__DATABASE_URL` | SeaORM/sqlx URL. Container example uses `/data/tikeo.db`; production should use PostgreSQL or MySQL. |
+| `storage.database_url` | `sqlite://.dev/tikeo-dev.db?mode=rwc` | `TIKEO__STORAGE__DATABASE_URL` | SeaORM/sqlx URL. Container example uses `/data/tikeo.db`; production should use PostgreSQL or MySQL. |
 | `storage.timestamp_offset` | `+00:00` | `TIKEO__STORAGE__TIMESTAMP_OFFSET` | Parsed at startup. `config/dev.toml` and `config/mysql.toml` use `+08:00`; account for this in timestamp comparisons. |
 | `cluster.mode` | `standalone` | `TIKEO__CLUSTER__MODE` | Accepted values are `standalone` and `raft`. Raft mode is currently a gated shape, not a production scheduling leader. |
 | `cluster.node_id` | `standalone` | `TIKEO__CLUSTER__NODE_ID` | Stable node ID in cluster status and raft metadata. |
@@ -106,7 +106,7 @@ TIKEO__STORAGE__DATABASE_URL='sqlite:///tmp/tikeo-smoke.db?mode=rwc' \
 
 | Backend | Example | Operational note |
 | --- | --- | --- |
-| SQLite dev | `sqlite://tikeo-dev.db?mode=rwc` | Fast local path; avoid sharing one file across concurrent Server processes. |
+| SQLite dev | `sqlite://.dev/tikeo-dev.db?mode=rwc` | Fast local path; avoid sharing one file across concurrent Server processes. |
 | SQLite container | `sqlite:///data/tikeo.db?mode=rwc` | Persist `/data` with a volume/PVC. |
 | PostgreSQL | `postgres://tikeo:change-me@postgres.example:5432/tikeo?sslmode=require` | Preferred production default when you need shared, managed storage. |
 | CockroachDB | `postgres://root@cockroach:26257/tikeo?sslmode=disable` | Uses PostgreSQL wire protocol shape. |

@@ -115,7 +115,7 @@ curl -fsS http://127.0.0.1:9090/readyz
 curl -fsS http://127.0.0.1:9090/api-docs/openapi.json >/tmp/tikeo-openapi.json
 ```
 
-`config/dev.toml` 绑定 HTTP `0.0.0.0:9090`、Worker Tunnel `0.0.0.0:9998`，SQLite 是 `tikeo-dev.db`，时间偏移是 `+08:00`。库默认值是 `+00:00`，跨环境比较时间时要读配置参考。
+`config/dev.toml` 绑定 HTTP `0.0.0.0:9090`、Worker Tunnel `0.0.0.0:9998`，SQLite 是 `.dev/tikeo-dev.db`，时间偏移是 `+08:00`。库默认值是 `+00:00`，跨环境比较时间时要读配置参考。
 
 ## 常见安装错误
 

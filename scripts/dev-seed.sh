@@ -1,7 +1,13 @@
 #!/usr/bin/env sh
 set -eu
 
-DB_PATH="${1:-tikeo-dev.db}"
+REFRESH="${TIKEO_DEV_SEED_REFRESH:-0}"
+if [ "${1:-}" = "--refresh" ]; then
+  REFRESH=1
+  shift
+fi
+
+DB_PATH="${1:-.dev/tikeo-dev.db}"
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 SQL_FILE="$SCRIPT_DIR/dev-seed.sql"
 
@@ -20,6 +26,26 @@ if ! sqlite3 "$DB_PATH" "SELECT 1 FROM sqlite_master WHERE type='table' AND name
   echo "Database exists but tikeo tables are missing: $DB_PATH" >&2
   echo "Start tikeo once first so migrations create the schema, then re-run this script." >&2
   exit 1
+fi
+
+if [ "$REFRESH" != "1" ]; then
+  existing_seed_rows="$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM namespaces WHERE id LIKE 'ns-dev-%';")"
+  if [ "${existing_seed_rows:-0}" -gt 0 ]; then
+    echo "Development seed data already exists in $DB_PATH; leaving local rows unchanged." >&2
+    echo "Use TIKEO_DEV_SEED_REFRESH=1 $0 $DB_PATH or $0 --refresh $DB_PATH only when you intentionally want to refresh the seeded demo rows." >&2
+    sqlite3 "$DB_PATH" <<'SQL'
+.headers on
+.mode column
+SELECT 'namespaces' AS table_name, COUNT(*) AS rows FROM namespaces WHERE id LIKE 'ns-dev-%'
+UNION ALL SELECT 'apps', COUNT(*) FROM apps WHERE id LIKE 'app-dev-%'
+UNION ALL SELECT 'jobs', COUNT(*) FROM jobs WHERE id LIKE 'job-dev-%'
+UNION ALL SELECT 'scripts', COUNT(*) FROM scripts WHERE id LIKE 'script-dev-%'
+UNION ALL SELECT 'notification_channels', COUNT(*) FROM notification_channels WHERE id LIKE 'notif-channel-dev-%'
+UNION ALL SELECT 'notification_templates', COUNT(*) FROM notification_templates WHERE id LIKE 'notif-template-dev-%'
+UNION ALL SELECT 'notification_policies', COUNT(*) FROM notification_policies WHERE id LIKE 'notif-policy-dev-%';
+SQL
+    exit 0
+  fi
 fi
 
 sqlite3 "$DB_PATH" < "$SQL_FILE"

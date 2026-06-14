@@ -48,7 +48,7 @@ cargo run --bin tikeo -- serve --config config/dev.toml
 | --- | --- |
 | HTTP API | `config/dev.toml` binds all interfaces on port `9090`; use `http://127.0.0.1:9090` from local clients |
 | Worker Tunnel | `config/dev.toml` binds all interfaces on port `9998`; use `http://127.0.0.1:9998` from local workers |
-| Storage | `sqlite://tikeo-dev.db?mode=rwc` |
+| Storage | `sqlite://.dev/tikeo-dev.db?mode=rwc` |
 | Local login | enabled |
 
 ### Common causes

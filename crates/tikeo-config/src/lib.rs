@@ -73,7 +73,7 @@ pub struct StorageConfig {
 impl Default for StorageConfig {
     fn default() -> Self {
         Self {
-            database_url: "sqlite://tikeo-dev.db?mode=rwc".to_owned(),
+            database_url: "sqlite://.dev/tikeo-dev.db?mode=rwc".to_owned(),
             timestamp_offset: "+00:00".to_owned(),
         }
     }

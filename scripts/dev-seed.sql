@@ -4,9 +4,9 @@
 --   1. Start the dev server once so migrations create the schema:
 --      ./scripts/dev.sh
 --   2. Apply this script to the SQLite dev database:
---      sqlite3 tikeo-dev.db < scripts/dev-seed.sql
+--      sqlite3 .dev/tikeo-dev.db < scripts/dev-seed.sql
 --
--- The script is idempotent: stable ids are upserted, so it can be re-run safely.
+-- The SQL is upsert-based for explicit refreshes. Prefer scripts/dev-seed.sh, which leaves existing local seed rows unchanged unless --refresh or TIKEO_DEV_SEED_REFRESH=1 is set.
 -- It is intended for local development only, not production bootstrapping.
 
 BEGIN TRANSACTION;

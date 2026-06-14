@@ -25,7 +25,7 @@ Start the local Server in one terminal:
 cargo run --bin tikeo -- serve --config config/dev.toml
 ```
 
-`config/dev.toml` starts the HTTP API on port `9090`, the Worker Tunnel on port `9998`, and SQLite at `tikeo-dev.db`.
+`config/dev.toml` starts the HTTP API on port `9090`, the Worker Tunnel on port `9998`, and SQLite at `.dev/tikeo-dev.db`.
 
 Verify the Server from another terminal:
 
@@ -114,13 +114,13 @@ curl -fsS http://127.0.0.1:9090/api/v1/workers \
 
 ## Optional: direct SQLite seed for local UI inspection
 
-`scripts/dev-seed.sh` applies `scripts/dev-seed.sql` directly to `tikeo-dev.db`. Use it only for disposable local UI inspection after migrations have created the schema:
+`scripts/dev-seed.sh` applies `scripts/dev-seed.sql` directly to `.dev/tikeo-dev.db`. Use it only for disposable local UI inspection after migrations have created the schema:
 
 ```bash
-scripts/dev-seed.sh tikeo-dev.db
+scripts/dev-seed.sh .dev/tikeo-dev.db
 ```
 
-The script checks that the database exists and that the `jobs` table is present before applying SQL. It then prints row counts for namespaces, apps, jobs, scripts, workflows, and dispatch queue records.
+The script checks that the database exists and that the `jobs` table is present before applying SQL. It then prints row counts for namespaces, apps, jobs, scripts, workflows, and dispatch queue records. It is non-destructive by default: when `ns-dev-*` rows already exist, it exits without reapplying the upsert SQL. Use `scripts/dev-seed.sh --refresh .dev/tikeo-dev.db` or `TIKEO_DEV_SEED_REFRESH=1` only when you intentionally want to refresh the seeded demo rows.
 
 Do not use direct SQL seeding for shared environments. It bypasses the HTTP API path and is not a substitute for validating auth, scopes, audit behavior, or runtime dispatch.
 
@@ -150,7 +150,7 @@ The smoke script starts isolated Server configs, runs `scripts/dev-integration-s
 Stop demo workers and Server processes with `Ctrl-C`. For a clean local SQLite reset:
 
 ```bash
-rm -f tikeo-dev.db tikeo-dev.db-shm tikeo-dev.db-wal
+rm -f .dev/tikeo-dev.db .dev/tikeo-dev.db-shm .dev/tikeo-dev.db-wal
 ```
 
 Only remove these files when you intentionally want to delete local state, including the bootstrapped Owner.

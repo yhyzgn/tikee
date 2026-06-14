@@ -183,7 +183,7 @@ curl -fsS http://127.0.0.1:9090/readyz
 curl -fsS http://127.0.0.1:9090/api-docs/openapi.json >/tmp/tikeo-openapi.json
 ```
 
-`config/dev.toml` binds HTTP to `0.0.0.0:9090`, Worker Tunnel to `0.0.0.0:9998`, and SQLite to `tikeo-dev.db` with timestamp offset `+08:00`. The library default is `+00:00`; read [Configuration reference](../reference/configuration) before comparing timestamps across environments.
+`config/dev.toml` binds HTTP to `0.0.0.0:9090`, Worker Tunnel to `0.0.0.0:9998`, and SQLite to `.dev/tikeo-dev.db` with timestamp offset `+08:00`. The library default is `+00:00`; read [Configuration reference](../reference/configuration) before comparing timestamps across environments.
 
 ## Common installation failures
 

@@ -42,7 +42,7 @@ curl -fsS http://127.0.0.1:9090/healthz
 curl -fsS http://127.0.0.1:9090/readyz
 ```
 
-`config/dev.toml` 默认使用 SQLite：`sqlite://tikeo-dev.db?mode=rwc`。首次启动后需要在 Web 控制台或 bootstrap API 创建 Owner；后续 API 示例需要带本地登录得到的 Bearer token，或使用已有管理 token。
+`config/dev.toml` 默认使用 SQLite：`sqlite://.dev/tikeo-dev.db?mode=rwc`。首次启动后需要在 Web 控制台或 bootstrap API 创建 Owner；后续 API 示例需要带本地登录得到的 Bearer token，或使用已有管理 token。
 
 ```bash
 export TIKEO_TOKEN='<local-admin-token>'
@@ -157,12 +157,12 @@ scripts/start-java-demo-workers.sh
 
 ## 可选方式：SQLite 本地快照脚本
 
-`scripts/dev-seed.sh` 会把 `scripts/dev-seed.sql` 写入本地 SQLite 数据库，并输出 namespace、app、job、script、workflow、queue 的行数。它只适合一次性本地展示或开发排查，不适合生产、共享环境或对审计链路有要求的验收。
+`scripts/dev-seed.sh` 会把 `scripts/dev-seed.sql` 写入本地 SQLite 数据库，并输出 namespace、app、job、script、workflow、queue 的行数。它只适合一次性本地展示或开发排查，不适合生产、共享环境或对审计链路有要求的验收。脚本默认不会覆盖已有 `ns-dev-*` seed 数据；只有显式执行 `scripts/dev-seed.sh --refresh .dev/tikeo-dev.db` 或设置 `TIKEO_DEV_SEED_REFRESH=1` 时才会刷新这些演示行。
 
 ```bash
 cargo run --bin tikeo -- serve --config config/dev.toml
 # 等 migrations 完成后停止 Server，再执行：
-scripts/dev-seed.sh tikeo-dev.db
+scripts/dev-seed.sh .dev/tikeo-dev.db
 ```
 
 如果数据库不存在，脚本会提示先启动 Tikeo 让 migrations 创建 schema。
@@ -220,7 +220,7 @@ curl -fsS -X POST "http://127.0.0.1:9090/api/v1/events/webhooks/${TIKEO_DEMO_JOB
 本地 SQLite 环境可以停止 Server 后删除数据库文件：
 
 ```bash
-rm -f tikeo-dev.db
+rm -f .dev/tikeo-dev.db .dev/tikeo-dev.db-shm .dev/tikeo-dev.db-wal
 ```
 
 如果只想清理 API 创建的对象，请先删除 Job，再删除 worker pool、app、namespace；避免留下引用关系导致删除失败。

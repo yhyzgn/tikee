@@ -22,7 +22,7 @@ cargo run --bin tikeo -- serve --config config/dev.toml
 
 | 文件 | 用途 | 关键值 |
 | --- | --- | --- |
-| `config/dev.toml` | 本地源码评估 | HTTP `0.0.0.0:9090`、Worker Tunnel `0.0.0.0:9998`、SQLite `tikeo-dev.db`、`timestamp_offset="+08:00"`、OIDC/TLS/OTel 关闭。 |
+| `config/dev.toml` | 本地源码评估 | HTTP `0.0.0.0:9090`、Worker Tunnel `0.0.0.0:9998`、SQLite `.dev/tikeo-dev.db`、`timestamp_offset="+08:00"`、OIDC/TLS/OTel 关闭。 |
 | `config/container.toml` | root Dockerfile 默认 | SQLite `/data/tikeo.db`、日志 info、alert retry 开启、alert env refs 开启。 |
 | `config/postgres.toml` | PostgreSQL/Cockroach 示例 | `postgres://tikeo:tikeo@postgres:5432/tikeo`，注释说明 `TIKEO__STORAGE__DATABASE_URL`。 |
 | `config/mysql.toml` | MySQL 示例 | `mysql://tikeo:tikeo@mysql:3306/tikeo`，提醒使用 `utf8mb4`。 |
@@ -34,7 +34,7 @@ cargo run --bin tikeo -- serve --config config/dev.toml
 | --- | --- | --- | --- |
 | `server.listen_addr` | `0.0.0.0:9090` | `TIKEO__SERVER__LISTEN_ADDR` | HTTP API、health、ready、metrics、OpenAPI。 |
 | `server.worker_tunnel_addr` | `0.0.0.0:9998` | `TIKEO__SERVER__WORKER_TUNNEL_ADDR` | gRPC/HTTP2 Worker Tunnel，Worker 主动连接。 |
-| `storage.database_url` | `sqlite://tikeo-dev.db?mode=rwc` | `TIKEO__STORAGE__DATABASE_URL` | SeaORM/sqlx URL；生产用 PostgreSQL/MySQL。 |
+| `storage.database_url` | `sqlite://.dev/tikeo-dev.db?mode=rwc` | `TIKEO__STORAGE__DATABASE_URL` | SeaORM/sqlx URL；生产用 PostgreSQL/MySQL。 |
 | `storage.timestamp_offset` | `+00:00` | `TIKEO__STORAGE__TIMESTAMP_OFFSET` | 启动时解析；dev/mysql 示例为 `+08:00`。 |
 | `cluster.mode` | `standalone` | `TIKEO__CLUSTER__MODE` | `standalone` 或 `raft`；raft 当前是受限 shape。 |
 | `cluster.node_id` | `standalone` | `TIKEO__CLUSTER__NODE_ID` | 集群状态和 raft 元数据节点 ID。 |

@@ -29,7 +29,7 @@ cd examples/nodejs/worker-demo && bun install --frozen-lockfile && cd ../../..
 cargo run --bin tikeo -- serve --config config/dev.toml
 ```
 
-`config/dev.toml` 默认 HTTP 是 `0.0.0.0:9090`，Worker Tunnel 是 `0.0.0.0:9998`，存储是 `sqlite://tikeo-dev.db?mode=rwc`。另一个终端检查：
+`config/dev.toml` 默认 HTTP 是 `0.0.0.0:9090`，Worker Tunnel 是 `0.0.0.0:9998`，存储是 `sqlite://.dev/tikeo-dev.db?mode=rwc`。另一个终端检查：
 
 ```bash
 curl -fsS http://127.0.0.1:9090/healthz
@@ -188,7 +188,7 @@ TIKEO_MANAGEMENT_TRIGGER_REBUILD_SERVER=0 scripts/management-trigger-e2e-smoke.s
 
 ## 清理和排障
 
-停止 Worker/Server 用 `Ctrl-C`。如果要重置本地 bootstrap 状态，可以删除 `tikeo-dev.db`。常见问题：`readyz` 失败看 DB/端口/配置；bootstrap closed 说明 DB 已有 Owner；SDK key unauthorized 说明 scopes 或 scope 不对；Worker online 但任务 pending 说明 namespace/app/processor 不匹配；Worker 不出现通常是 endpoint、TLS 或 dry-run 模式问题。
+停止 Worker/Server 用 `Ctrl-C`。`.dev/tikeo-dev.db` 是 Git 忽略的本地运行态数据库，普通重启、拉取代码或切分支不应该替换它；只有确实要重置本地 bootstrap 状态时才删除 `.dev/tikeo-dev.db .dev/tikeo-dev.db-shm .dev/tikeo-dev.db-wal`。常见问题：`readyz` 失败看 DB/端口/配置；bootstrap closed 说明 DB 已有 Owner；SDK key unauthorized 说明 scopes 或 scope 不对；Worker online 但任务 pending 说明 namespace/app/processor 不匹配；Worker 不出现通常是 endpoint、TLS 或 dry-run 模式问题。
 
 ## 为什么这些步骤不能省略
 

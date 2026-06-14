@@ -18,7 +18,7 @@ build/
 *.swp
 
 # Local development databases
-# *.db
+*.db
 *.db-*
 *.db.*
 

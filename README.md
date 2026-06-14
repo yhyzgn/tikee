@@ -265,6 +265,8 @@ logs under `.dev/`.
 
 Open <http://127.0.0.1:5173>. A fresh database routes you to first-run owner setup. After the owner is
 created, registration closes and users/roles are managed inside the console.
+The local SQLite database lives at `.dev/tikeo-dev.db` and is ignored by Git; pulling the repository
+or switching branches must not replace your local runtime data.
 
 ### 2. Seed real evaluation data
 
@@ -274,6 +276,9 @@ created, registration closes and users/roles are managed inside the console.
 
 The seed data gives you namespaces, apps, sample jobs, scripts, workflows, audit records, and instance
 logs so you can evaluate the console immediately instead of staring at an empty product.
+The seed script is non-destructive by default: if `ns-dev-*` rows already exist, it prints counts and
+leaves local edits unchanged. Use `./scripts/dev-seed.sh --refresh` only when you intentionally want
+to refresh the seeded demo rows.
 
 ### 3. Start a worker in your preferred language
 

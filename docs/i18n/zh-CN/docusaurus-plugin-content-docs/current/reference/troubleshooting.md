@@ -58,7 +58,7 @@ cargo run --bin tikeo -- serve --config config/dev.toml
 
 ```bash
 ss -ltnp | grep -E ':(9090|9998)\b' || true
-ls -l tikeo-dev.db 2>/dev/null || true
+ls -l .dev/tikeo-dev.db 2>/dev/null || true
 ```
 
 ## 2. 健康检查失败
@@ -285,7 +285,7 @@ bun run build
 
 ## 清理/生产检查清单
 
-- 本地临时环境可停止 Server 后删除 `tikeo-dev.db`。
+- 本地临时环境可停止 Server 后删除 `.dev/tikeo-dev.db .dev/tikeo-dev.db-shm .dev/tikeo-dev.db-wal`。
 - 不在生产执行会改写数据库的本地演示脚本。
 - 不把真实 token、Webhook URL、SMTP 密码、PagerDuty routing key 或 Authorization header 放进排障材料。
 - 生产探针只使用 `/healthz` 和 `/readyz`。

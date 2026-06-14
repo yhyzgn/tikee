@@ -45,7 +45,7 @@ Expected listeners from `config/dev.toml`:
 | --- | --- | --- |
 | HTTP API | `0.0.0.0:9090` | Management API, health, readiness, metrics, OpenAPI, Web gateway surface. |
 | Worker Tunnel | `0.0.0.0:9998` | gRPC/HTTP2 endpoint for outbound Worker connections. |
-| Storage | `sqlite://tikeo-dev.db?mode=rwc` | Local database file. |
+| Storage | `sqlite://.dev/tikeo-dev.db?mode=rwc` | Local database file. |
 
 From another shell:
 
@@ -243,10 +243,10 @@ Use this script before claiming the local SDK create+trigger path works.
 
 ## Clean shutdown
 
-Stop the Worker and Server with `Ctrl-C`. For smoke script runs, cleanup is handled by the script trap. If you reuse `tikeo-dev.db`, remember that bootstrap is one-time for that DB; remove the DB only when you intentionally want to reset local state:
+Stop the Worker and Server with `Ctrl-C`. For smoke script runs, cleanup is handled by the script trap. If you reuse `.dev/tikeo-dev.db`, remember that bootstrap is one-time for that DB. The file is ignored by Git and should persist across ordinary restarts; remove the DB only when you intentionally want to reset local state:
 
 ```bash
-rm -f tikeo-dev.db
+rm -f .dev/tikeo-dev.db .dev/tikeo-dev.db-shm .dev/tikeo-dev.db-wal
 ```
 
 ## Troubleshooting quickstart failures

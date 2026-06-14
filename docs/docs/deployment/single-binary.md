@@ -20,7 +20,7 @@ curl -fsS http://127.0.0.1:9090/healthz
 curl -fsS http://127.0.0.1:9090/readyz
 ```
 
-`config/dev.toml` listens on HTTP `9090`, Worker Tunnel `9998`, and uses `sqlite://tikeo-dev.db?mode=rwc` in the repository working directory.
+`config/dev.toml` listens on HTTP `9090`, Worker Tunnel `9998`, and uses `sqlite://.dev/tikeo-dev.db?mode=rwc` in the repository working directory.
 
 ## Build a release binary
 

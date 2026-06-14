@@ -9,7 +9,7 @@ pub mod repository;
 use sea_orm::{ConnectOptions, Database, DatabaseConnection};
 use sea_orm_migration::MigratorTrait;
 use sqlx::sqlite::{SqliteJournalMode, SqliteSynchronous};
-use std::time::Duration;
+use std::{path::Path, time::Duration};
 use thiserror::Error;
 
 pub use repository::util::{parse_timestamp_offset, set_timestamp_offset};
@@ -63,6 +63,15 @@ pub use sea_orm::DbErr;
 /// Errors raised by storage initialization and repository operations.
 #[derive(Debug, Error)]
 pub enum StorageError {
+    /// SQLite database parent directory could not be prepared.
+    #[error("sqlite database directory preparation failed for {path}: {source}")]
+    PrepareSqliteFile {
+        /// Configured SQLite database path.
+        path: String,
+        /// Underlying filesystem error.
+        #[source]
+        source: std::io::Error,
+    },
     /// Database connection failed.
     #[error("database connection failed: {0}")]
     Connect(#[from] sea_orm::DbErr),
@@ -74,6 +83,8 @@ pub enum StorageError {
 ///
 /// Returns an error when the database cannot be opened or migrations fail.
 pub async fn connect_and_migrate(database_url: &str) -> Result<DatabaseConnection, StorageError> {
+    ensure_sqlite_database_parent(database_url)?;
+
     let mut options = ConnectOptions::new(database_url.to_owned());
     options
         .max_connections(16)
@@ -87,6 +98,33 @@ pub async fn connect_and_migrate(database_url: &str) -> Result<DatabaseConnectio
     migration::Migrator::up(&db, None).await?;
     migration::apply_sqlite_schema_compatibility(&db).await?;
     Ok(db)
+}
+
+fn ensure_sqlite_database_parent(database_url: &str) -> Result<(), StorageError> {
+    let Some(path) = sqlite_database_file_path(database_url) else {
+        return Ok(());
+    };
+    let parent = Path::new(&path).parent();
+    if let Some(parent) = parent.filter(|parent| !parent.as_os_str().is_empty()) {
+        std::fs::create_dir_all(parent).map_err(|source| StorageError::PrepareSqliteFile {
+            path: path.clone(),
+            source,
+        })?;
+    }
+    Ok(())
+}
+
+fn sqlite_database_file_path(database_url: &str) -> Option<String> {
+    let path_with_query = database_url
+        .strip_prefix("sqlite://")
+        .or_else(|| database_url.strip_prefix("sqlite:"))?;
+    let path = path_with_query
+        .split_once('?')
+        .map_or(path_with_query, |(path, _)| path);
+    if path.is_empty() || path == ":memory:" || path.ends_with(":memory:") {
+        return None;
+    }
+    Some(path.to_owned())
 }
 
 fn configure_sqlite_connect_options(database_url: &str, options: &mut ConnectOptions) {
@@ -193,6 +231,96 @@ mod tests {
             versions.iter().any(|version| version == "sqlite_compat"),
             "schema compatibility upgrade must be recorded by migration/sqlite_compat.rs, got {versions:?}"
         );
+    }
+
+    #[tokio::test]
+    async fn sqlite_file_migrations_create_parent_directory_and_preserve_local_rows_on_rerun() {
+        let base = std::env::temp_dir().join(format!(
+            "tikeo-storage-persist-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ));
+        let db_path = base.join("nested").join("tikeo-dev.db");
+        let database_url = format!("sqlite://{}?mode=rwc", db_path.display());
+
+        let db = crate::connect_and_migrate(&database_url)
+            .await
+            .unwrap_or_else(|error| panic!("sqlite file db should initialize: {error}"));
+        assert!(
+            db_path.exists(),
+            "connect_and_migrate should create missing sqlite parent directories"
+        );
+
+        let namespace = format!("operator-local-{}", std::process::id());
+        db.execute(Statement::from_sql_and_values(
+            DatabaseBackend::Sqlite,
+            "INSERT INTO namespaces (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)",
+            vec![
+                "ns-operator-local".into(),
+                namespace.clone().into(),
+                "2026-06-14T00:00:00Z".into(),
+                "2026-06-14T00:00:00Z".into(),
+            ],
+        ))
+        .await
+        .unwrap_or_else(|error| panic!("local namespace should insert: {error}"));
+        db.execute(Statement::from_string(
+            DatabaseBackend::Sqlite,
+            "UPDATE notification_channels SET name = 'operator customized feishu card', enabled = 0 WHERE id = 'notification-channel-example-feishu-interactive'",
+        ))
+        .await
+        .unwrap_or_else(|error| panic!("seed notification channel should be editable: {error}"));
+        db.close()
+            .await
+            .unwrap_or_else(|error| panic!("sqlite file db should close: {error}"));
+
+        let reopened = crate::connect_and_migrate(&database_url)
+            .await
+            .unwrap_or_else(|error| panic!("sqlite file db should reopen and migrate: {error}"));
+        let namespace_count = reopened
+            .query_one(Statement::from_sql_and_values(
+                DatabaseBackend::Sqlite,
+                "SELECT COUNT(*) AS count FROM namespaces WHERE name = ?",
+                vec![namespace.into()],
+            ))
+            .await
+            .unwrap_or_else(|error| panic!("namespace should query: {error}"))
+            .unwrap_or_else(|| panic!("namespace count row should exist"))
+            .try_get::<i64>("", "count")
+            .unwrap_or_else(|error| panic!("namespace count should decode: {error}"));
+        assert_eq!(
+            namespace_count, 1,
+            "rerunning migrations must not clear locally created rows"
+        );
+
+        let customized_channel = reopened
+            .query_one(Statement::from_string(
+                DatabaseBackend::Sqlite,
+                "SELECT name, enabled FROM notification_channels WHERE id = 'notification-channel-example-feishu-interactive'",
+            ))
+            .await
+            .unwrap_or_else(|error| panic!("notification channel should query: {error}"))
+            .unwrap_or_else(|| panic!("seed notification channel should exist"));
+        let name = customized_channel
+            .try_get::<String>("", "name")
+            .unwrap_or_else(|error| panic!("notification name should decode: {error}"));
+        let enabled = customized_channel
+            .try_get::<bool>("", "enabled")
+            .unwrap_or_else(|error| panic!("notification enabled should decode: {error}"));
+        assert_eq!(name, "operator customized feishu card");
+        assert!(
+            !enabled,
+            "rerunning migrations must not refresh edited seed rows"
+        );
+
+        reopened
+            .close()
+            .await
+            .unwrap_or_else(|error| panic!("sqlite file db should close: {error}"));
+        let _ = std::fs::remove_dir_all(base);
     }
 
     #[tokio::test]
