@@ -10,6 +10,9 @@ MYSQL_URL="${TIKEO_TEST_MYSQL_URL:-mysql://tikeo:tikeo@127.0.0.1:${TIKEO_TEST_MY
 START_COMPOSE="${TIKEO_DB_COMPAT_COMPOSE:-auto}"
 mkdir -p "$REPORT_DIR"
 
+# shellcheck source=../deploy/smoke/lib/tikeo-smoke-lib.sh
+source "$ROOT_DIR/deploy/smoke/lib/tikeo-smoke-lib.sh"
+
 cleanup() {
   if [[ "${SERVER_PID:-}" ]]; then
     kill -TERM -- "-$SERVER_PID" >/dev/null 2>&1 || kill -TERM "$SERVER_PID" >/dev/null 2>&1 || true
@@ -105,12 +108,14 @@ run_one() {
     sleep 1
   done
   curl -fsS "http://127.0.0.1:$api_port/healthz" >/dev/null
-  (cd "$ROOT_DIR" && TIKEO_HTTP_URL="http://127.0.0.1:$api_port" scripts/dev-integration-seed.sh) | tee "$REPORT_DIR/$name-seed.log"
-  curl -fsS "http://127.0.0.1:$api_port/api/v1/auth/login" \
-    -H 'content-type: application/json' \
-    -d '{"username":"smoke_admin","password":"Tikeo@2026!"}' >"$REPORT_DIR/$name-login.json"
+  tikeo_smoke_login "http://127.0.0.1:$api_port"
   local token
-  token="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["data"]["token"])' "$REPORT_DIR/$name-login.json")"
+  token="$TIKEO_SMOKE_AUTH_TOKEN"
+  (cd "$ROOT_DIR" && TIKEO_HTTP_URL="http://127.0.0.1:$api_port" TIKEO_SMOKE_AUTH_TOKEN="$token" scripts/dev-integration-seed.sh) | tee "$REPORT_DIR/$name-seed.log"
+  python3 - <<'PY_LOGIN_RECORD' >"$REPORT_DIR/$name-login.json"
+import json, os
+print(json.dumps({"code": 0, "data": {"token": os.environ["TIKEO_SMOKE_AUTH_TOKEN"]}}))
+PY_LOGIN_RECORD
   curl -fsS "http://127.0.0.1:$api_port/api/v1/jobs" -H "authorization: Bearer $token" >"$REPORT_DIR/$name-jobs.json"
   curl -fsS "http://127.0.0.1:$api_port/api/v1/worker-pools" -H "authorization: Bearer $token" >"$REPORT_DIR/$name-worker-pools.json"
   curl -fsS "http://127.0.0.1:$api_port/api/v1/plugins" -H "authorization: Bearer $token" >"$REPORT_DIR/$name-plugins.json"

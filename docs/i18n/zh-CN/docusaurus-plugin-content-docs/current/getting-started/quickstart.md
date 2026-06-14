@@ -48,20 +48,35 @@ curl -fsS http://127.0.0.1:9090/api/v1/auth/bootstrap | jq .
 如果 `data.registrationOpen` 为 true，注册 Owner，并把注册接口返回的 bearer token 导出给后续步骤：
 
 ```bash
-TOKEN="$(curl -fsS -X POST http://127.0.0.1:9090/api/v1/auth/bootstrap/register \
-  -H 'content-type: application/json' \
-  -d '{"username":"bootstrap_admin","email":"bootstrap.admin@example.com","password":"Tikeo@2026!","confirmPassword":"Tikeo@2026!"}' \
+BOOTSTRAP_USERNAME="${TIKEO_BOOTSTRAP_USERNAME:-owner-$(date +%s)}"
+BOOTSTRAP_EMAIL="${TIKEO_BOOTSTRAP_EMAIL:-${BOOTSTRAP_USERNAME}@example.invalid}"
+BOOTSTRAP_PASSWORD="${TIKEO_BOOTSTRAP_PASSWORD:-$(openssl rand -base64 24 | tr -d '\n')}"
+TOKEN="$(jq -n \
+  --arg username "$BOOTSTRAP_USERNAME" \
+  --arg email "$BOOTSTRAP_EMAIL" \
+  --arg password "$BOOTSTRAP_PASSWORD" \
+  '{username:$username,email:$email,password:$password,confirmPassword:$password}' \
+  | curl -fsS -X POST http://127.0.0.1:9090/api/v1/auth/bootstrap/register \
+      -H 'content-type: application/json' \
+      -d @- \
   | tee /tmp/tikeo-bootstrap.json \
   | jq -r .data.token)"
 test -n "$TOKEN" && test "$TOKEN" != "null"
+printf 'Bootstrap owner: %s\nPassword saved only in this shell variable; store it securely now.\n' "$BOOTSTRAP_USERNAME"
 ```
 
 如果 bootstrap 已关闭，登录并保存 token：
 
 ```bash
-TOKEN="$(curl -fsS -X POST http://127.0.0.1:9090/api/v1/auth/login \
-  -H 'content-type: application/json' \
-  -d '{"username":"bootstrap_admin","password":"Tikeo@2026!"}' | jq -r .data.token)"
+: "${TIKEO_BOOTSTRAP_USERNAME:?set the owner username for this DB}"
+: "${TIKEO_BOOTSTRAP_PASSWORD:?set the owner password for this DB}"
+TOKEN="$(jq -n \
+  --arg username "$TIKEO_BOOTSTRAP_USERNAME" \
+  --arg password "$TIKEO_BOOTSTRAP_PASSWORD" \
+  '{username:$username,password:$password}' \
+  | curl -fsS -X POST http://127.0.0.1:9090/api/v1/auth/login \
+      -H 'content-type: application/json' \
+      -d @- | jq -r .data.token)"
 test -n "$TOKEN" && test "$TOKEN" != "null"
 ```
 

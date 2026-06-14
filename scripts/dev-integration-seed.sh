@@ -3,8 +3,6 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 API_URL="${TIKEO_HTTP_URL:-${TIKEO_API_URL:-http://127.0.0.1:9090}}"
-ADMIN_USER="${TIKEO_SMOKE_ADMIN_USERNAME:-${TIKEO_ADMIN_USERNAME:-smoke_admin}}"
-ADMIN_PASSWORD="${TIKEO_SMOKE_ADMIN_PASSWORD:-${TIKEO_ADMIN_PASSWORD:-Tikeo@2026!}}"
 
 # shellcheck source=../deploy/smoke/lib/tikeo-smoke-lib.sh
 source "$ROOT_DIR/deploy/smoke/lib/tikeo-smoke-lib.sh"
@@ -181,7 +179,7 @@ elif [[ -n "${TIKEO_ADMIN_TOKEN:-}" ]]; then
   export TIKEO_SMOKE_AUTH_TOKEN
   echo "✅ using existing TIKEO_ADMIN_TOKEN"
 else
-  if ! tikeo_smoke_login "$API_URL" "$ADMIN_USER" "$ADMIN_PASSWORD"; then
+  if ! tikeo_smoke_login "$API_URL"; then
     cat >&2 <<ERR
 ❌ failed to authenticate against $API_URL.
    Provide a valid admin bearer token with TIKEO_SMOKE_AUTH_TOKEN or TIKEO_ADMIN_TOKEN,
@@ -189,7 +187,7 @@ else
 ERR
     exit 1
   fi
-  echo "✅ authenticated as $ADMIN_USER"
+  echo "✅ authenticated for seed operations"
 fi
 
 # Integration topology used by scripts/start-java-demo-workers.sh.

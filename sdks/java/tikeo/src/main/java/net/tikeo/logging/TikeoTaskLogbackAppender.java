@@ -2,6 +2,8 @@ package net.tikeo.logging;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.classic.spi.IThrowableProxy;
+import ch.qos.logback.classic.spi.StackTraceElementProxy;
 import ch.qos.logback.core.AppenderBase;
 import java.io.StringWriter;
 
@@ -44,7 +46,7 @@ public final class TikeoTaskLogbackAppender extends AppenderBase<ILoggingEvent> 
         return writer.toString();
     }
 
-    private static void writeThrowable(ch.qos.logback.classic.spi.IThrowableProxy proxy, StringWriter writer, String prefix) {
+    private static void writeThrowable(IThrowableProxy proxy, StringWriter writer, String prefix) {
         writer.write(prefix);
         writer.write(proxy.getClassName());
         if (proxy.getMessage() != null) {
@@ -64,8 +66,8 @@ public final class TikeoTaskLogbackAppender extends AppenderBase<ILoggingEvent> 
     }
 
     private record StackTraceElementProxyCompat(String value) {
-        static StackTraceElementProxyCompat[] from(ch.qos.logback.classic.spi.IThrowableProxy proxy) {
-            ch.qos.logback.classic.spi.StackTraceElementProxy[] stackTrace = proxy.getStackTraceElementProxyArray();
+        static StackTraceElementProxyCompat[] from(IThrowableProxy proxy) {
+            StackTraceElementProxy[] stackTrace = proxy.getStackTraceElementProxyArray();
             if (stackTrace == null) {
                 return new StackTraceElementProxyCompat[0];
             }

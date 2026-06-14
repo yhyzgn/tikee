@@ -74,17 +74,29 @@ curl -fsS http://127.0.0.1:9090/api/v1/auth/bootstrap | jq .
 本地一次性注册：
 
 ```bash
-curl -fsS -X POST http://127.0.0.1:9090/api/v1/auth/bootstrap/register \
-  -H 'content-type: application/json' \
-  -d '{"username":"bootstrap_admin","email":"bootstrap.admin@example.com","password":"Tikeo@2026!","confirmPassword":"Tikeo@2026!"}' | jq .
+BOOTSTRAP_USERNAME="${TIKEO_BOOTSTRAP_USERNAME:-owner-$(date +%s)}"
+BOOTSTRAP_EMAIL="${TIKEO_BOOTSTRAP_EMAIL:-${BOOTSTRAP_USERNAME}@example.invalid}"
+BOOTSTRAP_PASSWORD="${TIKEO_BOOTSTRAP_PASSWORD:-$(openssl rand -base64 24 | tr -d '\n')}"
+jq -n \
+  --arg username "$BOOTSTRAP_USERNAME" \
+  --arg email "$BOOTSTRAP_EMAIL" \
+  --arg password "$BOOTSTRAP_PASSWORD" \
+  '{username:$username,email:$email,password:$password,confirmPassword:$password}' \
+  | curl -fsS -X POST http://127.0.0.1:9090/api/v1/auth/bootstrap/register \
+      -H 'content-type: application/json' \
+      -d @- | jq .
 ```
 
 后续登录：
 
 ```bash
-curl -fsS -X POST http://127.0.0.1:9090/api/v1/auth/login \
-  -H 'content-type: application/json' \
-  -d '{"username":"bootstrap_admin","password":"Tikeo@2026!"}' | jq .data.token
+jq -n \
+  --arg username "$TIKEO_BOOTSTRAP_USERNAME" \
+  --arg password "$TIKEO_BOOTSTRAP_PASSWORD" \
+  '{username:$username,password:$password}' \
+  | curl -fsS -X POST http://127.0.0.1:9090/api/v1/auth/login \
+      -H 'content-type: application/json' \
+      -d @- | jq .data.token
 ```
 
 这些示例凭证只能用于隔离本地 DB。CI smoke 会在 `.dev/reports/...` 下创建自己的临时 DB 和临时凭证。

@@ -1339,7 +1339,7 @@
         if status_json["data"]["registrationOpen"].as_bool() != Some(true) {
             return;
         }
-        let payload = r#"{"username":"bootstrap_admin","email":"bootstrap.admin@example.com","password":"Tikeo@2026!","confirmPassword":"Tikeo@2026!"}"#;
+        let payload = r#"{"username":"bootstrap_admin","email":"bootstrap.admin@example.com","password":"TestOnlyOwnerPassword!2026","confirmPassword":"TestOnlyOwnerPassword!2026"}"#;
         let created = post_json_raw(app, "/api/v1/auth/bootstrap/register", payload, None).await;
         assert_eq!(created["data"]["roles"][0], "owner");
     }

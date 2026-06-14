@@ -423,7 +423,7 @@ Git:
 - Renamed runtime configuration directory from `examples/` to `config/` and updated Dockerfile, Compose, prompt, memory, and design references.
 - Added `scripts/dev.sh` to start backend + Web dev server together, wait for health checks, print browser/API URLs, and write logs under `.dev/`.
 - Added root `README.md` with local startup instructions, configuration directory contract, and initialization credentials.
-- Updated built-in development initialization account defaults to `tikeo_init` / `Tikeo@2026!` / `tikeo-init-token`; env overrides remain available.
+- Updated built-in development initialization account defaults to `<retired-dev-admin>` / `<retired-password>` / `<retired-static-token>`; env overrides remain available.
 - Preserved the manually edited Dockerfile and committed the new `.cargo/config.toml` it references for rsproxy cargo source configuration.
 
 Verification:
@@ -588,7 +588,7 @@ Git:
 
 ## 2026-05-20 — 020-review-remediation 善后完成
 
-- 删除 `tikeo-init-token` 静态 admin bearer 后门；后端测试改为先通过初始化账号登录获取真实 `atk_` session token。
+- 删除 `<retired-static-token>` 静态 admin bearer 后门；后端测试改为先通过初始化账号登录获取真实 `atk_` session token。
 - login/logout 审计改为 token 脱敏标识，避免明文 Bearer token 写入 `audit_logs`；审计写入失败改为 `warn!`。
 - Alert Webhook 增加 HTTPS-only、localhost/私网/link-local/metadata 拒绝和 5s timeout，降低 SSRF 风险。
 - 脚本创建时写入初始版本；脚本更新在事务内写入更新后的不可变版本快照；diff API 改为按 `(script_id, version_number)` 精确查询；diff 输出改为带 header/hunk 的 LCS 结果。
@@ -1146,7 +1146,7 @@ Git:
 - User requested Java SDK previous Java core SDK name -> `tikeo` and Rust SDK previous Rust Worker SDK name -> `tikeo`.
 - Renamed directories to `sdks/java/tikeo` and `sdks/rust/tikeo`, updated Gradle project dependencies, Rust crate metadata, examples, docs, memory, and prompts.
 - Verification after this additional rename is in progress.
-- Fixed verification regression caused by renamed default admin password: regenerated the seeded BCrypt hash for `Tikeo@2026!`.
+- Fixed verification regression caused by renamed default admin password: regenerated the seeded BCrypt hash for `<retired-password>`.
 - Full verification passed after SDK naming contraction:
   - `cargo fmt --all -- --check`
   - `cargo clippy --workspace --all-targets --all-features -- -D warnings`

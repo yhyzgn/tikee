@@ -33,7 +33,7 @@
 
 ## 2026-05-19 — 012 auth 风险
 
-- 当前认证是开发期基础，不是生产安全方案；默认 `tikeo_init/Tikeo@2026!` 和静态 bearer token 仅用于本地与早期集成。
+- 当前认证是开发期基础，不是生产安全方案；默认 `<retired-dev-admin>/<retired-password>` 和静态 bearer token 仅用于本地与早期集成。
 - 尚未实现正式 RBAC、OIDC、API Token 生命周期、密码哈希、审计日志、CSRF/刷新 token 等生产能力。
 - Web token 使用 `localStorage`，存在 XSS 后 token 泄露风险；正式安全阶段需要收敛为更安全的会话策略。
 
@@ -68,7 +68,7 @@
 
 ## 2026-05-20 — session abstraction follow-up
 
-- 020 阶段已删除开发期 `tikeo-init-token` 静态 bearer backdoor；后续风险转为需要完善正式 RBAC / OIDC / API Token 生命周期管理。
+- 020 阶段已删除开发期 `<retired-static-token>` 静态 bearer backdoor；后续风险转为需要完善正式 RBAC / OIDC / API Token 生命周期管理。
 - 当前 session TTL 固定在代码中，后续应进入配置文件并支持 Redis 分布式实现。
 - moka 本地缓存不是权威状态；多节点部署前必须实现 Redis 或事件驱动的跨节点撤销同步。
 

@@ -128,9 +128,17 @@ After the Server is reachable, bootstrap the first Owner once:
 
 ```bash
 curl -fsS http://127.0.0.1:9090/api/v1/auth/bootstrap | jq .data.registrationOpen
-TOKEN="$(curl -fsS -X POST http://127.0.0.1:9090/api/v1/auth/bootstrap/register \
-  -H 'content-type: application/json' \
-  -d '{"username":"owner","email":"owner@example.com","password":"Tikeo@2026!","confirmPassword":"Tikeo@2026!"}' | jq -r .data.token)"
+: "${TIKEO_OWNER_USERNAME:?set the production owner username}"
+: "${TIKEO_OWNER_EMAIL:?set the production owner email}"
+: "${TIKEO_OWNER_PASSWORD:?set the production owner password from your secret manager}"
+TOKEN="$(jq -n \
+  --arg username "$TIKEO_OWNER_USERNAME" \
+  --arg email "$TIKEO_OWNER_EMAIL" \
+  --arg password "$TIKEO_OWNER_PASSWORD" \
+  '{username:$username,email:$email,password:$password,confirmPassword:$password}' \
+  | curl -fsS -X POST http://127.0.0.1:9090/api/v1/auth/bootstrap/register \
+      -H 'content-type: application/json' \
+      -d @- | jq -r .data.token)"
 ```
 
 Then create namespace/app scope, service account, and SDK API keys from the Web console or Management API before connecting application Workers. Do not run production Workers with human session tokens.

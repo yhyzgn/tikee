@@ -510,7 +510,7 @@
         assert_eq!(status_json["data"]["initialized"], false);
         assert_eq!(status_json["data"]["registrationOpen"], true);
 
-        let payload = r#"{"username":"bootstrap_admin","email":"bootstrap.admin@example.com","password":"Tikeo@2026!","confirmPassword":"Tikeo@2026!"}"#;
+        let payload = r#"{"username":"bootstrap_admin","email":"bootstrap.admin@example.com","password":"TestOnlyOwnerPassword!2026","confirmPassword":"TestOnlyOwnerPassword!2026"}"#;
         let registered = post_json_without_auth(app.clone(), "/api/v1/auth/bootstrap/register", payload).await;
         assert_eq!(registered["data"]["username"], "bootstrap_admin");
         assert_eq!(registered["data"]["roles"][0], "owner");

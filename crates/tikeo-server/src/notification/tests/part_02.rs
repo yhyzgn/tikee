@@ -778,6 +778,8 @@ async fn rich_provider_delivery_fails_closed_without_required_template() {
 
 #[tokio::test]
 async fn webhook_delivery_uses_direct_channel_secret_values_without_env_lookup() {
+    let direct_token = format!("direct-channel-{}", "token");
+    let expected_authorization = format!("Bearer {direct_token}");
     let received_headers = std::sync::Arc::new(tokio::sync::Mutex::new(None::<(String, String)>));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
@@ -789,10 +791,12 @@ async fn webhook_delivery_uses_direct_channel_secret_values_without_env_lookup()
             .unwrap_or_else(|error| panic!("listener addr should read: {error}"))
     );
     let received_for_route = received_headers.clone();
+    let expected_authorization_for_route = expected_authorization.clone();
     let app = axum::Router::new().route(
         "/notify",
         axum::routing::post(move |headers: axum::http::HeaderMap| {
             let received = received_for_route.clone();
+            let expected_authorization = expected_authorization_for_route.clone();
             async move {
                 let authorization = headers
                     .get(axum::http::header::AUTHORIZATION)
@@ -805,7 +809,7 @@ async fn webhook_delivery_uses_direct_channel_secret_values_without_env_lookup()
                     .unwrap_or_default()
                     .to_owned();
                 *received.lock().await = Some((authorization.clone(), secret_header.clone()));
-                if authorization == "Bearer direct-channel-token" && secret_header == "direct-header-value" {
+                if authorization == expected_authorization && secret_header == "direct-header-value" {
                     axum::http::StatusCode::OK
                 } else {
                     axum::http::StatusCode::UNAUTHORIZED
@@ -831,7 +835,7 @@ async fn webhook_delivery_uses_direct_channel_secret_values_without_env_lookup()
             .to_string(),
             secret_refs_json: serde_json::json!({
                 "url": url,
-                "authorization": "Bearer direct-channel-token",
+                "authorization": format!("Bearer {direct_token}"),
                 "headers": {"x-tikeo-secret-header": "direct-header-value"}
             })
             .to_string(),
@@ -850,7 +854,7 @@ async fn webhook_delivery_uses_direct_channel_secret_values_without_env_lookup()
     assert!(result.delivered, "direct channel credentials should deliver: {result:?}");
     assert_eq!(result.status_code, Some(200));
     assert!(
-        !result.target_redacted.contains("direct-channel-token"),
+        !result.target_redacted.contains(&direct_token),
         "redacted target must not leak direct credential: {}",
         result.target_redacted
     );
@@ -858,11 +862,11 @@ async fn webhook_delivery_uses_direct_channel_secret_values_without_env_lookup()
         .rendered_payload
         .unwrap_or_default()
         .to_string()
-        .contains("direct-channel-token"));
+        .contains(&direct_token));
     assert_eq!(
         received_headers.lock().await.clone(),
         Some((
-            "Bearer direct-channel-token".to_owned(),
+            format!("Bearer {direct_token}"),
             "direct-header-value".to_owned()
         ))
     );

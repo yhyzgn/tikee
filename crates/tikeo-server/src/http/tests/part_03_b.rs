@@ -1331,7 +1331,7 @@
         let login = post_json_without_auth(
             app,
             "/api/v1/auth/login",
-            r#"{"username":"bootstrap.admin@example.com","password":"Tikeo@2026!"}"#,
+            r#"{"username":"bootstrap.admin@example.com","password":"TestOnlyOwnerPassword!2026"}"#,
         )
         .await;
 

@@ -94,7 +94,7 @@ const webhookUrlField: ProviderFieldSchema = {
   type: 'string',
   required: true,
   secret: true,
-  placeholder: 'https://hooks.example.com/tikeo',
+  placeholder: 'env:CHANNEL_WEBHOOK_URL',
   help: '可直接填写真实值（本渠道 Webhook URL），保存后立即生效且响应不会回显；也支持 env:NAME 兼容引用。',
 };
 
@@ -293,83 +293,6 @@ function asArray(value: unknown): unknown[] {
 }
 
 
-function exampleTemplate(provider: string, messageType: string): Record<string, unknown> {
-  if (provider === 'slack' && messageType === 'blockKit') return { messageType, text: '[tikeo] {{subject}}', blocks: [{ type: 'section', text: { type: 'mrkdwn', text: '*{{subject}}*\n{{body}}' } }] };
-  if (provider === 'slack' && messageType === 'attachments') return { messageType, text: '[tikeo] {{subject}}', attachments: [{ color: '#439FE0', title: '{{subject}}', text: '{{body}}' }] };
-  if (provider === 'slack') return { messageType: 'text', text: '[tikeo/{{severity}}] {{subject}}\n{{body}}' };
-  if (provider === 'dingtalk' && messageType === 'markdown') return { messageType, title: '{{subject}}', text: '### {{subject}}\n\n{{body}}' };
-  if (provider === 'dingtalk' && messageType === 'link') return { messageType, title: '{{subject}}', text: '{{body}}', messageUrl: 'https://tikeo.example.com/instances/{{resourceId}}', picUrl: 'https://tikeo.example.com/logo.png' };
-  if (provider === 'dingtalk' && messageType === 'actionCard') return { messageType, title: '{{subject}}', text: '### {{subject}}\n\n{{body}}', singleTitle: 'Open Tikeo', singleURL: 'https://tikeo.example.com/instances/{{resourceId}}' };
-  if (provider === 'dingtalk' && messageType === 'feedCard') return { messageType, links: [{ title: '{{subject}}', messageURL: 'https://tikeo.example.com/instances/{{resourceId}}', picURL: 'https://tikeo.example.com/logo.png' }] };
-  if (provider === 'dingtalk') return { messageType: 'text', content: '{{subject}}\n{{body}}' };
-  if (provider === 'feishu' && messageType === 'post') return { messageType, title: '{{subject}}', content: [[{ tag: 'text', text: '{{body}}' }]] };
-  if (provider === 'feishu' && messageType === 'image') return { messageType, imageKey: 'img_v3_example_key' };
-  if (provider === 'feishu' && messageType === 'share_chat') return { messageType, shareChatId: 'oc_example_chat_id' };
-  if (provider === 'feishu' && messageType === 'interactive') return { messageType, card: { header: { title: { tag: 'plain_text', content: '{{subject}}' } }, elements: [{ tag: 'div', text: { tag: 'lark_md', content: '{{body}}' } }] } };
-  if (provider === 'feishu') return { messageType: 'text', text: '{{subject}}\n{{body}}' };
-  if (provider === 'wechat_work' && messageType === 'markdown') return { messageType, content: '### {{subject}}\n{{body}}' };
-  if (provider === 'wechat_work' && messageType === 'markdown_v2') return { messageType, content: '# {{subject}}\n{{body}}' };
-  if (provider === 'wechat_work' && messageType === 'image') return { messageType, base64: 'iVBORw0KGgo=', md5: 'd41d8cd98f00b204e9800998ecf8427e' };
-  if (provider === 'wechat_work' && messageType === 'news') return { messageType, articles: [{ title: '{{subject}}', description: '{{body}}', url: 'https://tikeo.example.com/instances/{{resourceId}}' }] };
-  if (provider === 'wechat_work' && (messageType === 'file' || messageType === 'voice')) return { messageType, media_id: 'MEDIA_ID_FROM_WECOM_UPLOAD' };
-  if (provider === 'wechat_work' && messageType === 'template_card') return { messageType, templateCard: { card_type: 'text_notice', main_title: { title: '{{subject}}', desc: '{{body}}' }, card_action: { type: 1, url: 'https://tikeo.example.com/instances/{{resourceId}}' } } };
-  if (provider === 'wechat_work') return { messageType: 'text', content: '{{subject}}\n{{body}}' };
-  if (provider === 'pagerduty' && messageType === 'acknowledge') return { messageType, customDetails: { eventType: '{{eventType}}', resourceId: '{{resourceId}}' } };
-  if (provider === 'pagerduty' && messageType === 'resolve') return { messageType, customDetails: { eventType: '{{eventType}}', resourceId: '{{resourceId}}' } };
-  if (provider === 'pagerduty') return { messageType: 'trigger', summary: '{{subject}}', customDetails: { body: '{{body}}', eventType: '{{eventType}}' } };
-  if (provider === 'email' && messageType === 'html') return { messageType, subject: '[tikeo/{{severity}}] {{subject}}', html: '<h1>{{subject}}</h1><p>{{body}}</p>', body: '{{body}}' };
-  if (provider === 'email') return { messageType: 'plain', subject: '[tikeo/{{severity}}] {{subject}}', body: '{{body}}\n\nResource: {{resourceType}}/{{resourceId}}' };
-  return { messageType: 'json', body: { text: '{{subject}}', body: '{{body}}', eventType: '{{eventType}}' } };
-}
-
-function directWebhookUrl(provider: string, messageType: string): string {
-  if (provider === 'slack') return `https://hooks.slack.com/services/T00000000/B00000000/${messageType.replace(/[^A-Za-z0-9]+/g, '_').toUpperCase()}_WEBHOOK`;
-  if (provider === 'dingtalk') return 'https://oapi.dingtalk.com/robot/send?access_token=xxxxxxxx';
-  if (provider === 'feishu') return 'https://open.feishu.cn/open-apis/bot/v2/hook/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx';
-  if (provider === 'wechat_work') return 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx';
-  return `https://hooks.example.com/tikeo/${provider}/${messageType}`;
-}
-
-function directSigningSecret(provider: string, messageType: string): string {
-  return `SEC_${provider.toUpperCase()}_${messageType.replace(/[^A-Za-z0-9]+/g, '_').toUpperCase()}_SIGNING_SECRET`;
-}
-
-function exampleSecretRefs(provider: string, messageType: string): Record<string, unknown> {
-  if (provider === 'slack') return { url: directWebhookUrl(provider, messageType) };
-  if (provider === 'dingtalk') return { url: directWebhookUrl(provider, messageType), signingKey: directSigningSecret(provider, messageType) };
-  if (provider === 'feishu') return { url: directWebhookUrl(provider, messageType), signingKey: directSigningSecret(provider, messageType) };
-  if (provider === 'wechat_work') return { url: directWebhookUrl(provider, messageType) };
-  if (provider === 'pagerduty') return { routingKey: `PAGERDUTY_${messageType.replace(/[^A-Za-z0-9]+/g, '_').toUpperCase()}_ROUTING_KEY` };
-  if (provider === 'email') return { password: `SMTP_${messageType.replace(/[^A-Za-z0-9]+/g, '_').toUpperCase()}_PASSWORD` };
-  return { url: directWebhookUrl(provider, messageType), authorization: 'Bearer direct-channel-token' };
-}
-
-function exampleConfig(provider: string, messageType: string): Record<string, unknown> {
-  if (provider === 'dingtalk') return { messageType, isAtAll: false };
-  if (provider === 'wechat_work') return { messageType, mentionedList: [], mentionedMobileList: [] };
-  if (provider === 'pagerduty') return { messageType, source: 'tikeo', severity: 'critical', dedupKey: '{{dedupeKey}}' };
-  if (provider === 'email') return { messageType, to: ['ops@example.com'], from: 'tikeo@example.com', host: 'smtp.feishu.cn', port: '465', username: 'tikeo@example.com', auth: true, ssl: true, starttls: false };
-  return { messageType };
-}
-
-function generatedExample(provider: string, messageType: string): ProviderMessageTypeExample {
-  return {
-    name: `${provider} ${messageType} smoke`,
-    description: '示例：按渠道私密配置保存，真实值保存后立即生效；也可改成 env:NAME 兼容引用。',
-    config: exampleConfig(provider, messageType),
-    secretRefs: exampleSecretRefs(provider, messageType),
-    template: exampleTemplate(provider, messageType),
-    sample: {
-      subject: 'Tikeo smoke test',
-      body: 'A notification channel test was sent from the configuration drawer.',
-      eventType: 'notification.channel_test',
-      resourceType: 'notification_channel',
-      resourceId: 'channel-example',
-      severity: 'info',
-    },
-  };
-}
-
 function parseExamples(value: unknown): ProviderMessageTypeExample[] {
   return asArray(value).filter((item): item is ProviderMessageTypeExample => Boolean(item && typeof item === 'object' && 'name' in item));
 }
@@ -383,7 +306,7 @@ function normalizeProviderField(field: ProviderFieldSchema): ProviderFieldSchema
     return {
       ...field,
       label: '机器人/Webhook 地址',
-      placeholder: field.placeholder ?? 'https://hooks.example.com/tikeo',
+      placeholder: field.placeholder ?? 'env:CHANNEL_WEBHOOK_URL',
       help: field.help ?? '可直接填写真实值（本渠道 Webhook URL），保存后立即生效且响应不会回显；也支持 env:NAME 兼容引用。',
     };
   }
@@ -416,7 +339,7 @@ export function providerSchemaFor(type?: NotificationChannelTypeSummary | null, 
   const parsedSecretFields = parseNormalizedFields(template.secretFields);
   const messageTypes = rawMessageTypes.map((item) => {
     const examples = parseExamples(item.examples);
-    return { ...item, examples: examples.length > 0 ? examples : [generatedExample(key, item.id)] };
+    return examples.length > 0 ? { ...item, examples } : { ...item, examples: undefined };
   });
   return {
     ...fallback,

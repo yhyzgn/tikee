@@ -100,21 +100,52 @@ tikeo_smoke_wait_for_http() {
   done
 }
 
+tikeo_smoke_random_password() {
+  python3 - <<'PY_RANDOM_PASSWORD'
+import secrets
+print("smoke-" + secrets.token_urlsafe(24))
+PY_RANDOM_PASSWORD
+}
+
+tikeo_smoke_json_object() {
+  python3 - "$@" <<'PY_JSON_OBJECT'
+import json
+import sys
+args = sys.argv[1:]
+if len(args) % 2 != 0:
+    raise SystemExit("tikeo_smoke_json_object requires key/value pairs")
+print(json.dumps({args[i]: args[i + 1] for i in range(0, len(args), 2)}, ensure_ascii=False))
+PY_JSON_OBJECT
+}
+
 tikeo_smoke_login() {
   local api_url="$1"
-  local username="${2:-smoke_admin}"
-  local password="${3:-Tikeo@2026!}"
+  local username="${2:-${TIKEO_SMOKE_ADMIN_USERNAME:-${TIKEO_ADMIN_USERNAME:-}}}"
+  local password="${3:-${TIKEO_SMOKE_ADMIN_PASSWORD:-${TIKEO_ADMIN_PASSWORD:-}}}"
   local email="${TIKEO_SMOKE_ADMIN_EMAIL:-smoke.admin@example.com}"
   local registration_open
   registration_open="$(curl -fsS "$(tikeo_smoke_api_path "$api_url" /api/v1/auth/bootstrap)" | tikeo_smoke_json_get data.registrationOpen)"
   if [[ "$registration_open" == "True" || "$registration_open" == "true" ]]; then
+    username="${username:-smoke_$(date -u +%Y%m%dT%H%M%SZ)_$$}"
+    password="${password:-$(tikeo_smoke_random_password)}"
+    local payload
+    payload="$(tikeo_smoke_json_object username "$username" email "$email" password "$password" confirmPassword "$password")"
     TIKEO_SMOKE_AUTH_TOKEN="$(curl -fsS -X POST "$(tikeo_smoke_api_path "$api_url" /api/v1/auth/bootstrap/register)" \
       -H 'content-type: application/json' \
-      -d "{\"username\":\"$username\",\"email\":\"$email\",\"password\":\"$password\",\"confirmPassword\":\"$password\"}" | tikeo_smoke_json_get data.token)"
+      -d "$payload" | tikeo_smoke_json_get data.token)"
   else
+    if [[ -z "$username" || -z "$password" ]]; then
+      cat >&2 <<ERR
+missing smoke authentication credentials for $api_url
+Provide TIKEO_SMOKE_AUTH_TOKEN/TIKEO_ADMIN_TOKEN, or explicit TIKEO_SMOKE_ADMIN_USERNAME and TIKEO_SMOKE_ADMIN_PASSWORD for an existing admin account.
+ERR
+      return 2
+    fi
+    local payload
+    payload="$(tikeo_smoke_json_object username "$username" password "$password")"
     TIKEO_SMOKE_AUTH_TOKEN="$(curl -fsS -X POST "$(tikeo_smoke_api_path "$api_url" /api/v1/auth/login)" \
       -H 'content-type: application/json' \
-      -d "{\"username\":\"$username\",\"password\":\"$password\"}" | tikeo_smoke_json_get data.token)"
+      -d "$payload" | tikeo_smoke_json_get data.token)"
   fi
   export TIKEO_SMOKE_AUTH_TOKEN
 }

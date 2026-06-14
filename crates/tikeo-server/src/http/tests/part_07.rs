@@ -788,162 +788,22 @@ fn assert_provider_template(channel_types: &[Value], provider: &str, expected_me
     }
 }
 
-fn notification_channel_example_suffix(value: &str) -> String {
-    let mut normalized = String::new();
-    let mut previous_was_separator = true;
-    for item in value.chars() {
-        if item.is_ascii_uppercase() {
-            if !previous_was_separator {
-                normalized.push('_');
-            }
-            normalized.push(item);
-            previous_was_separator = false;
-        } else if item.is_ascii_alphanumeric() {
-            normalized.push(item.to_ascii_uppercase());
-            previous_was_separator = false;
-        } else if !previous_was_separator {
-            normalized.push('_');
-            previous_was_separator = true;
-        }
-    }
-    let trimmed = normalized.trim_matches('_').to_owned();
-    if trimmed.is_empty() {
-        "CUSTOM".to_owned()
-    } else {
-        trimmed
-    }
-}
-
-fn assert_feishu_interactive_examples_are_schema_only(channel_types: &[Value]) {
-    let provider_type = channel_types
-        .iter()
-        .find(|item| item["type"] == "feishu")
-        .unwrap_or_else(|| panic!("feishu provider should be present"));
-    let message_types = provider_type["template"]["messageTypes"]
-        .as_array()
-        .unwrap_or_else(|| panic!("feishu messageTypes should be an array"));
-    let interactive = message_types
-        .iter()
-        .find(|item| item["id"] == "interactive")
-        .unwrap_or_else(|| panic!("feishu interactive type should be present"));
-    let examples = interactive["examples"]
-        .as_array()
-        .unwrap_or_else(|| panic!("feishu interactive should expose examples"));
-    assert_eq!(examples.len(), 1, "provider metadata should expose one schema example, not business card presets");
-    let rendered = serde_json::Value::Array(examples.clone()).to_string();
+fn assert_provider_metadata_does_not_embed_runtime_examples(channel_types: &[Value]) {
+    let rendered = serde_json::Value::Array(channel_types.to_vec()).to_string();
     for forbidden in [
-        "Tikeo Job 任务通知",
-        "任务执行失败报警",
-        "任务执行成功通知",
-        "任务执行状态通知",
-        "查看控制台",
-        "demo.exception",
-        "AutoGenerateStockPdfRecordAfterDateTask",
+        "Tikeo Job 任务通知".to_owned(),
+        "任务执行失败报警".to_owned(),
+        "任务执行成功通知".to_owned(),
+        "任务执行状态通知".to_owned(),
+        "查看控制台".to_owned(),
+        "direct-channel-".to_owned() + "token",
+        "hooks.example.com".to_owned(),
+        "SEC_FEISHU_INTERACTIVE_SIGNING_SECRET".to_owned(),
     ] {
         assert!(
-            !rendered.contains(forbidden),
-            "feishu interactive provider metadata must not hard-code business card content {forbidden}: {rendered}"
+            !rendered.contains(&forbidden),
+            "provider metadata must not hard-code runtime example content {forbidden}: {rendered}"
         );
-    }
-    assert_eq!(examples[0]["template"]["messageType"], "interactive");
-    assert!(
-        examples[0]["template"].to_string().contains("{{subject}}")
-            && examples[0]["template"].to_string().contains("{{body}}"),
-        "schema example should still show editable template variables: {rendered}"
-    );
-}
-
-fn assert_provider_template_example_secret_refs_are_channel_private_values(channel_types: &[Value]) {
-    for provider_type in channel_types.iter().filter(|item| {
-        item["type"] == "slack"
-            || item["type"] == "dingtalk"
-            || item["type"] == "feishu"
-            || item["type"] == "wechat_work"
-            || item["type"] == "pagerduty"
-            || item["type"] == "email"
-            || item["type"] == "webhook"
-    }) {
-        let provider = provider_type["type"]
-            .as_str()
-            .unwrap_or_else(|| panic!("provider type should be a string"));
-        let message_types = provider_type["template"]["messageTypes"]
-            .as_array()
-            .unwrap_or_else(|| panic!("{provider} messageTypes should be an array"));
-        for message_type in message_types {
-            let message_type_id = message_type["id"]
-                .as_str()
-                .unwrap_or_else(|| panic!("{provider} message type should have id"));
-            let examples = message_type["examples"].as_array().unwrap_or_else(|| {
-                panic!("{provider}/{message_type_id} should expose examples")
-            });
-            for example in examples {
-                let secret_refs = &example["secretRefs"];
-                let rendered = secret_refs.to_string();
-                assert!(
-                    !rendered.contains("env:TIKEO_NOTIFICATION_CHANNEL_"),
-                    "{provider}/{message_type_id} example secretRefs should demonstrate direct channel-private values"
-                );
-                assert!(
-                    example["description"]
-                        .as_str()
-                        .is_some_and(|description| description.contains("direct values")
-                            && description.contains("env:NAME")),
-                    "{provider}/{message_type_id} example should document direct values and env compatibility"
-                );
-                match provider {
-                    "slack" | "dingtalk" | "feishu" | "wechat_work" | "webhook" => {
-                        assert!(
-                            secret_refs["url"]
-                                .as_str()
-                                .is_some_and(|value| value.starts_with("https://")),
-                            "{provider}/{message_type_id} should include a direct webhook URL"
-                        );
-                    }
-                    "pagerduty" => assert!(
-                        secret_refs["routingKey"].as_str().is_some_and(|value| {
-                            value.contains("PAGERDUTY")
-                                && value.contains(&notification_channel_example_suffix(message_type_id))
-                        }),
-                        "{provider}/{message_type_id} should include a direct routing key placeholder"
-                    ),
-                    "email" => {
-                        assert!(secret_refs.get("smtpUrl").is_none());
-                        assert!(
-                            secret_refs["password"].as_str().is_some_and(|value| {
-                                value.contains("SMTP")
-                                    && value.contains(&notification_channel_example_suffix(message_type_id))
-                            }),
-                            "email/{message_type_id} should include a direct SMTP password placeholder"
-                        );
-                    }
-                    _ => {}
-                }
-                if matches!(provider, "dingtalk" | "feishu") {
-                    assert!(
-                        secret_refs["signingKey"].as_str().is_some_and(|value| {
-                            value.contains("SEC_")
-                                && value.contains(&notification_channel_example_suffix(message_type_id))
-                        }),
-                        "{provider}/{message_type_id} should include a direct signing secret placeholder"
-                    );
-                }
-                for global_ref in [
-                    "TIKEO_NOTIFICATION_WEBHOOK_URL",
-                    "SLACK_WEBHOOK_URL",
-                    "DINGTALK_WEBHOOK_URL",
-                    "FEISHU_WEBHOOK_URL",
-                    "FEISHU_BOT_SECRET",
-                    "WECOM_WEBHOOK_URL",
-                    "PAGERDUTY_ROUTING_KEY",
-                    "TIKEO_SMTP_URL",
-                ] {
-                    assert!(
-                        !rendered.contains(global_ref),
-                        "{provider}/{message_type_id} example should not use shared ref {global_ref}"
-                    );
-                }
-            }
-        }
     }
 }
 
@@ -962,7 +822,7 @@ fn assert_provider_template_has_field(
     );
 }
 
-fn assert_provider_template_examples(channel_types: &[Value], provider: &str) {
+fn assert_provider_template_has_no_runtime_examples(channel_types: &[Value], provider: &str) {
     let provider_type = channel_types
         .iter()
         .find(|item| item["type"] == provider)
@@ -974,29 +834,9 @@ fn assert_provider_template_examples(channel_types: &[Value], provider: &str) {
         let message_type_id = message_type["id"]
             .as_str()
             .unwrap_or_else(|| panic!("{provider} message type should have id"));
-        let examples = message_type["examples"].as_array().unwrap_or_else(|| {
-            panic!("{provider}/{message_type_id} should expose examples")
-        });
         assert!(
-            (1..=3).contains(&examples.len()),
-            "{provider}/{message_type_id} should expose 1-3 examples"
+            message_type.get("examples").is_none(),
+            "{provider}/{message_type_id} provider metadata must not embed runtime examples"
         );
-        for example in examples {
-            assert!(
-                example["name"].as_str().is_some_and(|value| !value.trim().is_empty()),
-                "{provider}/{message_type_id} example should have a name"
-            );
-            assert!(
-                example.get("template").is_some() || example.get("config").is_some(),
-                "{provider}/{message_type_id} example should provide template or config"
-            );
-            let rendered = example.to_string();
-            assert!(
-                !rendered.contains("***redacted***") && !rendered.contains("xoxb-"),
-                "{provider}/{message_type_id} example must not contain redacted markers or raw tokens"
-            );
-        }
     }
 }
-
-

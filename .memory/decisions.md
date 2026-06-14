@@ -254,7 +254,7 @@ Constraint:
 
 ## 2026-05-19 — 开发期认证基础
 
-- 012 阶段采用开发管理员 token 作为最小认证闭环，默认 `tikeo_init/Tikeo@2026!` -> `tikeo-init-token`，允许环境变量覆盖。
+- 012 阶段采用开发管理员 token 作为最小认证闭环，默认 `<retired-dev-admin>/<retired-password>` -> `<retired-static-token>`，允许环境变量覆盖。
 - 写操作先保护 Job 创建与手动触发，读接口、health、ready、OpenAPI 暂保持开放，便于开发和部署烟测。
 - Web token 暂存在 `localStorage`，后续正式 RBAC/OIDC 阶段必须替换为更完整的会话、安全刷新与权限模型。
 
@@ -286,7 +286,7 @@ Constraint:
 
 - Local configuration files live under `config/`, not `examples/`, because they are operational configuration rather than sample code.
 - `scripts/dev.sh` is the canonical local development launcher for backend + Web UI during the active development cycle.
-- Built-in initialization credentials are `tikeo_init` / `Tikeo@2026!` / `tikeo-init-token`; they are development-only and remain overrideable through `TIKEO_DEV_ADMIN_*`.
+- Built-in initialization credentials are `<retired-dev-admin>` / `<retired-password>` / `<retired-static-token>`; they are development-only and remain overrideable through `TIKEO_DEV_ADMIN_*`.
 
 
 ## 2026-05-19 — SQLite schema compatibility pass
@@ -356,7 +356,7 @@ Constraint:
 
 ## 2026-05-20 — 020 安全善后决策
 
-- 删除 `tikeo-init-token` 静态 Bearer 后门；初始化账号仅通过 `/api/v1/auth/login` 获取 `atk_` session token。
+- 删除 `<retired-static-token>` 静态 Bearer 后门；初始化账号仅通过 `/api/v1/auth/login` 获取 `atk_` session token。
 - 审计日志不得保存明文 Bearer token；session 相关审计只能保存脱敏标识或不可逆摘要。
 - 出站告警 Webhook 默认只允许 HTTPS，并拒绝 localhost/私网/link-local/metadata 目标；后续如需内网 webhook，必须显式 allowlist。
 

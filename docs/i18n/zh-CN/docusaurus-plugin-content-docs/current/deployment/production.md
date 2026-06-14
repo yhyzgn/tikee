@@ -114,9 +114,17 @@ Server 可达后，只创建一次首个 Owner：
 
 ```bash
 curl -fsS http://127.0.0.1:9090/api/v1/auth/bootstrap | jq .data.registrationOpen
-TOKEN="$(curl -fsS -X POST http://127.0.0.1:9090/api/v1/auth/bootstrap/register \
-  -H 'content-type: application/json' \
-  -d '{"username":"owner","email":"owner@example.com","password":"Tikeo@2026!","confirmPassword":"Tikeo@2026!"}' | jq -r .data.token)"
+: "${TIKEO_OWNER_USERNAME:?set the production owner username}"
+: "${TIKEO_OWNER_EMAIL:?set the production owner email}"
+: "${TIKEO_OWNER_PASSWORD:?set the production owner password from your secret manager}"
+TOKEN="$(jq -n \
+  --arg username "$TIKEO_OWNER_USERNAME" \
+  --arg email "$TIKEO_OWNER_EMAIL" \
+  --arg password "$TIKEO_OWNER_PASSWORD" \
+  '{username:$username,email:$email,password:$password,confirmPassword:$password}' \
+  | curl -fsS -X POST http://127.0.0.1:9090/api/v1/auth/bootstrap/register \
+      -H 'content-type: application/json' \
+      -d @- | jq -r .data.token)"
 ```
 
 随后用 Web 或 Management API 创建 namespace/app、service account 和 SDK API Key。生产 Worker 不应使用人类 session token。

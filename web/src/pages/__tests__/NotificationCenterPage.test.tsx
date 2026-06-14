@@ -142,26 +142,16 @@ describe('notification center console page', () => {
       expect(providerSchemaSource).toContain(token);
     }
     expect(providerSchemaSource).toContain('examples');
+    expect(providerSchemaSource).not.toContain('generatedExample');
+    expect(providerSchemaSource).not.toContain(`direct-channel-${'token'}`);
+    expect(providerSchemaSource).not.toContain('directWebhookUrl');
     expect(channelDrawerSource).not.toContain('套用示例');
-    const exampleSecretRefs = (provider: string, messageType: string) => {
+    for (const provider of ['webhook', 'slack', 'dingtalk', 'feishu', 'wechat_work', 'pagerduty', 'email']) {
       const schema = providerSchemaFor(null, provider);
-      const selected = schema.messageTypes.find((item) => item.id === messageType);
-      return JSON.stringify(selected?.examples?.[0]?.secretRefs ?? {});
-    };
-    for (const [provider, messageType, expected] of [
-      ['webhook', 'json', 'https://hooks.example.com/tikeo/webhook/json'],
-      ['slack', 'text', 'https://hooks.slack.com/services/'],
-      ['slack', 'blockKit', 'https://hooks.slack.com/services/'],
-      ['dingtalk', 'markdown', 'SEC_DINGTALK_MARKDOWN_SIGNING_SECRET'],
-      ['feishu', 'interactive', 'SEC_FEISHU_INTERACTIVE_SIGNING_SECRET'],
-      ['wechat_work', 'markdown_v2', 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key='],
-      ['pagerduty', 'trigger', 'PAGERDUTY_TRIGGER_ROUTING_KEY'],
-      ['email', 'plain', 'SMTP_PLAIN_PASSWORD'],
-    ]) {
-      expect(exampleSecretRefs(provider, messageType)).toContain(expected);
+      for (const messageType of schema.messageTypes) {
+        expect(messageType.examples).toBeUndefined();
+      }
     }
-    expect(exampleSecretRefs('slack', 'text')).not.toBe(exampleSecretRefs('slack', 'blockKit'));
-    expect(exampleSecretRefs('feishu', 'text')).not.toBe(exampleSecretRefs('feishu', 'interactive'));
     for (const token of ['env:TIKEO_NOTIFICATION_WEBHOOK_URL', 'env:SLACK_WEBHOOK_URL', 'env:DINGTALK_WEBHOOK_URL', 'env:FEISHU_WEBHOOK_URL', 'env:WECOM_WEBHOOK_URL', 'env:PAGERDUTY_ROUTING_KEY', 'env:TIKEO_SMTP_URL']) {
       expect(providerSchemaSource).not.toContain(token);
     }
@@ -259,7 +249,7 @@ describe('notification center console page', () => {
     }, 'feishu');
     const urlSecretField = metadataSchema.secretFields.find((item) => item.key === 'url');
     expect(urlSecretField?.label).toBe('机器人/Webhook 地址');
-    expect(urlSecretField?.placeholder).toContain('https://');
+    expect(urlSecretField?.placeholder).toBe('env:CHANNEL_WEBHOOK_URL');
     expect(urlSecretField?.help).toContain('可直接填写真实值');
   });
 

@@ -58,7 +58,7 @@
             "feishu",
             &["text", "post", "image", "share_chat", "interactive"],
         );
-        assert_feishu_interactive_examples_are_schema_only(channel_types);
+        assert_provider_metadata_does_not_embed_runtime_examples(channel_types);
         assert_provider_template(
             channel_types,
             "wechat_work",
@@ -72,9 +72,8 @@
         assert_provider_template(channel_types, "email", &["plain", "html"]);
         assert_provider_template(channel_types, "webhook", &["json"]);
         for provider in ["slack", "dingtalk", "feishu", "wechat_work", "pagerduty", "email", "webhook"] {
-            assert_provider_template_examples(channel_types, provider);
+            assert_provider_template_has_no_runtime_examples(channel_types, provider);
         }
-        assert_provider_template_example_secret_refs_are_channel_private_values(channel_types);
         assert_provider_template_has_field(channel_types, "dingtalk", "atUserIds");
         assert_provider_template_has_field(channel_types, "wechat_work", "mentionedList");
         assert_provider_template_has_field(channel_types, "wechat_work", "mentionedMobileList");
@@ -402,12 +401,15 @@
             .as_array()
             .unwrap_or_else(|| panic!("notification channels list should be an array"));
         assert!(
-            listed_channels.len() >= 5,
-            "list should include user-created channels and seeded normal channel rows: {listed_json}"
+            listed_channels.len() >= 4,
+            "list should include user-created channels without schema-seeded example rows: {listed_json}"
         );
-        assert!(listed_channels
-            .iter()
-            .any(|item| item["id"] == "notification-channel-example-slack-text"));
+        assert!(
+            listed_channels
+                .iter()
+                .all(|item| !item["id"].as_str().is_some_and(|id| id.starts_with("notification-channel-example-"))),
+            "schema migrations must not expose notification channel example rows: {listed_json}"
+        );
         assert!(listed_channels
             .iter()
             .any(|item| item["id"] == channel_id));

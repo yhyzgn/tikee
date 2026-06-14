@@ -68,24 +68,39 @@ curl -fsS http://127.0.0.1:9090/api/v1/auth/bootstrap | jq .
 If `data.registrationOpen` is true, register the first Owner and export the returned bearer token for the remaining steps:
 
 ```bash
-TOKEN="$(curl -fsS -X POST http://127.0.0.1:9090/api/v1/auth/bootstrap/register \
-  -H 'content-type: application/json' \
-  -d '{"username":"bootstrap_admin","email":"bootstrap.admin@example.com","password":"Tikeo@2026!","confirmPassword":"Tikeo@2026!"}' \
+BOOTSTRAP_USERNAME="${TIKEO_BOOTSTRAP_USERNAME:-owner-$(date +%s)}"
+BOOTSTRAP_EMAIL="${TIKEO_BOOTSTRAP_EMAIL:-${BOOTSTRAP_USERNAME}@example.invalid}"
+BOOTSTRAP_PASSWORD="${TIKEO_BOOTSTRAP_PASSWORD:-$(openssl rand -base64 24 | tr -d '\n')}"
+TOKEN="$(jq -n \
+  --arg username "$BOOTSTRAP_USERNAME" \
+  --arg email "$BOOTSTRAP_EMAIL" \
+  --arg password "$BOOTSTRAP_PASSWORD" \
+  '{username:$username,email:$email,password:$password,confirmPassword:$password}' \
+  | curl -fsS -X POST http://127.0.0.1:9090/api/v1/auth/bootstrap/register \
+      -H 'content-type: application/json' \
+      -d @- \
   | tee /tmp/tikeo-bootstrap.json \
   | jq -r .data.token)"
 test -n "$TOKEN" && test "$TOKEN" != "null"
+printf 'Bootstrap owner: %s\nPassword saved only in this shell variable; store it securely now.\n' "$BOOTSTRAP_USERNAME"
 ```
 
 If bootstrap is already closed, login with the local Owner for this DB and export the token:
 
 ```bash
-TOKEN="$(curl -fsS -X POST http://127.0.0.1:9090/api/v1/auth/login \
-  -H 'content-type: application/json' \
-  -d '{"username":"bootstrap_admin","password":"Tikeo@2026!"}' | jq -r .data.token)"
+: "${TIKEO_BOOTSTRAP_USERNAME:?set the owner username for this DB}"
+: "${TIKEO_BOOTSTRAP_PASSWORD:?set the owner password for this DB}"
+TOKEN="$(jq -n \
+  --arg username "$TIKEO_BOOTSTRAP_USERNAME" \
+  --arg password "$TIKEO_BOOTSTRAP_PASSWORD" \
+  '{username:$username,password:$password}' \
+  | curl -fsS -X POST http://127.0.0.1:9090/api/v1/auth/login \
+      -H 'content-type: application/json' \
+      -d @- | jq -r .data.token)"
 test -n "$TOKEN" && test "$TOKEN" != "null"
 ```
 
-Do not use the sample password in a shared environment. It is here so a reader can reproduce local API calls against a disposable SQLite DB.
+Do not publish or commit bootstrap credentials. Local examples generate a throwaway password when `TIKEO_BOOTSTRAP_PASSWORD` is not set; production must use a secret manager or a private operator shell.
 
 ## Phase 3: open the Web console
 

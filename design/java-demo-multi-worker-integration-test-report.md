@@ -292,7 +292,7 @@ TIKEO_HTTP_URL=http://127.0.0.1:19090 scripts/dev-integration-seed.sh
 关键输出：
 
 ```text
-✅ authenticated as smoke_admin
+✅ authenticated as generated_smoke_user
 ✅ namespace created: dev-alpha
 ✅ namespace created: dev-beta
 ✅ namespace created: dev-ops
@@ -321,7 +321,7 @@ TIKEO_HTTP_URL=http://127.0.0.1:19090 scripts/dev-integration-seed.sh
 
 ### 5.7 已初始化 dev DB 登录边界验证
 
-尝试在本机已有 dev DB 上使用默认 smoke admin：
+尝试在本机已有 dev DB 上不提供任何显式认证运行 seed：
 
 ```bash
 scripts/dev-integration-seed.sh
@@ -335,7 +335,7 @@ curl: (22) The requested URL returned error: 401
 
 结论：⚠️ 环境相关，不是 seed 数据创建逻辑失败。
 
-原因：本机 dev DB 已初始化，默认 `smoke_admin/Tikeo@2026!` 不一定存在或密码已变更。脚本已补充以下替代认证方式：
+原因：本机 dev DB 已初始化后不会存在可假设的默认管理员账号。脚本已补充以下显式认证方式：
 
 ```bash
 TIKEO_SMOKE_AUTH_TOKEN=<admin bearer token> scripts/dev-integration-seed.sh
@@ -364,7 +364,7 @@ TIKEO_ADMIN_USERNAME=<admin> TIKEO_ADMIN_PASSWORD=<password> scripts/dev-integra
 # 1. 启动 server + web
 ./scripts/dev.sh
 
-# 2. 如果当前 dev DB 默认账号不可用，先从 Web 登录后复制 admin token，或使用已有 admin 账号
+# 2. seed 不假设默认账号；先从 Web 登录后复制 admin token，或使用已有 admin 账号
 TIKEO_SMOKE_AUTH_TOKEN=<admin bearer token> scripts/dev-integration-seed.sh
 
 # 3. 启动多 Java demo worker
@@ -383,8 +383,8 @@ scripts/start-java-demo-workers.sh --stop
 
 ## 8. 风险与建议
 
-1. **已初始化 dev DB 默认账号不作为验收项**
-   - 本轮完整验证使用临时库 bootstrap 管理员完成；已初始化 dev DB 中默认账号可能不存在或密码不同，这是环境状态而非功能缺口。
+1. **已初始化 dev DB 不存在默认管理员假设**
+   - 本轮完整验证使用临时库临时 bootstrap 管理员完成；已初始化 dev DB 必须传入当前有效凭据，这是环境状态而非功能缺口。
    - `scripts/dev-integration-seed.sh` 支持 `TIKEO_SMOKE_AUTH_TOKEN` / `TIKEO_ADMIN_TOKEN` / 显式账号密码，实际 dev DB 使用时应传入当前有效管理员凭据。
 
 2. **完整联合测试已在临时 SQLite 环境跑通，但建议沉淀为自动化脚本**

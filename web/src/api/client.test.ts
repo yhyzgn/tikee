@@ -169,7 +169,7 @@ describe('api client envelope handling', () => {
       }));
     }) as unknown as typeof fetch;
 
-    await login({ username: 'bootstrap_admin', password: 'Tikeo@2026!' });
+    await login({ username: 'bootstrap_admin', password: 'TestOnlyOwnerPassword!2026' });
 
     globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
       calls.push(init ?? {});

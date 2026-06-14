@@ -545,7 +545,7 @@
 - Applied user-requested SDK naming contraction: Rust SDK previous Rust Worker SDK name -> `tikeo`, Java core SDK module previous Java core SDK name -> `tikeo`.
 - Updated Rust example dependency/imports to use `tikeo = { path = "../../../sdks/rust/tikeo" }`.
 - Updated Java Gradle composite build so `tikeo-spring` depends on `project(":tikeo")`; Java package prefix remains `net.tikeo`.
-- Rename verification fixed one regression: the default admin password text changed to `Tikeo@2026!`, so the seeded BCrypt hash was regenerated to match the new credential.
+- Rename verification fixed one regression: the default admin password text changed to `<retired-password>`, so the seeded BCrypt hash was regenerated to match the new credential.
 - Full rename verification passed: `cargo fmt --all -- --check`; `cargo clippy --workspace --all-targets --all-features -- -D warnings`; `cargo test --workspace --all-features`; `cargo build --workspace --all-features`; `cargo run -- --help`; `cd web && bun run typecheck && bun test && bun run build`; `cargo test --manifest-path sdks/rust/tikeo/Cargo.toml`; `cargo test --manifest-path sdks/rust/tikeo/Cargo.toml --features wasm`; `cargo clippy --manifest-path sdks/rust/tikeo/Cargo.toml --all-targets --all-features -- -D warnings`; `cd sdks/java && ./gradlew test --warning-mode all --no-daemon`.
 ### 2026-05-23 Phase3 script execution governance visibility
 - Continued `.prompt/077-script-execution-governance-after-tikeo-rename.md`.

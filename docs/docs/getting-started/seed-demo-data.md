@@ -52,20 +52,20 @@ Run it after the Server is healthy:
 
 ```bash
 TIKEO_HTTP_URL=http://127.0.0.1:9090 \
-TIKEO_ADMIN_USERNAME=smoke_admin \
-TIKEO_ADMIN_PASSWORD='<local-admin-password>' \
-scripts/dev-integration-seed.sh
-```
-
-If you already have a valid bearer token, avoid putting a password in the shell command:
-
-```bash
-TIKEO_HTTP_URL=http://127.0.0.1:9090 \
 TIKEO_SMOKE_AUTH_TOKEN="$TOKEN" \
 scripts/dev-integration-seed.sh
 ```
 
-Do not paste production passwords or long-lived tokens into shell history. Prefer `TIKEO_SMOKE_AUTH_TOKEN` for repeatable runs, or set `TIKEO_ADMIN_PASSWORD` only in a private shell session.
+If you need username/password login instead, provide credentials for the owner you bootstrapped for this DB; there is no default administrator account:
+
+```bash
+TIKEO_HTTP_URL=http://127.0.0.1:9090 \
+TIKEO_ADMIN_USERNAME="$TIKEO_BOOTSTRAP_USERNAME" \
+TIKEO_ADMIN_PASSWORD="$TIKEO_BOOTSTRAP_PASSWORD" \
+scripts/dev-integration-seed.sh
+```
+
+Do not paste production passwords or long-lived tokens into shell history. Prefer `TIKEO_SMOKE_AUTH_TOKEN` for repeatable runs, or set `TIKEO_ADMIN_USERNAME`/`TIKEO_ADMIN_PASSWORD` only in a private shell session.
 
 ## Verify the seeded data
 

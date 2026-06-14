@@ -267,12 +267,29 @@ mod tests {
         ))
         .await
         .unwrap_or_else(|error| panic!("local namespace should insert: {error}"));
-        db.execute(Statement::from_string(
+        db.execute(Statement::from_sql_and_values(
             DatabaseBackend::Sqlite,
-            "UPDATE notification_channels SET name = 'operator customized feishu card', enabled = 0 WHERE id = 'notification-channel-example-feishu-interactive'",
+            r#"INSERT INTO notification_channels (
+                id, scope_type, namespace, app, worker_pool, name, provider, enabled,
+                config_json, secret_refs_json, target_redacted, safety_policy_json,
+                created_by, updated_by, created_at, updated_at
+            ) VALUES (?, ?, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?)"#,
+            vec![
+                "notification-channel-local-operator".into(),
+                "global".into(),
+                "Operator customized Feishu card".into(),
+                "feishu".into(),
+                false.into(),
+                r#"{"messageType":"interactive","template":{"body":{"msg_type":"interactive"}}}"#
+                    .into(),
+                r#"{"webhook":"env:LOCAL_FEISHU_WEBHOOK"}"#.into(),
+                "feishu:env:LOCAL_FEISHU_WEBHOOK".into(),
+                "2026-06-14T00:00:00Z".into(),
+                "2026-06-14T00:00:00Z".into(),
+            ],
         ))
         .await
-        .unwrap_or_else(|error| panic!("seed notification channel should be editable: {error}"));
+        .unwrap_or_else(|error| panic!("local notification channel should insert: {error}"));
         db.close()
             .await
             .unwrap_or_else(|error| panic!("sqlite file db should close: {error}"));
@@ -299,18 +316,18 @@ mod tests {
         let customized_channel = reopened
             .query_one(Statement::from_string(
                 DatabaseBackend::Sqlite,
-                "SELECT name, enabled FROM notification_channels WHERE id = 'notification-channel-example-feishu-interactive'",
+                "SELECT name, enabled FROM notification_channels WHERE id = 'notification-channel-local-operator'",
             ))
             .await
             .unwrap_or_else(|error| panic!("notification channel should query: {error}"))
-            .unwrap_or_else(|| panic!("seed notification channel should exist"));
+            .unwrap_or_else(|| panic!("local notification channel should exist"));
         let name = customized_channel
             .try_get::<String>("", "name")
             .unwrap_or_else(|error| panic!("notification name should decode: {error}"));
         let enabled = customized_channel
             .try_get::<bool>("", "enabled")
             .unwrap_or_else(|error| panic!("notification enabled should decode: {error}"));
-        assert_eq!(name, "operator customized feishu card");
+        assert_eq!(name, "Operator customized Feishu card");
         assert!(
             !enabled,
             "rerunning migrations must not refresh edited seed rows"

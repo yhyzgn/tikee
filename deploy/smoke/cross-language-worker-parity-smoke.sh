@@ -178,9 +178,7 @@ stop_web() {
 }
 
 login() {
-  local username="${TIKEO_SMOKE_ADMIN_USERNAME:-smoke_admin}"
-  local password="${TIKEO_SMOKE_ADMIN_PASSWORD:-Tikeo@2026!}"
-  tikeo_smoke_login "$API_URL" "$username" "$password"
+  tikeo_smoke_login "$API_URL"
   AUTH_TOKEN="$TIKEO_SMOKE_AUTH_TOKEN"
   export AUTH_TOKEN
 }
