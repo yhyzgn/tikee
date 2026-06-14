@@ -204,6 +204,10 @@ create_app dev-ops automation
 
 create_pool dev-alpha orders boot2-blue 200 8
 create_pool dev-alpha orders boot3-blue 200 8
+create_pool dev-alpha orders go-blue 200 8
+create_pool dev-alpha orders rust-blue 200 8
+create_pool dev-alpha orders python-blue 200 8
+create_pool dev-alpha orders nodejs-blue 200 8
 create_pool dev-alpha billing boot4-green 100 4
 create_pool dev-beta analytics boot3-batch 150 6
 create_pool dev-ops automation boot4-ops 80 3
@@ -223,5 +227,5 @@ echo
 echo "联调数据已就绪："
 echo "  API:        $API_URL"
 echo "  namespaces: dev-alpha, dev-beta, dev-ops"
-echo "  worker pools: dev-alpha/orders/{boot2-blue,boot3-blue}, dev-alpha/billing/boot4-green, dev-beta/analytics/boot3-batch, dev-ops/automation/boot4-ops"
+echo "  worker pools: dev-alpha/orders/{boot2-blue,boot3-blue,go-blue,rust-blue,python-blue,nodejs-blue}, dev-alpha/billing/boot4-green, dev-beta/analytics/boot3-batch, dev-ops/automation/boot4-ops"
 echo "  next:       scripts/start-java-demo-workers.sh"

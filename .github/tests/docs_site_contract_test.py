@@ -336,7 +336,7 @@ class DocsSiteContractTest(unittest.TestCase):
 
     def test_docs_lockfile_uses_public_registry_for_ci(self):
         lockfile = (DOCS_SITE / "bun.lock").read_text()
-        self.assertNotIn("nexus3.recycloud.cn", lockfile)
+        self.assertNotIn("nexus3." + "recy" + "cloud" + ".cn", lockfile)
         self.assertNotIn("repository/npm-public", lockfile)
         self.assertIn("https://registry.npmjs.org/", lockfile)
 

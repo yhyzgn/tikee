@@ -44,7 +44,7 @@ Use `scripts/dev-integration-seed.sh` for repeatable local demo data. The script
 | --- | --- |
 | Namespaces | `dev-alpha`, `dev-beta`, `dev-ops` |
 | Apps | `dev-alpha/orders`, `dev-alpha/billing`, `dev-beta/analytics`, `dev-ops/automation` |
-| Worker pools | `boot2-blue`, `boot3-blue`, `boot4-green`, `boot3-batch`, `boot4-ops` |
+| Worker pools | `dev-alpha/orders/{boot2-blue,boot3-blue,go-blue,rust-blue,python-blue,nodejs-blue}`, `dev-alpha/billing/boot4-green`, `dev-beta/analytics/boot3-batch`, `dev-ops/automation/boot4-ops` |
 | Plugin processor | `sql` with processor name `billing.sql-sync` |
 | Jobs | `echo-api`, `context-api`, `bytes-api`, `report-api`, `sql-sync-api`, `workflow-step-api`, `heartbeat-api`, `fail-api` |
 
@@ -120,7 +120,7 @@ curl -fsS http://127.0.0.1:9090/api/v1/workers \
 scripts/dev-seed.sh .dev/tikeo-dev.db
 ```
 
-The script checks that the database exists and that the `jobs` table is present before applying SQL. It then prints row counts for namespaces, apps, jobs, scripts, workflows, and dispatch queue records. It is non-destructive by default: when `ns-dev-*` rows already exist, it exits without reapplying the upsert SQL. Use `scripts/dev-seed.sh --refresh .dev/tikeo-dev.db` or `TIKEO_DEV_SEED_REFRESH=1` only when you intentionally want to refresh the seeded demo rows.
+The script checks that the database exists and that the `jobs` table is present before applying SQL. It then prints row counts for namespaces, apps, worker pools, jobs, scripts, workflows, and dispatch queue records. The direct SQL seed mirrors the same default demo topology used by the API seed and language demos, so a worker started with the documented defaults can match seeded `dev-alpha/orders` jobs. It is non-destructive by default: when `ns-dev-*` rows already exist, it exits without reapplying the upsert SQL. Use `scripts/dev-seed.sh --refresh .dev/tikeo-dev.db` or `TIKEO_DEV_SEED_REFRESH=1` only when you intentionally want to refresh the seeded demo rows.
 
 Do not use direct SQL seeding for shared environments. It bypasses the HTTP API path and is not a substitute for validating auth, scopes, audit behavior, or runtime dispatch.
 

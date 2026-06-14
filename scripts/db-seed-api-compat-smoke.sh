@@ -120,7 +120,7 @@ jobs=json.load(open(sys.argv[1]))['data']['items']
 pools=json.load(open(sys.argv[2]))['data']
 plugins=json.load(open(sys.argv[3]))['data']
 assert len(jobs)==8, len(jobs)
-assert len(pools)==5, len(pools)
+assert len(pools)==9, len(pools)
 assert any(any(pt.get('type')=='sql' and 'billing.sql-sync' in pt.get('processorNames',[]) for pt in pl.get('processorTypes',[])) for pl in plugins), plugins
 PY
   kill -TERM -- "-$SERVER_PID" >/dev/null 2>&1 || kill -TERM "$SERVER_PID" >/dev/null 2>&1 || true

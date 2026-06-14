@@ -405,7 +405,7 @@ fn builtin_feishu_interactive_example(
                 "jobId": "AutoGenerateStockPdfRecordAfterDateTask",
                 "jobName": "按日期生成出入库单据PDF",
                 "namespace": "core_dev",
-                "app": "recycloud-erp",
+                "app": "acme-erp",
                 "instanceId": format!("inst-feishu-{status}"),
                 "status": status,
                 "triggerType": "api",

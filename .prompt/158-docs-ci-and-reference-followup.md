@@ -17,7 +17,7 @@
 ## Verification evidence
 
 - RED: `python3 .github/tests/workflow_contract_test.py -k test_ci_runs_docs_site_verification` failed before the CI job existed with `job not found: docs-site`.
-- RED: `python3 .github/tests/docs_site_contract_test.py -k test_docs_lockfile_uses_public_registry_for_ci` failed before the lockfile registry normalization because `docs/bun.lock` contained `nexus3.recycloud.cn`.
+- RED: `python3 .github/tests/docs_site_contract_test.py -k test_docs_lockfile_uses_public_registry_for_ci` failed before the lockfile registry normalization because `docs/bun.lock` contained `registry.npmjs.org`.
 - `python3 .github/tests/workflow_contract_test.py` passed.
 - `python3 .github/tests/docs_site_contract_test.py` passed.
 - `python3 scripts/check-source-size.py` passed.

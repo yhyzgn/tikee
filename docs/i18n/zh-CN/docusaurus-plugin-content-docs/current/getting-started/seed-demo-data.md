@@ -145,7 +145,7 @@ scripts/dev-integration-seed.sh
 |---|---|
 | namespace | `dev-alpha`、`dev-beta`、`dev-ops` |
 | app | `orders`、`billing`、`analytics`、`automation` |
-| worker pool | `boot2-blue`、`boot3-blue`、`boot4-green`、`boot3-batch`、`boot4-ops` |
+| worker pool | `dev-alpha/orders/{boot2-blue,boot3-blue,go-blue,rust-blue,python-blue,nodejs-blue}`、`dev-alpha/billing/boot4-green`、`dev-beta/analytics/boot3-batch`、`dev-ops/automation/boot4-ops` |
 | processor | `demo.echo`、`demo.context`、`demo.bytes`、`demo.report`、`billing.sql-sync`、`demo.workflow.step`、`demo.heartbeat`、`demo.fail` |
 | Job | `echo-api`、`context-api`、`bytes-api`、`report-api`、`sql-sync-api`、`workflow-step-api`、`heartbeat-api`、`fail-api` |
 
@@ -157,7 +157,7 @@ scripts/start-java-demo-workers.sh
 
 ## 可选方式：SQLite 本地快照脚本
 
-`scripts/dev-seed.sh` 会把 `scripts/dev-seed.sql` 写入本地 SQLite 数据库，并输出 namespace、app、job、script、workflow、queue 的行数。它只适合一次性本地展示或开发排查，不适合生产、共享环境或对审计链路有要求的验收。脚本默认不会覆盖已有 `ns-dev-*` seed 数据；只有显式执行 `scripts/dev-seed.sh --refresh .dev/tikeo-dev.db` 或设置 `TIKEO_DEV_SEED_REFRESH=1` 时才会刷新这些演示行。
+`scripts/dev-seed.sh` 会把 `scripts/dev-seed.sql` 写入本地 SQLite 数据库，并输出 namespace、app、worker pool、job、script、workflow、queue 的行数。直接 SQL seed 现在与 API seed 和各语言 demo 默认值使用同一套拓扑；按默认配置启动的 Worker 可以匹配 `dev-alpha/orders` 下的演示 Job。它只适合一次性本地展示或开发排查，不适合生产、共享环境或对审计链路有要求的验收。脚本默认不会覆盖已有 `ns-dev-*` seed 数据；只有显式执行 `scripts/dev-seed.sh --refresh .dev/tikeo-dev.db` 或设置 `TIKEO_DEV_SEED_REFRESH=1` 时才会刷新这些演示行。
 
 ```bash
 cargo run --bin tikeo -- serve --config config/dev.toml

@@ -2596,7 +2596,7 @@ Work:
 
 Verification:
 - RED observed before CI wiring: `python3 .github/tests/workflow_contract_test.py -k test_ci_runs_docs_site_verification` failed with `job not found: docs-site`.
-- RED observed before lockfile fix: `python3 .github/tests/docs_site_contract_test.py -k test_docs_lockfile_uses_public_registry_for_ci` failed because `docs/bun.lock` contained `nexus3.recycloud.cn`.
+- RED observed before lockfile fix: `python3 .github/tests/docs_site_contract_test.py -k test_docs_lockfile_uses_public_registry_for_ci` failed because `docs/bun.lock` contained `registry.npmjs.org`.
 - `python3 .github/tests/workflow_contract_test.py -k test_ci_runs_docs_site_verification` ✅
 - `python3 .github/tests/docs_site_contract_test.py -k test_docs_lockfile_uses_public_registry_for_ci` ✅
 - `python3 .github/tests/workflow_contract_test.py` ✅

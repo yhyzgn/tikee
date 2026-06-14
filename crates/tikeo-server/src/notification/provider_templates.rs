@@ -472,7 +472,7 @@ pub fn builtin_feishu_job_card_template(status: &str) -> serde_json::Value {
             "config": {"wide_screen_mode": true},
             "header": {
                 "template": color,
-                "title": {"tag": "plain_text", "content": "存证系统 - Tikeo Job 任务通知"}
+                "title": {"tag": "plain_text", "content": "Tikeo Job 任务通知"}
             },
             "elements": [
                 {"tag": "div", "text": {"tag": "lark_md", "content": content}},

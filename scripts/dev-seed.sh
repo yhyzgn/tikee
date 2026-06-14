@@ -38,6 +38,7 @@ if [ "$REFRESH" != "1" ]; then
 .mode column
 SELECT 'namespaces' AS table_name, COUNT(*) AS rows FROM namespaces WHERE id LIKE 'ns-dev-%'
 UNION ALL SELECT 'apps', COUNT(*) FROM apps WHERE id LIKE 'app-dev-%'
+UNION ALL SELECT 'worker_pools', COUNT(*) FROM worker_pools WHERE id LIKE 'wp-dev-%'
 UNION ALL SELECT 'jobs', COUNT(*) FROM jobs WHERE id LIKE 'job-dev-%'
 UNION ALL SELECT 'scripts', COUNT(*) FROM scripts WHERE id LIKE 'script-dev-%'
 UNION ALL SELECT 'notification_channels', COUNT(*) FROM notification_channels WHERE id LIKE 'notif-channel-dev-%'
@@ -55,6 +56,7 @@ sqlite3 "$DB_PATH" <<'SQL'
 .mode column
 SELECT 'namespaces' AS table_name, COUNT(*) AS rows FROM namespaces WHERE id LIKE 'ns-dev-%'
 UNION ALL SELECT 'apps', COUNT(*) FROM apps WHERE id LIKE 'app-dev-%'
+UNION ALL SELECT 'worker_pools', COUNT(*) FROM worker_pools WHERE id LIKE 'wp-dev-%'
 UNION ALL SELECT 'jobs', COUNT(*) FROM jobs WHERE id LIKE 'job-dev-%'
 UNION ALL SELECT 'scripts', COUNT(*) FROM scripts WHERE id LIKE 'script-dev-%'
 UNION ALL SELECT 'script_language_examples', COUNT(*) FROM scripts WHERE id LIKE 'script-dev-%-example'

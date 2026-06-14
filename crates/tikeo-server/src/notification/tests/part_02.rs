@@ -1311,7 +1311,7 @@ fn feishu_interactive_job_card_templates_include_status_variants_and_console_but
         payload_json: serde_json::json!({
             "jobName": "按日期生成出入库单据PDF失败",
             "namespace": "core_dev",
-            "app": "recycloud-erp",
+            "app": "acme-erp",
             "instanceId": "inst-feishu-card",
             "status": "failed",
             "triggerType": "api",
@@ -1330,7 +1330,7 @@ fn feishu_interactive_job_card_templates_include_status_variants_and_console_but
 
     assert_eq!(payload["msg_type"], "interactive");
     assert_eq!(payload["card"]["header"]["template"], "red");
-    assert_eq!(payload["card"]["header"]["title"]["content"], "存证系统 - Tikeo Job 任务通知");
+    assert_eq!(payload["card"]["header"]["title"]["content"], "Tikeo Job 任务通知");
     let body = payload["card"]["elements"].to_string();
     assert!(body.contains("报警类型"), "card should keep the operator field layout: {body}");
     assert!(body.contains("任务执行失败报警"), "failed card should describe failed job alerts: {body}");

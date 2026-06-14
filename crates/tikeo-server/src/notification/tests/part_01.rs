@@ -440,7 +440,7 @@ fn email_channel_prefers_split_smtp_fields_when_legacy_smtp_url_is_bare_host() {
             "port": "465",
             "ssl": true,
             "starttls": false,
-            "username": "ailink@recycloud.cn"
+            "username": "alerts@example.com"
         })
         .to_string(),
         secret_refs_json: serde_json::json!({

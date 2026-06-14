@@ -269,7 +269,7 @@ const fallbackSchemas: Record<string, ProviderSchema> = {
       { key: 'from', label: 'From address', type: 'string', placeholder: 'tikeo@example.com' },
       { key: 'host', label: 'SMTP host', type: 'string', required: true, placeholder: 'smtp.feishu.cn' },
       { key: 'port', label: 'SMTP port', type: 'string', required: true, placeholder: '465', defaultValue: '465' },
-      { key: 'username', label: 'SMTP username', type: 'string', placeholder: 'ailink@recycloud.cn' },
+      { key: 'username', label: 'SMTP username', type: 'string', placeholder: 'alerts@example.com' },
       { key: 'auth', label: 'SMTP auth', type: 'boolean', defaultValue: true },
       { key: 'ssl', label: 'SSL/TLS', type: 'boolean', defaultValue: true },
       { key: 'starttls', label: 'STARTTLS', type: 'boolean', defaultValue: false },

@@ -58,7 +58,7 @@ For route/baseUrl changes, also run `bun run docs:serve` and curl affected Engli
 Also keep `docs/bun.lock` free of private registry tarball URLs before pushing:
 
 ```bash
-rg "nexus3\\.recycloud\\.cn|repository/npm-public" docs/bun.lock
+rg "registry\\.npmjs\\.org|repository/npm-public" docs/bun.lock
 ```
 
 Expected: no matches.

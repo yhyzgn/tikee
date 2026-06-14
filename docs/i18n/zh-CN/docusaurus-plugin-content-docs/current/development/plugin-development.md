@@ -35,7 +35,7 @@ flowchart TD
   H -- 禁用 --> I[停止路由并保留审计]
 ```
 
-这个边界是有意设计的：插件能让能力对平台可见，但 Server 仍然负责校验输入、脱敏 secret 引用和保存证据。插件失败时，操作人应使用与内置 processor 相同的工具排查：Instance 控制台、投递记录、Worker 能力和 Audit。
+这个边界是有意设计的：插件能让能力对平台可见，但 Server 仍然负责校验输入、脱敏 secret 引用和保留证据。插件失败时，操作人应使用与内置 processor 相同的工具排查：Instance 控制台、投递记录、Worker 能力和 Audit。
 
 ## 扩展面
 
