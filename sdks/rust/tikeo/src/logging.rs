@@ -197,7 +197,7 @@ pub fn install_task_log_bridge() -> bool {
     })
 }
 
-pub(crate) async fn in_task_log_scope<F>(logger: TaskLogger, future: F) -> F::Output
+pub async fn in_task_log_scope<F>(logger: TaskLogger, future: F) -> F::Output
 where
     F: std::future::Future,
 {
@@ -219,7 +219,7 @@ where
 {
     fn on_event(&self, event: &Event<'_>, _ctx: Context<'_, S>) {
         let metadata = event.metadata();
-        let Some(level) = task_log_level(metadata.level()) else {
+        let Some(level) = task_log_level(*metadata.level()) else {
             return;
         };
         let _ = TASK_LOG_SCOPE.try_with(|logger| {
@@ -233,8 +233,8 @@ where
     }
 }
 
-fn task_log_level(level: &Level) -> Option<&'static str> {
-    match *level {
+const fn task_log_level(level: Level) -> Option<&'static str> {
+    match level {
         Level::ERROR => Some("error"),
         Level::WARN | Level::INFO => Some("info"),
         Level::DEBUG | Level::TRACE => None,
