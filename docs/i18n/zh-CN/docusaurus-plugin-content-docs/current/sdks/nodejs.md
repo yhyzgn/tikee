@@ -30,7 +30,7 @@ bun run build
 
 `localConfig(endpoint, clientInstanceId)` 将 namespace/app 默认成 `default`，cluster/region 默认成 `local`，version 默认 `dev`，heartbeat 默认 10 秒。只添加 Worker 真正能运行的 processor。
 
-```ts
+```typescript
 import { Client, TaskContext, TaskOutcome, localConfig } from "@yhyzgn/tikeo";
 
 function process(task: TaskContext): TaskOutcome {
@@ -66,7 +66,7 @@ try {
 
 ## Management client 写法
 
-```ts
+```typescript
 import { BroadcastSelectorRequest, ManagementClient, apiJob, apiTrigger, broadcastApiTrigger } from "@yhyzgn/tikeo";
 
 const client = new ManagementClient(

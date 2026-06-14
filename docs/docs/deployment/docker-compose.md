@@ -97,7 +97,7 @@ docker compose --env-file .env -f docker-compose.postgres.yml ps
 
 Useful `.env` overrides:
 
-```dotenv
+```properties
 TIKEO_POSTGRES_PORT=15432
 TIKEO_POSTGRES_DB=tikeo
 TIKEO_POSTGRES_USER=tikeo
@@ -201,7 +201,7 @@ docker compose --env-file .env -f docker-compose.mysql.yml ps
 
 Useful `.env` overrides:
 
-```dotenv
+```properties
 TIKEO_MYSQL_PORT=13306
 TIKEO_MYSQL_DATABASE=tikeo
 TIKEO_MYSQL_USER=tikeo

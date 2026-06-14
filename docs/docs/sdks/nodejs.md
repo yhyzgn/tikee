@@ -68,7 +68,7 @@ The `validate()` method rejects blank required fields and non-positive heartbeat
 
 ## Minimal Worker
 
-```ts
+```typescript
 import { Client, localConfig, type TaskContext, type TaskOutcome } from "@yhyzgn/tikeo";
 
 const config = localConfig("http://127.0.0.1:9998", "nodejs-worker-1");
@@ -141,7 +141,7 @@ bun start
 
 ## Management API create + trigger
 
-```ts
+```typescript
 import { ManagementClient, apiJob, apiTrigger, broadcastApiTrigger, type BroadcastSelectorRequest } from "@yhyzgn/tikeo";
 
 const management = new ManagementClient(
@@ -161,7 +161,7 @@ if (instance.triggerType !== "api" || instance.executionMode !== "single") {
 
 Broadcast is explicit:
 
-```ts
+```typescript
 const selector: BroadcastSelectorRequest = {
   tags: ["manual-demo"],
   region: "local",

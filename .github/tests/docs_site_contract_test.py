@@ -920,5 +920,34 @@ class DocsSiteContractTest(unittest.TestCase):
                 self.assertIn(token, text, f"zh {relative_path} missing operator-grade token {token!r}")
 
 
+    def test_docs_code_blocks_have_loaded_highlight_languages(self):
+        config = (DOCS_SITE / "docusaurus.config.ts").read_text()
+        loaded_languages = set(re.findall(r"'([a-z0-9-]+)'", config))
+        default_languages = {
+            "bash", "diff", "html", "javascript", "jsx", "json", "markdown", "mdx",
+            "text", "typescript", "tsx", "css", "mermaid", "xml",
+        }
+        allowed = default_languages | loaded_languages
+        doc_roots = [
+            DOCS_SITE / "docs",
+            DOCS_SITE / "i18n/zh-CN/docusaurus-plugin-content-docs/current",
+        ]
+        for root in doc_roots:
+            for path in root.rglob("*.md"):
+                in_fence = False
+                for line_no, line in enumerate(path.read_text().splitlines(), 1):
+                    stripped = line.strip()
+                    if not stripped.startswith("```"):
+                        continue
+                    if not in_fence:
+                        lang = stripped[3:].strip().split()[0] if stripped[3:].strip() else ""
+                        self.assertTrue(lang, f"code block lacks highlight language: {path.relative_to(DOCS_SITE)}:{line_no}")
+                        self.assertIn(lang, allowed, f"code block language is not loaded by Prism: {path.relative_to(DOCS_SITE)}:{line_no} {lang!r}")
+                        in_fence = True
+                    else:
+                        in_fence = False
+
+
+
 if __name__ == "__main__":
     unittest.main()
