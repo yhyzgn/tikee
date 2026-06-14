@@ -10,6 +10,10 @@ on:
         description: 'Image tag to publish, for example v0.1.123'
         required: true
         type: string
+      ref:
+        description: 'Git ref to build from. Defaults to the tag input.'
+        required: false
+        type: string
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -28,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && (inputs.ref || inputs.tag) || github.ref }}
       - name: Resolve release version
         id: version
         shell: bash
@@ -52,8 +56,9 @@ jobs:
         with:
           images: yhyzgn/tikeo-server
           tags: |
-            type=raw,value=${{ github.ref_name || inputs.tag }}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/') && !startsWith(github.ref_name, 'v0.') }}
+            type=raw,value=${{ steps.version.outputs.tag }}
+            type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=latest
       - name: Build and push server image
         uses: docker/build-push-action@v7
         with:
@@ -63,3 +68,14 @@ jobs:
           platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          provenance: false
+          sbom: false
+      - name: Update Docker Hub overview
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: >-
+          python3 scripts/update-dockerhub-overview.py
+          --repository yhyzgn/tikeo-server
+          --readme dockerhub/overviews/tikeo-server.md
+          --description "Tikeo Server control-plane runtime for scheduled jobs, workers, execution logs, notifications, and management APIs."

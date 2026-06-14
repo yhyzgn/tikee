@@ -226,6 +226,11 @@ class WorkflowContractTest(unittest.TestCase):
             docker_server_job.index("docker/build-push-action@v7"),
         )
 
+    def test_docker_server_manual_dispatch_can_build_from_explicit_ref(self):
+        self.assertIn("ref:", DOCKER_SERVER)
+        self.assertIn("Git ref to build from. Defaults to the tag input.", DOCKER_SERVER)
+        self.assertIn("inputs.ref || inputs.tag", DOCKER_SERVER)
+
     def test_docker_publish_targets_are_split(self):
         self.assertIn("yhyzgn/tikeo-server", DOCKER_SERVER)
         self.assertIn("docker/login-action", DOCKER_SERVER)
@@ -247,6 +252,50 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn("file: docs/Dockerfile", DOCKER_DOCS)
         self.assertNotIn("yhyzgn/tikeo-web", DOCKER_DOCS)
         self.assertNotIn("yhyzgn/tikeo-server", DOCKER_DOCS)
+
+    def test_docker_publish_tags_are_pull_friendly_release_aliases(self):
+        for workflow_text in [DOCKER_SERVER, DOCKER_WEB, DOCKER_DOCS]:
+            job_block = workflow_job_block(workflow_text, "publish")
+            self.assertIn("Docker metadata", job_block)
+            self.assertIn("type=raw,value=${{ steps.version.outputs.tag }}", job_block)
+            self.assertIn("type=raw,value=${{ steps.version.outputs.version }}", job_block)
+            self.assertIn("type=raw,value=latest", job_block)
+            self.assertIn("provenance: false", job_block)
+            self.assertIn("sbom: false", job_block)
+            self.assertNotIn("!startsWith(github.ref_name, 'v0.')", job_block)
+
+        for workflow_text in [DOCKER_WEB, DOCKER_DOCS]:
+            job_block = workflow_job_block(workflow_text, "publish")
+            self.assertIn("Resolve image tag", job_block)
+            self.assertIn('VERSION="${RELEASE_TAG#v}"', job_block)
+
+    def test_docker_publish_updates_dockerhub_overview(self):
+        expected = {
+            DOCKER_SERVER: ("yhyzgn/tikeo-server", "dockerhub/overviews/tikeo-server.md"),
+            DOCKER_WEB: ("yhyzgn/tikeo-web", "dockerhub/overviews/tikeo-web.md"),
+            DOCKER_DOCS: ("yhyzgn/tikeo-docs", "dockerhub/overviews/tikeo-docs.md"),
+        }
+        for workflow_text, (repository, readme) in expected.items():
+            job_block = workflow_job_block(workflow_text, "publish")
+            self.assertIn("Update Docker Hub overview", job_block)
+            self.assertIn("scripts/update-dockerhub-overview.py", job_block)
+            self.assertIn(f"--repository {repository}", job_block)
+            self.assertIn(f"--readme {readme}", job_block)
+            self.assertIn("DOCKERHUB_USERNAME", job_block)
+            self.assertIn("DOCKERHUB_TOKEN", job_block)
+
+    def test_dockerhub_overviews_include_run_and_compose_paths(self):
+        for readme in [
+            ROOT / "dockerhub/overviews/tikeo-server.md",
+            ROOT / "dockerhub/overviews/tikeo-web.md",
+            ROOT / "dockerhub/overviews/tikeo-docs.md",
+        ]:
+            content = readme.read_text()
+            self.assertIn("docker run", content)
+            self.assertIn("Docker Compose", content)
+            self.assertIn("docker compose", content)
+            self.assertIn("latest", content)
+            self.assertIn("v0.2.11", content)
 
 
     def test_release_setup_includes_docs_docker_publish_lane(self):
